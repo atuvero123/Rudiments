@@ -1,6 +1,0 @@
-{
-  "name": "Rudiment — Drum Coach AI",
-  "description": "Personal AI drumming coach and curriculum designer for self-taught drummers, featuring skill track tracking, tempo ladders, interactive metronome, audio pad synthesizer, and personalized practice planning.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
