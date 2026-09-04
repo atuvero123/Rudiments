@@ -1,0 +1,50 @@
+name: Auto Unzip Files
+
+on:
+  push:
+    paths:
+      - '**.zip'
+  workflow_dispatch:
+
+jobs:
+  unzip-files:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find and Extract Zip Files
+        run: |
+          # Loop through all zip files in the repo
+          find . -name "*.zip" | while read -r zipfile; do
+            # Define target folder matching zip file name (minus .zip)
+            target_dir="${zipfile%.zip}"
+            
+            echo "Extracting $zipfile into $target_dir"
+            mkdir -p "$target_dir"
+            unzip -o "$zipfile" -d "$target_dir"
+            
+            # Optional: Remove the original zip file after extraction
+            rm "$zipfile"
+          done
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          git add .
+          
+          # Only commit if changes exist to avoid workflow errors
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: automatically extract zip files [skip ci]"
+            git push
+          else
+            echo "No changes to commit"
+          fi
+          
