@@ -27,3 +27,7 @@ This snapshot includes the integrated C2 teaching flow: **Understand → Count �
 
 This C2 package has been converted to Vercel-native serverless API routes. See `VERCEL_DEPLOY.md` for the exact deployment steps. The previous Express server is retained only under `legacy/` for reference.
 
+
+## C3 — Musical Application & Play-Along Engine
+
+C3 adds original no-drum curriculum play-alongs and arrangement coaching. The current canonical competency recommends an appropriate backing track, verified vocabulary determines which variations/fill challenges are available, and Today can launch the current musical application directly. See `C3_BUILD_REPORT.md` and `VERCEL_DEPLOY.md`.

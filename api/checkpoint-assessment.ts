@@ -1,6 +1,6 @@
 import {
   RUDIMENT_SYSTEM_PROMPT,
-  getGeminiClient,
+  generateGeminiText,
   getRequestBody,
   methodNotAllowed,
   sendApiError,
@@ -8,28 +8,11 @@ import {
 
 export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
-
   try {
     const { track, currentLevel, targetLevel } = getRequestBody(req);
-    const ai = getGeminiClient();
-
-    const prompt = `Design a Checkpoint Assessment to test whether the student is ready to advance in the "${track || 'Rudiments'}" skill track from ${currentLevel || 'Beginner'} to ${targetLevel || 'Intermediate'}.
-Provide:
-1. 3-4 specific self-check assessment criteria with concrete BPMs and durations.
-2. 2 practical drum tests (e.g. play X pattern cleanly for 1 minute at Y bpm without rushing).
-3. Clear indicators of failure vs passing.
-4. Next steps if they pass or fail.`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
-      config: {
-        systemInstruction: RUDIMENT_SYSTEM_PROMPT,
-        temperature: 0.7,
-      },
-    });
-
-    return res.status(200).json({ assessment: response.text || '' });
+    const prompt = `Design a supportive qualitative Checkpoint Assessment explanation for the "${track || 'Rudiments'}" skill track from ${currentLevel || 'Beginner'} toward ${targetLevel || 'Intermediate'}. The app's deterministic curriculum remains authoritative; provide 3-4 concrete self-check criteria, 2 practical tests, and next steps without claiming to certify the student yourself.`;
+    const assessment = await generateGeminiText({ contents: prompt, systemInstruction: RUDIMENT_SYSTEM_PROMPT, temperature: 0.7 });
+    return res.status(200).json({ apiVersion: 'c3.0', assessment });
   } catch (error) {
     return sendApiError(res, 'Checkpoint API Error', error);
   }

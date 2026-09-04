@@ -1,35 +1,47 @@
-# Rudiment Drum Coach — Vercel Deployment
+# Rudiment Drum Coach C3 — Vercel Deployment
 
-This package is Vercel-native. The React/Vite frontend builds to `dist/`, while AI endpoints are implemented as Vercel serverless functions under `api/`.
+This package is Vercel-native. The React/Vite frontend builds to `dist/`; AI endpoints are Vercel serverless functions under `api/`.
 
 ## Deploy through GitHub + Vercel
 
-1. Extract this ZIP and upload the complete project contents to your GitHub repository root.
-2. In Vercel, import the repository as a new project (or point your existing project to this repository).
-3. Vercel should detect **Vite** automatically.
-4. Keep these settings:
+1. Extract the ZIP and replace/update the complete contents of your GitHub project with this build.
+2. Commit/push all files, including the new `src/components/PlayAlongStudio.tsx`, `src/data/playAlongTracks.ts`, and `src/lib/playAlongEngine.ts`.
+3. In Vercel, redeploy the latest GitHub commit.
+4. Keep:
+   - Framework: Vite
    - Build Command: `npm run build`
    - Output Directory: `dist`
    - Install Command: default (`npm install`)
-5. In **Project Settings → Environment Variables**, add:
-   - `GEMINI_API_KEY` = your Gemini API key
-   Add it for Production and Preview if you want Coach Chat to work in both.
-6. Deploy.
+5. In Project Settings → Environment Variables add `GEMINI_API_KEY` for Production (and Preview if desired), then redeploy after adding/changing it.
 
-## After deployment
+## API test
 
-Open `/api/health` on your deployed domain. It should return JSON with `status: "ok"` and `runtime: "vercel-serverless"`.
+Open:
 
-Then test the app in this order:
+`https://YOUR-DOMAIN.vercel.app/api/health`
 
-1. Today loads.
-2. Path loads and current curriculum state is preserved.
-3. Practice Quarter-Note Pulse opens the C2 teaching flow.
-4. Count / Watch / Follow / Play / Evaluate work.
-5. Coach Chat returns a response (this confirms the Gemini environment variable and `/api/chat` function work).
+C3 should return JSON containing:
+- `status: "ok"`
+- `runtime: "vercel-serverless"`
+- `apiVersion: "c3.0"`
+- `aiConfigured: true` when the Gemini key is available
+- `transport: "google-rest-api"`
+
+If `aiConfigured` is false, add the environment variable and redeploy.
+
+## C3 app test
+
+1. Open Today.
+2. In Musical Application, tap the new play-along button.
+3. Confirm the recommended current-path track opens.
+4. Start Slow 4/4 Ballad at 64 BPM.
+5. Test Guided / Reduced / Performance.
+6. Test Groove Only and Musical Choice.
+7. If fill competencies are not verified, confirm 3+1 / 7+1 / Half-Bar / Beat-4 modes are visibly locked.
+8. Let a play-along finish and save its review.
+9. Open Songs directly and test all four play-alongs.
+10. Test `/api/health`, then Coach Chat.
 
 ## Important
 
-- Do not put the real Gemini key into `.env.example` or commit it to GitHub.
-- `legacy/server.express.ts` is retained only as historical reference. Vercel does not use it.
-- The deployed frontend calls the same relative URLs (`/api/chat`, etc.), so no frontend API URL changes are required.
+The play-alongs are locally generated no-drum practice music. The reference Song Vault does not host or redistribute commercial recordings.

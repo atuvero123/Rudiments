@@ -75,6 +75,7 @@ function calculateTruePracticeStreak(sessions: PracticeSession[]): number {
 function MainAppContent() {
   // Mobile-first default to Today's practice
   const [activeTab, setActiveTab] = useState<AppTab>('today');
+  const [requestedPlayAlongId, setRequestedPlayAlongId] = useState<string | null>(null);
 
   const {
     profile,
@@ -303,6 +304,10 @@ What are you working on at your kit or practice pad today? Choose a quick prompt
               <TodayPracticeView
                 practiceSessions={practiceSessions}
                 onAddSession={handleLogSession}
+                onOpenMusicalApplication={(trackId) => {
+                  setRequestedPlayAlongId(trackId);
+                  setActiveTab('songs');
+                }}
               />
             )}
 
@@ -318,7 +323,11 @@ What are you working on at your kit or practice pad today? Choose a quick prompt
             {activeTab === 'vocabulary' && <VocabularyView />}
 
             {activeTab === 'songs' && (
-              <SongVaultView onAskCoachAboutSong={handleAskCoachAboutSong} />
+              <SongVaultView
+                onAskCoachAboutSong={handleAskCoachAboutSong}
+                initialPlayAlongId={requestedPlayAlongId}
+                onInitialPlayAlongConsumed={() => setRequestedPlayAlongId(null)}
+              />
             )}
 
             {activeTab === 'profile' && <LearnerProfileView />}

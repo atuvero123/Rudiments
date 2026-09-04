@@ -24,6 +24,7 @@ import {
   CURRICULUM_UNITS_BY_ID,
 } from '../data/canonicalCurriculum';
 import { GuidedPracticeSession } from './GuidedPracticeSession';
+import { recommendPlayAlongForCompetency } from '../data/playAlongTracks';
 import { RoadmapWhyThisNextCard } from './RoadmapWhyThisNextCard';
 import { CurriculumDecisionCard } from './CurriculumDecisionCard';
 import {
@@ -52,11 +53,13 @@ import {
 interface TodayPracticeViewProps {
   practiceSessions: PracticeSession[];
   onAddSession: (session: PracticeSession) => void;
+  onOpenMusicalApplication?: (trackId: string) => void;
 }
 
 export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
   practiceSessions,
   onAddSession,
+  onOpenMusicalApplication,
 }) => {
   const {
     profile,
@@ -115,6 +118,7 @@ export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
   const perfLane = todayLanes.find((l) => l.laneType === 'PERFORMANCE_PREP') || todayLanes[2];
 
   const activeLane = todayLanes.find((l) => l.laneType === selectedLaneType) || primaryLane;
+  const recommendedPlayAlong = recommendPlayAlongForCompetency(canonicalPosition.activeCompetencyId);
 
   const canonicalActiveSkill: GranularSkill =
     skills.find((s) => s.id === activeLane.targetSkillId) ||
@@ -577,6 +581,20 @@ COACH NOTE: Focus on relaxed wrists and strict subdivision accuracy.
                 <span className="text-indigo-700 font-bold">Song Integration</span>
               </div>
             </div>
+
+            {onOpenMusicalApplication && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenMusicalApplication(recommendedPlayAlong.id);
+                }}
+                className="w-full min-h-[42px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black flex items-center justify-center gap-2 transition-colors"
+              >
+                <Music className="w-3.5 h-3.5" />
+                Play in {recommendedPlayAlong.title} · {recommendedPlayAlong.bpm} BPM
+              </button>
+            )}
           </div>
         </div>
       </div>
