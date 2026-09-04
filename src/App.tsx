@@ -184,8 +184,22 @@ What are you working on at your kit or practice pad today? Choose a quick prompt
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to get response from Rudiment.');
+      const rawResponse = await res.text();
+      let data: any = null;
+      try {
+        data = rawResponse ? JSON.parse(rawResponse) : {};
+      } catch {
+        const preview = rawResponse.replace(/\s+/g, ' ').trim().slice(0, 140);
+        throw new Error(
+          `Coach API returned a non-JSON response (${res.status}). ` +
+          `This deployment may still contain an older /api/chat function.${preview ? ` Response: ${preview}` : ''}`
+        );
+      }
+
+      if (!res.ok) throw new Error(data.error || `Failed to get response from Rudiment (${res.status}).`);
+      if (!data.reply || typeof data.reply !== 'string') {
+        throw new Error('Coach API responded without a valid reply.');
+      }
 
       const assistantMsg: ChatMessage = {
         id: `ast-${Date.now()}`,

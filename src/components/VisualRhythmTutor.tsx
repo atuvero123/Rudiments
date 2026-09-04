@@ -194,8 +194,9 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         { label: '>L', hand: 'L', accent: true, count: 'la' },
       ];
     }
-    if (exercise.sticking) {
-      const parts = exercise.sticking.split(/\s+/).filter(Boolean);
+    const canonicalSticking = matchedTeachingDef?.sticking || exercise.sticking;
+    if (canonicalSticking) {
+      const parts = canonicalSticking.split(/\s+/).filter(Boolean);
       if (parts.length > 0) {
         return parts.map((p, idx) => ({
           label: p,
@@ -211,7 +212,12 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       { label: 'R', hand: 'R', accent: false, count: '&' },
       { label: 'R', hand: 'R', accent: false, count: 'a' },
     ];
-  }, [isSixStrokeRoll, exercise.sticking]);
+  }, [isSixStrokeRoll, exercise.sticking, matchedTeachingDef]);
+
+  const hasLandingTarget = useMemo(
+    () => timeline.events.some((event) => event.role === 'landing'),
+    [timeline]
+  );
 
   // Stop master transport cleanly
   const stopTransport = useCallback(() => {
@@ -294,20 +300,16 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     // 2. Deterministic Phrase Guidance Cue
     if (state.isCountIn) {
       setTransitionCue(`Count-In: Beat ${state.countInBeat} of 4 — Prepare Entry`);
+    } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'FULL') {
+      setTransitionCue('PLAY ALONG: Match the tutor note-for-note in real time');
+    } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED') {
+      setTransitionCue(
+        state.activeOwner === 'LEARNER'
+          ? 'YOUR BAR: Tutor silent — play the complete bar from memory'
+          : 'TUTOR BAR: Listen closely — your matching bar is next'
+      );
     } else if (state.isIntentionalLearnerSpace) {
       setTransitionCue(`YOUR TURN: Student Execution (${timeline.title.split('—')[0]})`);
-    } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED') {
-      if (state.phraseStage === 'FILL') {
-        setTransitionCue(`ENTRY ANCHOR (BEAT 4) → PLAY YOUR PHRASE (>R L L R R >L)`);
-      } else if (state.phraseStage === 'LAND') {
-        setTransitionCue(`LAND ON 1: ${isPad ? 'Pad Rim Edge' : '💥 Crash + Kick'} Anchor`);
-      } else if (state.phraseStage === 'PREPARE') {
-        setTransitionCue('READY: Prepare fill entry anchor at Beat 4');
-      } else if (state.phraseStage === 'RECOVER') {
-        setTransitionCue('RECOVER: Return to Steady Groove Pulse');
-      } else {
-        setTransitionCue('GROOVE: Lock into tempo with relaxed pulse');
-      }
     } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'MINIMAL') {
       if (state.phraseStage === 'FILL') {
         setTransitionCue(`FILL OPPORTUNITY: Execute phrase from memory into Beat 1`);
@@ -817,6 +819,11 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                       onClick={() => {
                         if (isPlaying) stopTransport();
                         setAssistanceLevel(lvl);
+                        // A one-bar exercise needs at least two repetitions for
+                        // REDUCED's tutor-bar -> learner-bar call-and-response.
+                        if (lvl === 'REDUCED' && timeline.totalBars === 1 && loopMode === '1x') {
+                          setLoopMode('2x');
+                        }
                       }}
                       className={`py-1.5 px-3 rounded-xl font-black text-[10px] uppercase transition-all cursor-pointer ${
                         assistanceLevel === lvl
@@ -853,57 +860,48 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="font-black text-[11px] uppercase tracking-wide">
                       {assistanceLevel === 'FULL'
-                        ? 'FULL SUPPORT — TEACH ME'
+                        ? 'FULL — PLAY ALONG WITH TUTOR'
                         : assistanceLevel === 'REDUCED'
-                        ? 'REDUCED SUPPORT — GUIDE ENTRY & LANDING'
-                        : 'MINIMAL SUPPORT — KEEP ME ORIENTED'}
+                        ? 'REDUCED — TUTOR BAR / YOUR BAR'
+                        : 'MINIMAL — METRONOME ONLY'}
                     </span>
                     <span className="text-[10px] opacity-75 font-mono">
                       {assistanceLevel === 'FULL'
                         ? 'Level 1/3'
                         : assistanceLevel === 'REDUCED'
-                        ? 'Level 2/3 (Inner notes removed)'
-                        : 'Level 3/3 (Tutor demo removed)'}
+                        ? 'Level 2/3 (Alternating bars)'
+                        : 'Level 3/3 (Click only)'}
                     </span>
                   </div>
                   <p className="text-[11px] leading-relaxed opacity-90 font-sans">
                     {assistanceLevel === 'FULL'
-                      ? 'Tutor demonstrates the complete phrase before / with your turn. Listen closely to dynamic accents and spacing.'
+                      ? 'The tutor plays the entire target pattern continuously while you play at the same time. Match its timing, sound and dynamics note-for-note.'
                       : assistanceLevel === 'REDUCED'
-                      ? 'You know the phrase. Tutor fill audio is removed after the initial entry anchor; you supply the inner doubles and land on Beat 1.'
-                      : 'Keep the pulse. Complete tutor demonstration is removed. Play the phrase from memory with the metronome and land on Beat 1.'}
+                      ? 'Call and response: the tutor plays one complete bar, then becomes silent for the next bar while you copy it. The metronome keeps time during your bar.'
+                      : 'The tutor pattern is completely removed. Use only the metronome pulse and play the phrase from memory.'}
                   </p>
                 </div>
               </div>
 
-              {/* Coach-Then-You (Call & Response) Toggle */}
-              <div className="flex items-center justify-between p-2.5 bg-stone-950/80 rounded-xl border border-stone-800">
-                <div className="flex items-center gap-2">
-                  <Repeat className="w-4 h-4 text-amber-400 shrink-0" />
-                  <div>
-                    <span className="text-xs font-bold text-stone-200 block">
-                      Coach-Then-You (Call & Response Loop)
-                    </span>
-                    <span className="text-[10px] text-stone-400">
-                      Bar 1: Coach demonstrates → Bar 2: You echo & play
-                    </span>
-                  </div>
+              {/* Assistance contract summary */}
+              <div className="flex items-start gap-2.5 p-2.5 bg-stone-950/80 rounded-xl border border-stone-800">
+                <Repeat className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <span className="text-xs font-bold text-stone-200 block">
+                    {assistanceLevel === 'FULL'
+                      ? 'Play together: tutor + you'
+                      : assistanceLevel === 'REDUCED'
+                      ? 'Call & response: tutor bar → your bar'
+                      : 'Independent memory: metronome only'}
+                  </span>
+                  <span className="text-[10px] text-stone-400">
+                    {assistanceLevel === 'FULL'
+                      ? 'No silent response bar. Stay with the tutor through the whole phrase.'
+                      : assistanceLevel === 'REDUCED'
+                      ? 'The tutor models a full bar, then gives you a full bar of space to answer.'
+                      : 'No target drum audio is played; maintain the phrase from your internal count.'}
+                  </span>
                 </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (isPlaying) stopTransport();
-                    setIsCoachThenYou((prev) => !prev);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl font-black text-xs transition-all cursor-pointer ${
-                    isCoachThenYou
-                      ? 'bg-amber-400 text-stone-950 shadow-md ring-2 ring-amber-300'
-                      : 'bg-stone-900 text-stone-400 border border-stone-800 hover:text-white'
-                  }`}
-                >
-                  {isCoachThenYou ? 'CALL & RESPONSE ON' : 'SIMULTANEOUS (OFF)'}
-                </button>
               </div>
             </div>
           )}
@@ -911,38 +909,38 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           {/* ================= 2. DOMINANT PHRASE OWNERSHIP / MUSICAL STATE BANNER ================= */}
           <div className="space-y-2">
             {/* Live Call & Response Stage Indicator Banner (when active) */}
-            {isCoachThenYou && isPlaying && phraseStage !== 'COUNT_IN' && (
+            {instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED' && isPlaying && phraseStage !== 'COUNT_IN' && (
               <div
                 className={`p-3.5 rounded-2xl border-2 flex items-center justify-between transition-all ${
-                  isCoachTurn
+                  activeOwner === 'TUTOR'
                     ? 'bg-amber-500/20 border-amber-400/80 text-amber-200'
                     : 'bg-emerald-500/25 border-emerald-400 text-emerald-200 ring-2 ring-emerald-400 animate-pulse'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  {isCoachTurn ? (
+                  {activeOwner === 'TUTOR' ? (
                     <Eye className="w-5 h-5 text-amber-400 shrink-0" />
                   ) : (
                     <Zap className="w-5 h-5 text-emerald-400 shrink-0" />
                   )}
                   <div>
                     <span className="text-xs font-black uppercase tracking-wider block">
-                      {isCoachTurn ? "COACH'S TURN — LISTEN & OBSERVE" : 'YOUR TURN — PLAY IT NOW!'}
+                      {activeOwner === 'TUTOR' ? "TUTOR BAR — LISTEN" : 'YOUR BAR — PLAY IT NOW!'}
                     </span>
                     <span className="text-[11px] opacity-80">
-                      {isCoachTurn
-                        ? 'Coach plays the phrase on drums. Internalize the stickings.'
-                        : 'Echo the phrase with precision, dynamic accents and clean landing.'}
+                      {activeOwner === 'TUTOR'
+                        ? 'Tutor plays one complete bar. Listen to the full pattern.'
+                        : 'Tutor is silent. Copy the complete bar while the metronome continues.'}
                     </span>
                   </div>
                 </div>
 
                 <span
                   className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-xl shrink-0 ${
-                    isCoachTurn ? 'bg-amber-400 text-stone-950' : 'bg-emerald-400 text-stone-950'
+                    activeOwner === 'TUTOR' ? 'bg-amber-400 text-stone-950' : 'bg-emerald-400 text-stone-950'
                   }`}
                 >
-                  {isCoachTurn ? 'COACH CALL' : 'YOUR RESPONSE'}
+                  {activeOwner === 'TUTOR' ? 'TUTOR BAR' : 'YOUR BAR'}
                 </span>
               </div>
             )}
@@ -1019,8 +1017,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                     ? activeOwner === 'LEARNER'
                       ? 'Tutor is silent. Metronome pulse continues. Play the phrase now!'
                       : activeOwner === 'TUTOR'
-                      ? 'Listen to dynamic accent contrast & clean note spacing.'
-                      : 'Keep steady groove and lock downbeat resolution.'
+                      ? 'Listen to the complete tutor bar; your response comes next.'
+                      : 'Tutor and learner play together. Match every note and dynamic in real time.'
                     : 'Press Start to begin audio playback with metronome pulse.'}
                 </p>
               </div>
@@ -1163,16 +1161,18 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 </div>
               ))}
 
-              {/* Landing Stroke Target */}
-              <div className="flex-1 min-w-[3.5rem] py-2 px-2 rounded-xl border bg-emerald-950/80 text-emerald-300 border-emerald-700/80 text-center font-black">
-                <span className="text-[8px] font-mono text-emerald-400 block">LAND</span>
-                <span className="text-sm font-black font-mono block mt-0.5">
-                  {isPad ? 'RIM' : '💥 CRASH'}
-                </span>
-                <span className="text-[8px] font-mono text-emerald-400 block mt-0.5">
-                  Bar 2.1
-                </span>
-              </div>
+              {/* Landing Stroke Target — only when this competency actually contains one */}
+              {hasLandingTarget && (
+                <div className="flex-1 min-w-[3.5rem] py-2 px-2 rounded-xl border bg-emerald-950/80 text-emerald-300 border-emerald-700/80 text-center font-black">
+                  <span className="text-[8px] font-mono text-emerald-400 block">LAND</span>
+                  <span className="text-sm font-black font-mono block mt-0.5">
+                    {isPad ? 'RIM' : '💥 CRASH'}
+                  </span>
+                  <span className="text-[8px] font-mono text-emerald-400 block mt-0.5">
+                    Beat 1
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 

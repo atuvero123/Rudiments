@@ -7,6 +7,8 @@ import {
 } from '../serverlib/rudiment';
 
 export default async function handler(req: any, res: any) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('X-Rudiment-API-Version', 'c2.1');
   if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
 
   try {
@@ -45,6 +47,7 @@ export default async function handler(req: any, res: any) {
     });
 
     return res.status(200).json({
+      apiVersion: 'c2.1',
       reply: response.text || "I'm sorry, I couldn't process that request right now. Let's try again.",
     });
   } catch (error) {

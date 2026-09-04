@@ -516,6 +516,14 @@ export class MasterMusicalTransport {
    */
   private scheduleSingleEvent(ev: RhythmEvent, eventTime: number): void {
     const isLearnerSpace = ev.isLearnerSpace === true || ev.role === 'learner_space';
+    const barsPerLoop = Math.max(1, this.timeline?.totalBars || 1);
+    const absoluteBarIndex = this.currentLoopIndex * barsPerLoop + Math.max(0, ev.barNumber - 1);
+    const isReducedLearnerBar =
+      this.instructionMode === 'FOLLOW' &&
+      this.assistanceLevel === 'REDUCED' &&
+      absoluteBarIndex % 2 === 1;
+    const isFullFollow =
+      this.instructionMode === 'FOLLOW' && this.assistanceLevel === 'FULL';
 
     // COUNT is a dedicated rhythmic-language stage: voice + clap + neutral pulse,
     // never the target drum demonstration. This keeps Count distinct from Watch.
@@ -536,8 +544,10 @@ export class MasterMusicalTransport {
       return;
     }
 
-    // 1. Intentional Silence / Learner Space Region
-    if (isLearnerSpace) {
+    // 1. Intentional learner space. FULL Follow deliberately overrides legacy
+    // learner-space silence so the drummer can play continuously WITH the tutor.
+    // Reduced Follow owns the alternating-bar silence contract below instead.
+    if (isLearnerSpace && !isFullFollow) {
       this.learnerSpaceRegionsCount++;
       this.logDiagnostic(
         'LEARNER_SPACE',
@@ -548,7 +558,6 @@ export class MasterMusicalTransport {
         eventTime
       );
 
-      // Play metronome timekeeper click on downbeats during learner space if mode requires it
       if (ev.subdivisionIndex === 0) {
         const isDownbeat = ev.beatNumber === 1;
         audioEngine.playMetronomeClick(isDownbeat, eventTime);
@@ -556,6 +565,24 @@ export class MasterMusicalTransport {
 
       if (this.onLearnerSpaceStartCb && ev.subdivisionIndex === 0) {
         this.onLearnerSpaceStartCb(ev.learnerSpaceInfo);
+      }
+      return;
+    }
+
+    // REDUCED Follow is strict call-and-response: Tutor owns one complete bar,
+    // learner owns the next complete bar. For one-bar exercises this alternates
+    // on successive loops; for multi-bar phrases it alternates inside the phrase.
+    if (isReducedLearnerBar) {
+      if (ev.subdivisionIndex === 0) {
+        audioEngine.playMetronomeClick(ev.beatNumber === 1, eventTime);
+      }
+      if (this.onLearnerSpaceStartCb && ev.subdivisionIndex === 0) {
+        this.onLearnerSpaceStartCb({
+          purpose: 'Reduced Follow response bar',
+          expectedLearnerAction: 'Play the complete bar back from memory while the tutor stays silent.',
+          durationBeats: this.timeline?.beatsPerBar || 4,
+          isIntentionalSilence: true,
+        });
       }
       return;
     }
@@ -590,18 +617,11 @@ export class MasterMusicalTransport {
           audioEngine.playMetronomeClick(ev.beatNumber === 1, eventTime);
         }
       } else if (this.assistanceLevel === 'REDUCED') {
-        if (ev.role === 'landing') {
-          isAudible = true; // Beat 1 landing anchor
-        } else if (ev.role === 'groove') {
-          isAudible = true; // Bar 1 groove context
-        } else if (ev.role === 'fill') {
-          isAudible = ev.subdivisionIndex === 0;
-        } else if (ev.role === 'groove_return') {
-          isAudible = true; // Bar 2 groove recovery context
-        } else {
-          isAudible = ev.subdivisionIndex === 0;
-        }
+        // We arrive here only on Tutor bars. Play the COMPLETE target bar so the
+        // learner hears a faithful model, then the next bar is entirely theirs.
+        isAudible = true;
       } else {
+        // FULL: continuous tutor pattern. The learner plays along in ensemble.
         isAudible = true;
       }
     } else {
@@ -802,6 +822,16 @@ export class MasterMusicalTransport {
     const currentGlobalBeat = progressInPhrase * this.totalBeats;
     const currentBar = Math.floor(currentGlobalBeat / beatsPerBar) + 1;
     const currentBeat = (Math.floor(currentGlobalBeat) % beatsPerBar) + 1;
+    const barsPerLoop = Math.max(1, this.timeline.totalBars || 1);
+    const absoluteBarIndex = loopIndex * barsPerLoop + Math.max(0, currentBar - 1);
+    const isReducedLearnerBar =
+      this.instructionMode === 'FOLLOW' &&
+      this.assistanceLevel === 'REDUCED' &&
+      absoluteBarIndex % 2 === 1;
+    const isReducedTutorBar =
+      this.instructionMode === 'FOLLOW' &&
+      this.assistanceLevel === 'REDUCED' &&
+      !isReducedLearnerBar;
     const activeSubdivisionCount = this.timeline.events?.[0]?.totalSubdivisionsInBeat || this.teachingDefinition?.subdivisionCount || 1;
     const currentSubdivision = Math.floor((currentGlobalBeat % 1) * activeSubdivisionCount);
 
@@ -826,7 +856,10 @@ export class MasterMusicalTransport {
 
     // Determine current musical phrase stage
     let phraseStage: PhraseStage = 'GROOVE';
-    const isLearnerSpace = activeEvent?.isLearnerSpace === true || activeEvent?.role === 'learner_space' || (this.timeline.hasLearnerSpace && currentBar === 2);
+    const legacyLearnerSpace = activeEvent?.isLearnerSpace === true || activeEvent?.role === 'learner_space' || (this.timeline.hasLearnerSpace && currentBar === 2);
+    const isLearnerSpace =
+      isReducedLearnerBar ||
+      (legacyLearnerSpace && !(this.instructionMode === 'FOLLOW' && this.assistanceLevel === 'FULL'));
 
     if (isLearnerSpace) {
       phraseStage = 'LEARNER_SPACE';
@@ -854,58 +887,53 @@ export class MasterMusicalTransport {
 
     // Check Coach-Then-You alternating loop state
     const isCoachThenYouLearnerTurn = this.isCoachThenYou && (loopIndex % 2 === 1);
-    const isLearnerTurn = isCoachThenYouLearnerTurn || isLearnerSpace || this.instructionMode === 'PLAY' || this.teachingStage === 'PLAY';
-    const isCoachTurn = !isLearnerTurn;
+    const isLearnerTurn =
+      isCoachThenYouLearnerTurn ||
+      isLearnerSpace ||
+      isReducedLearnerBar ||
+      this.instructionMode === 'PLAY' ||
+      this.teachingStage === 'PLAY' ||
+      (this.instructionMode === 'FOLLOW' && this.assistanceLevel === 'FULL');
+    const isCoachTurn =
+      !isLearnerTurn ||
+      isReducedTutorBar ||
+      (this.instructionMode === 'FOLLOW' && this.assistanceLevel === 'FULL');
 
     if (isCoachThenYouLearnerTurn) {
       activeOwner = 'LEARNER';
       ownershipTitle = 'YOUR TURN — PLAY IT!';
       ownershipSubtitle = 'Imitate the coach demonstration with steady rhythm';
-    } else if (isLearnerSpace) {
-      activeOwner = 'LEARNER';
-      ownershipTitle = 'YOUR TURN — PLAY THE PHRASE';
-      ownershipSubtitle = activeEvent?.learnerSpaceInfo?.expectedLearnerAction || 'Execute matching phrase with steady metronome pulse';
     } else if (this.instructionMode === 'PLAY' || this.teachingStage === 'PLAY') {
       activeOwner = 'LEARNER';
       ownershipTitle = 'INDEPENDENT EXECUTION';
       ownershipSubtitle = 'Test your mastery with steady pulse. You provide the drumming.';
+    } else if (this.instructionMode === 'FOLLOW' && this.assistanceLevel === 'FULL') {
+      activeOwner = 'ENSEMBLE';
+      ownershipTitle = 'PLAY ALONG WITH TUTOR';
+      ownershipSubtitle = 'The tutor plays every note. Match the sound, placement and dynamics in real time.';
+    } else if (this.instructionMode === 'FOLLOW' && this.assistanceLevel === 'REDUCED') {
+      activeOwner = isReducedLearnerBar ? 'LEARNER' : 'TUTOR';
+      ownershipTitle = isReducedLearnerBar
+        ? 'YOUR BAR — TUTOR SILENT'
+        : 'TUTOR BAR — LISTEN & COPY';
+      ownershipSubtitle = isReducedLearnerBar
+        ? 'Play the complete bar from memory while only the metronome keeps time.'
+        : 'Hear the complete target bar. Your matching response comes next.';
+    } else if (isLearnerSpace) {
+      activeOwner = 'LEARNER';
+      ownershipTitle = 'YOUR TURN — PLAY THE PHRASE';
+      ownershipSubtitle = activeEvent?.learnerSpaceInfo?.expectedLearnerAction || 'Execute matching phrase with steady metronome pulse';
     } else if (this.instructionMode === 'FOLLOW') {
-      if (this.assistanceLevel === 'FULL') {
-        activeOwner = isLearnerSpace ? 'LEARNER' : 'TUTOR';
-        ownershipTitle = isLearnerSpace
-          ? 'YOUR TURN — STUDENT REPETITION'
-          : phraseStage === 'FILL'
-          ? 'TUTOR DEMO: FILL ENTRY (BEAT 4)'
-          : phraseStage === 'LAND'
-          ? 'LAND ON 1: CRASH RESOLUTION'
-          : phraseStage === 'RECOVER'
-          ? 'GROOVE RECOVERY'
-          : 'GROOVE PULSE';
-        ownershipSubtitle = 'Tutor demonstrates the phrase before your turn';
-      } else if (this.assistanceLevel === 'REDUCED') {
-        activeOwner = 'LEARNER';
-        ownershipTitle = phraseStage === 'FILL'
-          ? 'ENTRY ANCHOR → YOUR PHRASE'
-          : phraseStage === 'LAND'
-          ? 'LAND ON 1: CRASH ANCHOR'
-          : phraseStage === 'RECOVER'
-          ? 'RECOVER TO GROOVE'
-          : phraseStage === 'PREPARE'
-          ? 'READY FOR ENTRY'
-          : 'GROOVE PULSE — PREPARE ENTRY';
-        ownershipSubtitle = 'You know the phrase. Listen for the entry and land on Beat 1.';
-      } else {
-        // MINIMAL
-        activeOwner = 'LEARNER';
-        ownershipTitle = phraseStage === 'FILL'
-          ? 'OWN PHRASE — FILL OPPORTUNITY'
-          : phraseStage === 'LAND'
-          ? 'LAND ON 1: DOWNBEAT ANCHOR'
-          : phraseStage === 'RECOVER'
-          ? 'RECOVER — STEADY TIME'
-          : 'KEEP THE PULSE (STEADY TIME)';
-        ownershipSubtitle = 'Keep the pulse. Play the phrase from memory and land on 1.';
-      }
+      // MINIMAL
+      activeOwner = 'LEARNER';
+      ownershipTitle = phraseStage === 'FILL'
+        ? 'OWN PHRASE — FILL OPPORTUNITY'
+        : phraseStage === 'LAND'
+        ? 'LAND ON 1: DOWNBEAT ANCHOR'
+        : phraseStage === 'RECOVER'
+        ? 'RECOVER — STEADY TIME'
+        : 'KEEP THE PULSE (STEADY TIME)';
+      ownershipSubtitle = 'Keep the pulse. Play the phrase from memory and land on 1.';
     } else {
       activeOwner = 'TUTOR';
       if (this.timeline.hasLearnerSpace) {
@@ -918,6 +946,7 @@ export class MasterMusicalTransport {
         ownershipSubtitle = 'Observe transition into fill, solid downbeat arrival, and return';
       }
     }
+
 
     return {
       status: this.isPaused ? 'paused' : 'running',

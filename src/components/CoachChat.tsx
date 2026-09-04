@@ -84,7 +84,7 @@ export const CoachChat: React.FC<CoachChatProps> = ({
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             </h2>
             <p className="text-xs text-slate-400">
-              Personal curriculum & technique advisor • Powered by Gemini 3.6
+              Personal curriculum & technique advisor • Powered by Gemini 3.8
             </p>
           </div>
         </div>
