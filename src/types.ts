@@ -99,6 +99,9 @@ export interface ChatMessage {
     type: 'Practice' | 'Stretch';
     bpm: number;
   };
+  retryText?: string;
+  retryable?: boolean;
+  errorCode?: string;
 }
 
 export interface SongRecommendation {

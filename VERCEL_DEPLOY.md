@@ -45,3 +45,9 @@ If `aiConfigured` is false, add the environment variable and redeploy.
 ## Important
 
 The play-alongs are locally generated no-drum practice music. The reference Song Vault does not host or redistribute commercial recordings.
+
+## C3.2 checks
+
+After deployment, visit `/api/health` and confirm `apiVersion` is `c3.2`. `aiConfigured` should be `true` when `GEMINI_API_KEY` is available to the deployment. Optional: set `GEMINI_FALLBACK_MODEL` to another model name if you deliberately want a fallback during primary-model capacity events.
+
+The repository must contain only the JavaScript Vercel handlers under `api/`. Do not restore the legacy `.ts` API files; `.vercelignore` also guards against those stale routes.

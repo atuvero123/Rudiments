@@ -76,6 +76,7 @@ function MainAppContent() {
   // Mobile-first default to Today's practice
   const [activeTab, setActiveTab] = useState<AppTab>('today');
   const [requestedPlayAlongId, setRequestedPlayAlongId] = useState<string | null>(null);
+  const [requestedDevelopmentStepId, setRequestedDevelopmentStepId] = useState<string | null>(null);
 
   const {
     profile,
@@ -133,7 +134,97 @@ What are you working on at your kit or practice pad today? Choose a quick prompt
   const [metronomeStartBpm, setMetronomeStartBpm] = useState(60);
   const [metronomeTargetBpm, setMetronomeTargetBpm] = useState(100);
 
-  // Send message to Coach Rudiment API
+  // Coach Rudiment API — C3.2 resilient request + retry flow.
+  const requestCoachResponse = async (conversation: ChatMessage[]): Promise<string> => {
+    const currentTrackLevels = skillTracks.reduce((acc, t) => {
+      acc[t.id] = t.currentLevel;
+      return acc;
+    }, {} as Record<string, string>);
+
+    const skillsSummary = skills.map((s) => {
+      const evidenceCtx = getCoachSkillContext(s.id, s.name);
+      return {
+        name: s.name,
+        track: s.parentTrack,
+        status: s.status,
+        comfortBpm: s.currentComfortTempo,
+        gaps: s.knownGaps,
+        evidence: {
+          workingBpm: evidenceCtx.currentWorkingTempo,
+          cleanBpm: evidenceCtx.highestCleanTempo,
+          recurringFriction: evidenceCtx.primaryRecurringFriction,
+          trend: evidenceCtx.recentTrend,
+          totalSessions: evidenceCtx.totalSessions,
+          totalAttempts: evidenceCtx.totalAttempts,
+          summaryText: evidenceCtx.summaryText,
+        },
+      };
+    });
+
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: conversation
+          .filter((m) => !m.errorCode)
+          .map((m) => ({ role: m.role, content: m.content })),
+        currentTrackLevels,
+        learnerProfile: profile,
+        skillsSummary,
+      }),
+    });
+
+    const rawResponse = await res.text();
+    let data: any = null;
+    try {
+      data = rawResponse ? JSON.parse(rawResponse) : {};
+    } catch {
+      const preview = rawResponse.replace(/\s+/g, ' ').trim().slice(0, 140);
+      throw Object.assign(
+        new Error(
+          `Coach API returned a non-JSON response (${res.status}).` +
+          `${preview ? ` Response: ${preview}` : ''}`
+        ),
+        { code: 'AI_BAD_RESPONSE', retryable: res.status >= 500 }
+      );
+    }
+
+    if (!res.ok) {
+      throw Object.assign(
+        new Error(data.error || `Failed to get response from Rudiment (${res.status}).`),
+        {
+          code: data.code || 'COACH_REQUEST_FAILED',
+          retryable: Boolean(data.retryable) || [429, 502, 503, 504].includes(res.status),
+          retryAfterMs: data.retryAfterMs,
+        }
+      );
+    }
+    if (!data.reply || typeof data.reply !== 'string') {
+      throw Object.assign(new Error('Coach API responded without a valid reply.'), {
+        code: 'AI_EMPTY_RESPONSE',
+        retryable: true,
+      });
+    }
+    return data.reply;
+  };
+
+  const appendCoachError = (err: any, retryText: string) => {
+    console.error(err);
+    const retryable = Boolean(err?.retryable) || ['AI_BUSY', 'AI_TIMEOUT', 'AI_NETWORK_ERROR', 'AI_BAD_RESPONSE'].includes(err?.code);
+    const errorMsg: ChatMessage = {
+      id: `err-${Date.now()}`,
+      role: 'assistant',
+      content: retryable
+        ? `⚠️ Rudiment could not answer just now: ${err?.message || 'temporary AI service issue'}. Your question is saved — tap Retry when ready.`
+        : `⚠️ Note: ${err?.message || 'I encountered an issue connecting. Please try again.'}`,
+      timestamp: new Date(),
+      retryText: retryable ? retryText : undefined,
+      retryable,
+      errorCode: err?.code || 'COACH_ERROR',
+    };
+    setMessages((prev) => [...prev, errorMsg]);
+  };
+
   const handleSendMessage = async (text: string) => {
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -147,78 +238,40 @@ What are you working on at your kit or practice pad today? Choose a quick prompt
     setIsLoading(true);
 
     try {
-      // Map track levels
-      const currentTrackLevels = skillTracks.reduce((acc, t) => {
-        acc[t.id] = t.currentLevel;
-        return acc;
-      }, {} as Record<string, string>);
-
-      // Summarize granular skills with BU2B Evidence Engine facts
-      const skillsSummary = skills.map((s) => {
-        const evidenceCtx = getCoachSkillContext(s.id, s.name);
-        return {
-          name: s.name,
-          track: s.parentTrack,
-          status: s.status,
-          comfortBpm: s.currentComfortTempo,
-          gaps: s.knownGaps,
-          evidence: {
-            workingBpm: evidenceCtx.currentWorkingTempo,
-            cleanBpm: evidenceCtx.highestCleanTempo,
-            recurringFriction: evidenceCtx.primaryRecurringFriction,
-            trend: evidenceCtx.recentTrend,
-            totalSessions: evidenceCtx.totalSessions,
-            totalAttempts: evidenceCtx.totalAttempts,
-            summaryText: evidenceCtx.summaryText,
-          },
-        };
-      });
-
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: newMessages.map((m) => ({ role: m.role, content: m.content })),
-          currentTrackLevels,
-          learnerProfile: profile,
-          skillsSummary,
-        }),
-      });
-
-      const rawResponse = await res.text();
-      let data: any = null;
-      try {
-        data = rawResponse ? JSON.parse(rawResponse) : {};
-      } catch {
-        const preview = rawResponse.replace(/\s+/g, ' ').trim().slice(0, 140);
-        throw new Error(
-          `Coach API returned a non-JSON response (${res.status}). ` +
-          `This deployment may still contain an older /api/chat function.${preview ? ` Response: ${preview}` : ''}`
-        );
-      }
-
-      if (!res.ok) throw new Error(data.error || `Failed to get response from Rudiment (${res.status}).`);
-      if (!data.reply || typeof data.reply !== 'string') {
-        throw new Error('Coach API responded without a valid reply.');
-      }
-
+      const reply = await requestCoachResponse(newMessages);
       const assistantMsg: ChatMessage = {
         id: `ast-${Date.now()}`,
         role: 'assistant',
-        content: data.reply,
+        content: reply,
         timestamp: new Date(),
       };
-
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err: any) {
-      console.error(err);
-      const errorMsg: ChatMessage = {
-        id: `err-${Date.now()}`,
-        role: 'assistant',
-        content: `⚠️ Note: ${err.message || 'I encountered an issue connecting. Please try again.'}`,
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+      appendCoachError(err, text);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRetryCoachMessage = async (text: string) => {
+    if (isLoading) return;
+    setIsLoading(true);
+    // Keep the learner's original question; remove only the retry card itself.
+    const cleaned = messages.filter((message) => !(message.retryable && message.retryText === text));
+    setMessages(cleaned);
+    try {
+      const reply = await requestCoachResponse(cleaned);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `ast-${Date.now()}`,
+          role: 'assistant',
+          content: reply,
+          timestamp: new Date(),
+        },
+      ]);
+    } catch (err: any) {
+      appendCoachError(err, text);
     } finally {
       setIsLoading(false);
     }
@@ -304,8 +357,9 @@ What are you working on at your kit or practice pad today? Choose a quick prompt
               <TodayPracticeView
                 practiceSessions={practiceSessions}
                 onAddSession={handleLogSession}
-                onOpenMusicalApplication={(trackId) => {
+                onOpenMusicalApplication={(trackId, developmentStepId) => {
                   setRequestedPlayAlongId(trackId);
+                  setRequestedDevelopmentStepId(developmentStepId || null);
                   setActiveTab('songs');
                 }}
               />
@@ -326,7 +380,11 @@ What are you working on at your kit or practice pad today? Choose a quick prompt
               <SongVaultView
                 onAskCoachAboutSong={handleAskCoachAboutSong}
                 initialPlayAlongId={requestedPlayAlongId}
-                onInitialPlayAlongConsumed={() => setRequestedPlayAlongId(null)}
+                initialDevelopmentStepId={requestedDevelopmentStepId}
+                onInitialPlayAlongConsumed={() => {
+                  setRequestedPlayAlongId(null);
+                  setRequestedDevelopmentStepId(null);
+                }}
               />
             )}
 
@@ -336,6 +394,7 @@ What are you working on at your kit or practice pad today? Choose a quick prompt
               <CoachChat
                 messages={messages}
                 onSendMessage={handleSendMessage}
+                onRetryMessage={handleRetryCoachMessage}
                 isLoading={isLoading}
                 skillTracks={skillTracks}
                 onOpenMetronomeWithLadder={handleOpenMetronomeWithLadder}

@@ -31,3 +31,9 @@ This C2 package has been converted to Vercel-native serverless API routes. See `
 ## C3 — Musical Application & Play-Along Engine
 
 C3 adds original no-drum curriculum play-alongs and arrangement coaching. The current canonical competency recommends an appropriate backing track, verified vocabulary determines which variations/fill challenges are available, and Today can launch the current musical application directly. See `C3_BUILD_REPORT.md` and `VERCEL_DEPLOY.md`.
+
+## C3.2 — Musical Development
+
+C3.2 adds a curriculum-gated 4/4 musical-development path on top of the existing original no-drum play-alongs. The pathway develops pulse → backbeat → groove variation → fill phrasing → rudiment application → constrained creativity → full arrangement performance. Today launches the musical-development step associated with the current canonical competency.
+
+Coach Chat also retries temporary Gemini capacity errors automatically and preserves the learner's question for a one-tap retry if the service remains busy.

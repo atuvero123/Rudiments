@@ -24,7 +24,8 @@ import {
   CURRICULUM_UNITS_BY_ID,
 } from '../data/canonicalCurriculum';
 import { GuidedPracticeSession } from './GuidedPracticeSession';
-import { recommendPlayAlongForCompetency } from '../data/playAlongTracks';
+import { getPlayAlongById, recommendPlayAlongForCompetency } from '../data/playAlongTracks';
+import { recommendMusicalDevelopmentStepForCompetency } from '../data/musicalDevelopment';
 import { RoadmapWhyThisNextCard } from './RoadmapWhyThisNextCard';
 import { CurriculumDecisionCard } from './CurriculumDecisionCard';
 import {
@@ -53,7 +54,7 @@ import {
 interface TodayPracticeViewProps {
   practiceSessions: PracticeSession[];
   onAddSession: (session: PracticeSession) => void;
-  onOpenMusicalApplication?: (trackId: string) => void;
+  onOpenMusicalApplication?: (trackId: string, developmentStepId?: string) => void;
 }
 
 export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
@@ -119,6 +120,8 @@ export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
 
   const activeLane = todayLanes.find((l) => l.laneType === selectedLaneType) || primaryLane;
   const recommendedPlayAlong = recommendPlayAlongForCompetency(canonicalPosition.activeCompetencyId);
+  const recommendedMusicalStep = recommendMusicalDevelopmentStepForCompetency(canonicalPosition.activeCompetencyId);
+  const recommendedMusicalTrack = getPlayAlongById(recommendedMusicalStep.trackId) || recommendedPlayAlong;
 
   const canonicalActiveSkill: GranularSkill =
     skills.find((s) => s.id === activeLane.targetSkillId) ||
@@ -587,12 +590,12 @@ COACH NOTE: Focus on relaxed wrists and strict subdivision accuracy.
                 type="button"
                 onClick={(event) => {
                   event.stopPropagation();
-                  onOpenMusicalApplication(recommendedPlayAlong.id);
+                  onOpenMusicalApplication(recommendedMusicalTrack.id, recommendedMusicalStep.id);
                 }}
                 className="w-full min-h-[42px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black flex items-center justify-center gap-2 transition-colors"
               >
                 <Music className="w-3.5 h-3.5" />
-                Play in {recommendedPlayAlong.title} · {recommendedPlayAlong.bpm} BPM
+                Step {recommendedMusicalStep.order}: {recommendedMusicalStep.shortTitle} · {recommendedMusicalTrack.bpm} BPM
               </button>
             )}
           </div>

@@ -2,11 +2,15 @@ export type PlayAlongMeter = '4/4' | '6/8';
 export type PlayAlongCoachMode = 'GUIDED' | 'REDUCED' | 'PERFORMANCE';
 export type PlayAlongApplicationMode =
   | 'GROOVE_ONLY'
+  | 'GROOVE_VARIATION'
   | 'THREE_PLUS_ONE'
   | 'SEVEN_PLUS_ONE'
   | 'HALF_BAR_FILL'
   | 'BEAT_FOUR_FILL'
+  | 'RUDIMENT_FILL'
   | 'MUSICAL_CHOICE'
+  | 'CREATIVITY_CHALLENGE'
+  | 'FULL_ARRANGEMENT'
   | 'FREE_PLAY';
 
 export type SectionCue = 'NO_FILL' | 'SHORT_FILL' | 'BUILD' | 'CRASH_ONLY' | 'FREE';
@@ -27,7 +31,10 @@ export interface PlayAlongVariation {
   label: string;
   description: string;
   prerequisiteCompetencyIds: string[];
-  kind: 'groove' | 'fill' | 'dynamic' | 'restraint';
+  kind: 'groove' | 'fill' | 'rudiment' | 'dynamic' | 'restraint';
+  countPattern?: string;
+  stickingPattern?: string;
+  placementHint?: string;
 }
 
 export interface PlayAlongTrack {
@@ -99,16 +106,23 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         id: 'pulse-only', label: 'Quarter-note pulse',
         description: 'Play one relaxed stroke per beat and make the click disappear beneath your stroke.',
         prerequisiteCompetencyIds: [], kind: 'groove',
+        countPattern: '1 - 2 - 3 - 4',
+        stickingPattern: 'R R R R (or alternate hands if the current lesson asks for it)',
+        placementHint: 'Stay simple through the whole arrangement; the musical challenge is consistency, not vocabulary.',
       },
       {
         id: '8th-count', label: 'Count eighths internally',
         description: 'Keep playing quarter notes while internally hearing 1 & 2 & 3 & 4 &.',
         prerequisiteCompetencyIds: ['comp-subdiv-8th'], kind: 'groove',
+        countPattern: '1 & 2 & 3 & 4 &',
+        stickingPattern: 'Play on the numbers; hear the & subdivisions internally.',
+        placementHint: 'Use the hidden eighth-note grid to stop quarter notes from drifting between beats.',
       },
       {
         id: 'no-fill', label: 'Choose no fill',
         description: 'Cross a section boundary without filling; use a controlled dynamic change instead.',
         prerequisiteCompetencyIds: [], kind: 'restraint',
+        placementHint: 'Listen to the harmony and let the section change be the event. A clean no-fill is an intentional choice.',
       },
     ],
   },
@@ -190,26 +204,69 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         id: 'base-groove', label: 'Basic backbeat groove',
         description: '8th-note hats, snare on 2 & 4, simple kick on 1 and 3.',
         prerequisiteCompetencyIds: ['comp-grv-backbeat', 'comp-grv-stability'], kind: 'groove',
+        countPattern: '1 & 2 & 3 & 4 &',
+        stickingPattern: 'HH: x x x x x x x x • S: 2, 4 • K: 1, 3',
+        placementHint: 'Use as the default verse groove.',
       },
       {
         id: 'kick-var', label: 'Kick variation',
-        description: 'Add one approved syncopated kick while keeping the backbeat unchanged.',
+        description: 'Add the verified 3-and kick while keeping the backbeat and hi-hat unchanged.',
         prerequisiteCompetencyIds: ['comp-grv-kick-variation'], kind: 'groove',
+        countPattern: '1 & 2 & 3 & 4 &',
+        stickingPattern: 'HH stays constant • S: 2, 4 • K: 1, 3, 3&',
+        placementHint: 'Introduce after the basic groove is settled; do not change the snare placement.',
       },
       {
         id: 'quarter-fill', label: 'Quarter-note transition fill',
         description: 'Use four deliberate notes in the final bar and land beat 1 confidently.',
         prerequisiteCompetencyIds: ['comp-fill-quarter', 'comp-fill-recovery'], kind: 'fill',
+        countPattern: '1 - 2 - 3 - 4 -> CRASH 1',
+        stickingPattern: 'R L R L across snare / toms',
+        placementHint: 'Use on a major section ending, not every four bars.',
       },
       {
         id: '8th-fill', label: 'Eighth-note transition fill',
         description: 'Move even 8ths around the kit without squeezing the final note before beat 1.',
         prerequisiteCompetencyIds: ['comp-fill-8th', 'comp-fill-recovery'], kind: 'fill',
+        countPattern: '1 & 2 & 3 & 4 & -> CRASH 1',
+        stickingPattern: 'R L R L R L R L, moving gradually around the kit',
+        placementHint: 'Use when the arrangement needs more lift than a quarter-note fill.',
+      },
+      {
+        id: 'single-stroke-fill', label: 'Single-stroke musical fill',
+        description: 'Use even alternating singles as a short musical fill while preserving the phrase.',
+        prerequisiteCompetencyIds: ['comp-rud-singles', 'comp-fill-recovery'], kind: 'rudiment',
+        countPattern: '1 e & a 2 e & a 3 e & a 4 e & a',
+        stickingPattern: 'R L R L…; orchestrate simply from snare to toms',
+        placementHint: 'Start with half a bar before attempting a full-bar stream.',
+      },
+      {
+        id: 'double-stroke-fill', label: 'Double-stroke musical fill',
+        description: 'Use R R L L groups as a controlled fill rather than a pad-only roll.',
+        prerequisiteCompetencyIds: ['comp-rud-doubles', 'comp-fill-recovery'], kind: 'rudiment',
+        countPattern: '1 e & a 2 e & a…',
+        stickingPattern: 'R R L L R R L L',
+        placementHint: 'Keep doubles relaxed; move only after the rebound remains even.',
+      },
+      {
+        id: 'paradiddle-fill', label: 'Paradiddle phrase fill',
+        description: 'Turn R L R R L R L L into a phrase-ending fill with clear accents and a clean Beat-1 return.',
+        prerequisiteCompetencyIds: ['comp-rud-single-paradiddle', 'comp-fill-recovery'], kind: 'rudiment',
+        countPattern: '1 e & a 2 e & a',
+        stickingPattern: '>R L R R >L R L L',
+        placementHint: 'Try snare for taps, toms for accents; keep the sticking intact.',
       },
       {
         id: 'dynamic-lift', label: 'Dynamic lift',
         description: 'Raise energy with cymbal texture and stroke height rather than a busier groove.',
         prerequisiteCompetencyIds: ['comp-dyn-song-balance'], kind: 'dynamic',
+        placementHint: 'Use section energy changes before reaching for extra notes.',
+      },
+      {
+        id: 'no-fill', label: 'Deliberate no-fill transition',
+        description: 'Cross a section boundary with a dynamic change or crash only and leave deliberate space.',
+        prerequisiteCompetencyIds: [], kind: 'restraint',
+        placementHint: 'Use whenever a fill would compete with the vocal or musical phrase.',
       },
     ],
   },

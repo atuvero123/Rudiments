@@ -17,6 +17,7 @@ import {
   PlayAlongApplicationMode,
   PlayAlongCoachMode,
   PlayAlongTrack,
+  PlayAlongVariation,
   SectionCue,
 } from '../data/playAlongTracks';
 import {
@@ -25,10 +26,14 @@ import {
   PlayAlongTransportSnapshot,
 } from '../lib/playAlongEngine';
 import { isCompetencyVerified } from '../lib/canonicalProgressEngine';
+import { CURRICULUM_COMPETENCIES_BY_ID } from '../data/canonicalCurriculum';
+import { getMusicalDevelopmentStep } from '../data/musicalDevelopment';
 
 interface PlayAlongStudioProps {
   track: PlayAlongTrack;
   currentCompetencyId?: string | null;
+  developmentStepId?: string | null;
+  initialApplicationMode?: PlayAlongApplicationMode;
   onClose: () => void;
 }
 
@@ -44,6 +49,9 @@ interface StoredPlayAlongAttempt {
   rating: PlayAlongRating;
   transitionControl: 'LOST' | 'MIXED' | 'SOLID';
   musicalChoice: 'OVERPLAYED' | 'UNSURE' | 'MUSICAL';
+  developmentStepId?: string | null;
+  selectedVariationId?: string | null;
+  constraintControl?: 'BROKE' | 'MOSTLY' | 'FOLLOWED';
 }
 
 const HISTORY_KEY = 'RUDIMENT_PLAYALONG_HISTORY_V1';
@@ -54,11 +62,15 @@ const APPLICATION_OPTIONS: Array<{
   description: string;
 }> = [
   { id: 'GROOVE_ONLY', label: 'Groove only', description: 'No fills. Protect pulse, pocket and section dynamics.' },
+  { id: 'GROOVE_VARIATION', label: 'Groove variation', description: 'Alternate the base groove with one verified variation without disturbing the pocket.' },
   { id: 'THREE_PLUS_ONE', label: '3 + 1', description: 'Three bars groove, one full bar fill.' },
   { id: 'SEVEN_PLUS_ONE', label: '7 + 1', description: 'Seven bars groove, one full bar fill.' },
   { id: 'HALF_BAR_FILL', label: 'Half-bar fills', description: 'Enter the fill on beat 3 in selected transition bars.' },
   { id: 'BEAT_FOUR_FILL', label: 'Beat-4 fills', description: 'Use only beat 4 for a compact transition.' },
+  { id: 'RUDIMENT_FILL', label: 'Rudiment as fill', description: 'Choose one verified rudiment and place it musically at selected phrase endings.' },
   { id: 'MUSICAL_CHOICE', label: 'Musical choice', description: 'The arrangement tells you when to fill, build or deliberately leave space.' },
+  { id: 'CREATIVITY_CHALLENGE', label: 'Creativity challenge', description: 'Choose from verified vocabulary under a musical constraint instead of copying one answer.' },
+  { id: 'FULL_ARRANGEMENT', label: 'Full arrangement', description: 'Shape the whole song with groove, dynamics, fills, restraint and recovery.' },
   { id: 'FREE_PLAY', label: 'Free application', description: 'No fill instructions. Make your own musical decisions.' },
 ];
 
@@ -86,18 +98,35 @@ function cueToInstruction(cue: SectionCue): string {
 
 function applicationInstruction(
   mode: PlayAlongApplicationMode,
-  snapshot: PlayAlongTransportSnapshot | null
+  snapshot: PlayAlongTransportSnapshot | null,
+  variation?: PlayAlongVariation
 ): { title: string; detail: string; emphasis: 'groove' | 'fill' | 'choice' } {
   if (!snapshot) {
     return { title: 'Ready', detail: 'Press Start when your sticks and posture are set.', emphasis: 'groove' };
   }
 
   const bar = snapshot.currentBar;
-  const beats = snapshot.currentSection;
+  const section = snapshot.currentSection;
   const isSectionFinalBar = snapshot.barInSection === snapshot.sectionBars;
 
   if (mode === 'GROOVE_ONLY') {
-    return { title: 'GROOVE', detail: 'Stay in the groove. No fill this bar.', emphasis: 'groove' };
+    return { title: 'GROOVE', detail: 'Stay in the simplest verified groove. No fill this bar.', emphasis: 'groove' };
+  }
+  if (mode === 'GROOVE_VARIATION') {
+    const useVariation = snapshot.barInSection > Math.ceil(snapshot.sectionBars / 2);
+    return useVariation
+      ? {
+          title: 'VARIATION B',
+          detail: variation
+            ? `${variation.label}: ${variation.description}`
+            : 'Change only the kick phrase. Keep hi-hat spacing and backbeat identical.',
+          emphasis: 'choice',
+        }
+      : {
+          title: 'GROOVE A',
+          detail: 'Play the basic backbeat groove first. Make the listener feel the foundation before changing it.',
+          emphasis: 'groove',
+        };
   }
   if (mode === 'THREE_PLUS_ONE') {
     const fill = bar % 4 === 0;
@@ -121,11 +150,55 @@ function applicationInstruction(
       ? { title: 'BEAT-4 FILL', detail: 'Stay in the groove through beat 3. Use beat 4 only, then land the next section on beat 1.', emphasis: 'fill' }
       : { title: 'GROOVE', detail: 'Do not enter the fill early. Keep the bar intact.', emphasis: 'groove' };
   }
+  if (mode === 'RUDIMENT_FILL') {
+    return isSectionFinalBar
+      ? {
+          title: 'RUDIMENT → MUSIC',
+          detail: variation
+            ? `${variation.label}. ${variation.placementHint || variation.description} Land the next section on beat 1.`
+            : 'Use one verified rudiment as a short fill, then return to the groove on beat 1.',
+          emphasis: 'fill',
+        }
+      : {
+          title: 'GROOVE FIRST',
+          detail: 'Do not practise the rudiment continuously. Preserve the song until a phrase ending gives it somewhere to belong.',
+          emphasis: 'groove',
+        };
+  }
   if (mode === 'MUSICAL_CHOICE') {
     if (isSectionFinalBar) {
-      return { title: 'TRANSITION CHOICE', detail: cueToInstruction(beats.transitionCue), emphasis: 'choice' };
+      return { title: 'TRANSITION CHOICE', detail: cueToInstruction(section.transitionCue), emphasis: 'choice' };
     }
-    return { title: 'SERVE THE SECTION', detail: beats.grooveHint, emphasis: 'groove' };
+    return { title: 'SERVE THE SECTION', detail: section.grooveHint, emphasis: 'groove' };
+  }
+  if (mode === 'CREATIVITY_CHALLENGE') {
+    if (isSectionFinalBar) {
+      return {
+        title: 'CREATE — WITH RESTRAINT',
+        detail: `${cueToInstruction(section.transitionCue)} Use only verified vocabulary and remember the two-fill limit for the whole arrangement.`,
+        emphasis: 'choice',
+      };
+    }
+    return {
+      title: 'DEVELOP THE SECTION',
+      detail: variation
+        ? `Explore ${variation.label.toLowerCase()} without changing the tempo or the backbeat foundation.`
+        : section.grooveHint,
+      emphasis: 'choice',
+    };
+  }
+  if (mode === 'FULL_ARRANGEMENT') {
+    return isSectionFinalBar
+      ? {
+          title: 'ARRANGE THE TRANSITION',
+          detail: cueToInstruction(section.transitionCue),
+          emphasis: 'choice',
+        }
+      : {
+          title: section.energy >= 3 ? 'LIFT — KEEP THE POCKET' : 'SUPPORT THE SECTION',
+          detail: section.grooveHint,
+          emphasis: 'groove',
+        };
   }
   return { title: 'FREE PLAY', detail: 'Make your own musical choices while protecting time, dynamics and section awareness.', emphasis: 'choice' };
 }
@@ -133,11 +206,16 @@ function applicationInstruction(
 export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
   track,
   currentCompetencyId,
+  developmentStepId,
+  initialApplicationMode,
   onClose,
 }) => {
   const { skills } = useLearner();
+  const developmentStep = getMusicalDevelopmentStep(developmentStepId);
   const [coachMode, setCoachMode] = useState<PlayAlongCoachMode>('GUIDED');
-  const [applicationMode, setApplicationMode] = useState<PlayAlongApplicationMode>('MUSICAL_CHOICE');
+  const [applicationMode, setApplicationMode] = useState<PlayAlongApplicationMode>(
+    initialApplicationMode || developmentStep?.applicationMode || 'MUSICAL_CHOICE'
+  );
   const [clickEnabled, setClickEnabled] = useState(true);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [volume, setVolume] = useState(0.55);
@@ -147,7 +225,9 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
   const [rating, setRating] = useState<PlayAlongRating | null>(null);
   const [transitionControl, setTransitionControl] = useState<'LOST' | 'MIXED' | 'SOLID' | null>(null);
   const [musicalChoice, setMusicalChoice] = useState<'OVERPLAYED' | 'UNSURE' | 'MUSICAL' | null>(null);
+  const [constraintControl, setConstraintControl] = useState<'BROKE' | 'MOSTLY' | 'FOLLOWED' | null>(null);
   const [saved, setSaved] = useState(false);
+  const [selectedVariationId, setSelectedVariationId] = useState<string | null>(null);
   const transportRef = useRef<PlayAlongTransport | null>(null);
   const lastPromptBarRef = useRef<number>(0);
 
@@ -159,17 +239,42 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
     !variation.prerequisiteCompetencyIds.every((id) => isCompetencyVerified(id, skills))
   ), [track, skills]);
 
-  const currentPrompt = applicationInstruction(applicationMode, snapshot);
+  const contextualVariations = useMemo(() => {
+    if (applicationMode === 'RUDIMENT_FILL') return verifiedVariations.filter((v) => v.kind === 'rudiment');
+    if (applicationMode === 'GROOVE_VARIATION') return verifiedVariations.filter((v) => v.kind === 'groove');
+    if (applicationMode === 'CREATIVITY_CHALLENGE' || applicationMode === 'FULL_ARRANGEMENT') return verifiedVariations;
+    return verifiedVariations;
+  }, [verifiedVariations, applicationMode]);
+
+  const preferredVariation = developmentStep?.preferredVariationIds
+    ?.map((id) => contextualVariations.find((variation) => variation.id === id))
+    .find((variation): variation is PlayAlongVariation => Boolean(variation));
+
+  const selectedVariation =
+    contextualVariations.find((variation) => variation.id === selectedVariationId) ||
+    preferredVariation ||
+    contextualVariations[0];
+
+  const currentPrompt = applicationInstruction(applicationMode, snapshot, selectedVariation);
   const totalBars = getTotalPlayAlongBars(track);
 
   const applicationRequirements: Partial<Record<PlayAlongApplicationMode, string[]>> = {
+    GROOVE_VARIATION: ['comp-grv-backbeat', 'comp-grv-stability', 'comp-grv-kick-variation'],
     THREE_PLUS_ONE: ['comp-fill-quarter', 'comp-fill-recovery'],
     SEVEN_PLUS_ONE: ['comp-fill-quarter', 'comp-fill-recovery'],
     HALF_BAR_FILL: ['comp-fill-entry', 'comp-fill-recovery'],
     BEAT_FOUR_FILL: ['comp-fill-entry', 'comp-fill-recovery'],
+    RUDIMENT_FILL: ['comp-rud-singles', 'comp-fill-recovery'],
+    CREATIVITY_CHALLENGE: ['comp-perf-song-arrangement', 'comp-fill-recovery'],
+    FULL_ARRANGEMENT: ['comp-perf-song-app', 'comp-perf-song-arrangement'],
   };
   const applicationAvailable = (mode: PlayAlongApplicationMode) =>
     (applicationRequirements[mode] || []).every((id) => isCompetencyVerified(id, skills));
+
+  const missingRequirements = (mode: PlayAlongApplicationMode) =>
+    (applicationRequirements[mode] || [])
+      .filter((id) => !isCompetencyVerified(id, skills))
+      .map((id) => CURRICULUM_COMPETENCIES_BY_ID.get(id)?.title || id);
 
   useEffect(() => {
     const transport = new PlayAlongTransport(track, {
@@ -197,10 +302,30 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
   useEffect(() => transportRef.current?.setVolume(volume), [volume]);
 
   useEffect(() => {
+    if (developmentStep?.applicationMode) {
+      setApplicationMode(developmentStep.applicationMode);
+    } else if (initialApplicationMode) {
+      setApplicationMode(initialApplicationMode);
+    }
+  }, [developmentStep?.id, initialApplicationMode]);
+
+  useEffect(() => {
+    if (!contextualVariations.length) {
+      setSelectedVariationId(null);
+      return;
+    }
+    if (selectedVariationId && contextualVariations.some((v) => v.id === selectedVariationId)) return;
+    const preferred = developmentStep?.preferredVariationIds
+      ?.map((id) => contextualVariations.find((variation) => variation.id === id))
+      .find(Boolean);
+    setSelectedVariationId((preferred || contextualVariations[0]).id);
+  }, [applicationMode, contextualVariations, developmentStep?.id]);
+
+  useEffect(() => {
     if (!snapshot || !isRunning || coachMode !== 'GUIDED' || !voiceEnabled) return;
     if (snapshot.currentBar === lastPromptBarRef.current) return;
     lastPromptBarRef.current = snapshot.currentBar;
-    const instruction = applicationInstruction(applicationMode, snapshot);
+    const instruction = applicationInstruction(applicationMode, snapshot, selectedVariation);
     const shouldSpeak = instruction.emphasis !== 'groove' || snapshot.barInSection === 1;
     if (!shouldSpeak || !('speechSynthesis' in window)) return;
     try {
@@ -212,7 +337,7 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
     } catch {
       // Visual instruction remains available.
     }
-  }, [snapshot?.currentBar, applicationMode, coachMode, voiceEnabled, isRunning]);
+  }, [snapshot?.currentBar, applicationMode, coachMode, voiceEnabled, isRunning, selectedVariation?.id]);
 
   const start = async () => {
     setIsComplete(false);
@@ -220,6 +345,7 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
     setRating(null);
     setTransitionControl(null);
     setMusicalChoice(null);
+    setConstraintControl(null);
     await transportRef.current?.start();
     setIsRunning(true);
   };
@@ -238,11 +364,12 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
     setRating(null);
     setTransitionControl(null);
     setMusicalChoice(null);
+    setConstraintControl(null);
     lastPromptBarRef.current = 0;
   };
 
   const saveAttempt = () => {
-    if (!rating || !transitionControl || !musicalChoice) return;
+    if (!rating || !transitionControl || !musicalChoice || (developmentStep && !constraintControl)) return;
     const history = loadHistory();
     const attempt: StoredPlayAlongAttempt = {
       id: `playalong-${Date.now()}`,
@@ -254,6 +381,9 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
       rating,
       transitionControl,
       musicalChoice,
+      developmentStepId: developmentStep?.id || null,
+      selectedVariationId: selectedVariation?.id || null,
+      constraintControl: constraintControl || undefined,
     };
     const next = [attempt, ...history].slice(0, 40);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
@@ -296,6 +426,29 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
         </div>
       </section>
 
+      {developmentStep && (
+        <section className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">4/4 Musical Development • Step {developmentStep.order} of 7</p>
+              <h3 className="mt-1 text-lg font-black text-stone-900">{developmentStep.title}</h3>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">{developmentStep.outcome}</p>
+            </div>
+            <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase text-violet-700 shadow-sm">{developmentStep.stage}</span>
+          </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-2">
+            <div className="rounded-xl border border-violet-100 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">Constraint</p>
+              <p className="mt-1 text-xs leading-5 text-stone-700">{developmentStep.practiceConstraint}</p>
+            </div>
+            <div className="rounded-xl border border-violet-100 bg-white p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">Evidence goal</p>
+              <p className="mt-1 text-xs leading-5 text-stone-700">{developmentStep.evidenceGoal}</p>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="grid gap-4 lg:grid-cols-3">
           <div>
@@ -333,7 +486,7 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
                     }`}
                   >
                     <strong className="block text-xs text-stone-900">{option.label}{!available ? ' · Locked' : ''}</strong>
-                    <span className="mt-1 block text-[10px] leading-4 text-stone-500">{available ? option.description : 'Verify the required fill-entry and Beat-1 recovery skills before using this challenge.'}</span>
+                    <span className="mt-1 block text-[10px] leading-4 text-stone-500">{available ? option.description : `Verify first: ${missingRequirements(option.id).join(' • ') || 'required curriculum skills'}`}</span>
                   </button>
                 );
               })}
@@ -381,6 +534,9 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
               <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">Right now</p>
               <h4 className="text-base font-black text-stone-900">{currentPrompt.title}</h4>
               <p className="mt-1 text-xs leading-5 text-stone-600">{currentPrompt.detail}</p>
+              {selectedVariation && ['GROOVE_VARIATION','RUDIMENT_FILL','CREATIVITY_CHALLENGE','FULL_ARRANGEMENT'].includes(applicationMode) && (
+                <p className="mt-2 rounded-lg bg-white/70 px-2 py-1.5 text-[10px] font-semibold text-stone-600">Current vocabulary focus: {selectedVariation.label}</p>
+              )}
             </div>
           </div>
         </div>
@@ -405,12 +561,26 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
           <h3 className="text-sm font-black text-stone-900">Vocabulary you may use now</h3>
           <p className="mt-1 text-xs text-stone-500">Suggestions appear only when their prerequisite competency is verified.</p>
           <div className="mt-3 space-y-2">
-            {verifiedVariations.map((variation) => (
-              <div key={variation.id} className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-                <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-emerald-600" /><strong className="text-xs text-stone-900">{variation.label}</strong></div>
-                <p className="mt-1 text-[11px] leading-5 text-stone-600">{variation.description}</p>
-              </div>
-            ))}
+            {verifiedVariations.map((variation) => {
+              const active = selectedVariation?.id === variation.id;
+              return (
+                <button
+                  key={variation.id}
+                  type="button"
+                  onClick={() => setSelectedVariationId(variation.id)}
+                  className={`w-full rounded-xl border p-3 text-left transition-all ${active ? 'border-[#4a523a] bg-[#eef1e8] ring-1 ring-[#4a523a]/20' : 'border-emerald-200 bg-emerald-50'}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-emerald-600" /><strong className="text-xs text-stone-900">{variation.label}</strong></div>
+                    {active && <span className="rounded-full bg-[#4a523a] px-2 py-0.5 text-[9px] font-black uppercase text-white">Focus</span>}
+                  </div>
+                  <p className="mt-1 text-[11px] leading-5 text-stone-600">{variation.description}</p>
+                  {variation.countPattern && <p className="mt-2 font-mono text-[10px] text-stone-700"><strong>Count:</strong> {variation.countPattern}</p>}
+                  {variation.stickingPattern && <p className="mt-1 font-mono text-[10px] text-stone-700"><strong>Pattern:</strong> {variation.stickingPattern}</p>}
+                  {variation.placementHint && <p className="mt-1 text-[10px] italic leading-4 text-stone-500">{variation.placementHint}</p>}
+                </button>
+              );
+            })}
             {verifiedVariations.length === 0 && <p className="rounded-xl bg-stone-50 p-3 text-xs text-stone-500">Stay with the basic groove/pulse. The curriculum will unlock more musical options as competencies are verified.</p>}
           </div>
         </div>
@@ -438,7 +608,14 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
             <div><p className="mb-2 text-xs font-bold text-stone-300">How controlled was the whole performance?</p><div className="grid grid-cols-3 gap-2">{([['STRUGGLED','Needs work'],['MOSTLY','Mostly controlled'],['CLEAN','Clean & relaxed']] as const).map(([id,label])=><button key={id} onClick={()=>setRating(id)} className={`min-h-[52px] rounded-xl border p-2 text-xs font-bold ${rating===id?'border-amber-400 bg-amber-500 text-stone-950':'border-stone-700 bg-stone-900 text-stone-300'}`}>{label}</button>)}</div></div>
             <div><p className="mb-2 text-xs font-bold text-stone-300">How were section transitions?</p><div className="grid grid-cols-3 gap-2">{([['LOST','Lost sections'],['MIXED','Mixed'],['SOLID','Solid landings']] as const).map(([id,label])=><button key={id} onClick={()=>setTransitionControl(id)} className={`min-h-[48px] rounded-xl border p-2 text-xs font-bold ${transitionControl===id?'border-sky-400 bg-sky-500 text-stone-950':'border-stone-700 bg-stone-900 text-stone-300'}`}>{label}</button>)}</div></div>
             <div><p className="mb-2 text-xs font-bold text-stone-300">How musical were your fill/no-fill choices?</p><div className="grid grid-cols-3 gap-2">{([['OVERPLAYED','Overplayed'],['UNSURE','Unsure'],['MUSICAL','Served the song']] as const).map(([id,label])=><button key={id} onClick={()=>setMusicalChoice(id)} className={`min-h-[48px] rounded-xl border p-2 text-xs font-bold ${musicalChoice===id?'border-violet-400 bg-violet-500 text-white':'border-stone-700 bg-stone-900 text-stone-300'}`}>{label}</button>)}</div></div>
-            <button disabled={!rating || !transitionControl || !musicalChoice || saved} onClick={saveAttempt} className="min-h-[50px] w-full rounded-xl bg-emerald-500 px-4 text-sm font-black text-stone-950 disabled:bg-stone-800 disabled:text-stone-500">{saved ? 'Application attempt saved' : 'Save Play-Along Review'}</button>
+            {developmentStep && (
+              <div>
+                <p className="mb-2 text-xs font-bold text-stone-300">Did you respect this step's practice constraint?</p>
+                <p className="mb-2 text-[10px] leading-4 text-stone-500">{developmentStep.practiceConstraint}</p>
+                <div className="grid grid-cols-3 gap-2">{([['BROKE','Lost the constraint'],['MOSTLY','Mostly'],['FOLLOWED','Followed it']] as const).map(([id,label])=><button key={id} onClick={()=>setConstraintControl(id)} className={`min-h-[48px] rounded-xl border p-2 text-xs font-bold ${constraintControl===id?'border-emerald-400 bg-emerald-500 text-stone-950':'border-stone-700 bg-stone-900 text-stone-300'}`}>{label}</button>)}</div>
+              </div>
+            )}
+            <button disabled={!rating || !transitionControl || !musicalChoice || (developmentStep ? !constraintControl : false) || saved} onClick={saveAttempt} className="min-h-[50px] w-full rounded-xl bg-emerald-500 px-4 text-sm font-black text-stone-950 disabled:bg-stone-800 disabled:text-stone-500">{saved ? (developmentStep ? 'Musical development evidence saved' : 'Application attempt saved') : 'Save Play-Along Review'}</button>
           </div>
         </section>
       )}

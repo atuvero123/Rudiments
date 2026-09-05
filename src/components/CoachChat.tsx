@@ -5,6 +5,7 @@ import { Send, Bot, User, Sparkles, Drum, Play, ShieldAlert, ArrowRight, RotateC
 interface CoachChatProps {
   messages: ChatMessage[];
   onSendMessage: (content: string) => Promise<void>;
+  onRetryMessage?: (content: string) => Promise<void>;
   isLoading: boolean;
   skillTracks: SkillTrack[];
   onOpenMetronomeWithLadder?: (startBpm: number, targetBpm: number) => void;
@@ -14,6 +15,7 @@ interface CoachChatProps {
 export const CoachChat: React.FC<CoachChatProps> = ({
   messages,
   onSendMessage,
+  onRetryMessage,
   isLoading,
   skillTracks,
   onOpenMetronomeWithLadder,
@@ -162,6 +164,23 @@ export const CoachChat: React.FC<CoachChatProps> = ({
               <div className="whitespace-pre-wrap space-y-2 font-sans">
                 {msg.content}
               </div>
+
+              {msg.role === 'assistant' && msg.retryable && msg.retryText && onRetryMessage && (
+                <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5">
+                  <div className="text-[11px] text-amber-100">
+                    <strong className="block text-amber-300">Question preserved</strong>
+                    You do not need to type it again.
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isLoading}
+                    onClick={() => onRetryMessage(msg.retryText!)}
+                    className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg bg-amber-500 px-3 text-xs font-black text-slate-950 disabled:bg-slate-700 disabled:text-slate-400"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" /> Retry
+                  </button>
+                </div>
+              )}
 
               {/* Extra action cards if model output contains tempo ladders */}
               {msg.role === 'assistant' && msg.content.includes('Tempo ladder') && (
