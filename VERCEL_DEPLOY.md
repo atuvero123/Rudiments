@@ -53,6 +53,6 @@ After deployment, visit `/api/health` and confirm `apiVersion` is `c3.2`. `aiCon
 The repository must contain only the JavaScript Vercel handlers under `api/`. Do not restore the legacy `.ts` API files; `.vercelignore` also guards against those stale routes.
 
 
-## C3.3 checks
+## C3.3.1 checks
 
-After deployment, `/api/health` should report `apiVersion: "c3.3"`. In Songs, the 4/4 Musical Development Path should show mission progress inside each stage. Open an available stage and verify that only the current/previously completed mission can be selected, that available vocabulary has a Hear preview, and that creator missions require an actual self-created choice to complete.
+After deployment, `/api/health` should report `apiVersion: "c3.3.1"`. In Songs, the 4/4 Musical Development Path should show mission progress inside each stage. Open an available stage and verify that only the current/previously completed mission can be selected, that available vocabulary has a Hear preview, and that creator missions require an actual self-created choice to complete.

@@ -134,7 +134,7 @@ What are you working on at your kit or practice pad today? Choose a quick prompt
   const [metronomeStartBpm, setMetronomeStartBpm] = useState(60);
   const [metronomeTargetBpm, setMetronomeTargetBpm] = useState(100);
 
-  // Coach Rudiment API — C3.3 resilient request + retry flow.
+  // Coach Rudiment API — C3.3.1 resilient request + retry flow.
   const requestCoachResponse = async (conversation: ChatMessage[]): Promise<string> => {
     const currentTrackLevels = skillTracks.reduce((acc, t) => {
       acc[t.id] = t.currentLevel;

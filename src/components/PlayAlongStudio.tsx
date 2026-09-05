@@ -254,9 +254,12 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
       attempt.musicalChoice !== 'OVERPLAYED' &&
       attempt.constraintControl === 'FOLLOWED'
     );
-    if (hasLegacySuccessfulStepAttempt) {
-      developmentStep.missions.forEach((missionItem) => completed.add(missionItem.id));
-      return completed;
+    // C3.3.1 migration rule: legacy C3.2 step-level evidence proves the
+    // original musical application only. Credit Mission 1, then continue
+    // reading explicit C3.3 mission attempts so later missions are earned
+    // individually rather than being grandfathered wholesale.
+    if (hasLegacySuccessfulStepAttempt && developmentStep.missions[0]) {
+      completed.add(developmentStep.missions[0].id);
     }
     history.forEach((attempt) => {
       const missionItem = developmentStep.missions.find((candidate) => candidate.id === attempt.developmentMissionId);
@@ -536,7 +539,7 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
         <section className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">C3.3 Musical Development • Step {developmentStep.order} of 7</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">C3.3.1 Musical Development • Step {developmentStep.order} of 7</p>
               <h3 className="mt-1 text-lg font-black text-stone-900">{developmentStep.title}</h3>
               <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">{developmentStep.outcome}</p>
             </div>

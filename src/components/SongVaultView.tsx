@@ -58,13 +58,18 @@ export const SongVaultView: React.FC<SongVaultViewProps> = ({ onAskCoachAboutSon
   }, [historyRevision]);
 
   const missionProgress = (step: MusicalDevelopmentStep) => {
-    if (developmentEvidence.legacyCompletedSteps.has(step.id)) {
-      return { completed: step.missions.length, total: step.missions.length, nextMission: undefined };
+    // C3.3.1 migration rule: a successful pre-mission (C3.2) step attempt
+    // preserves prior musical application, but it only credits Mission 1.
+    // Missions introduced in C3.3 must be completed through their own evidence.
+    const effectiveCompletedMissionIds = new Set(developmentEvidence.completedMissionIds);
+    if (developmentEvidence.legacyCompletedSteps.has(step.id) && step.missions[0]) {
+      effectiveCompletedMissionIds.add(step.missions[0].id);
     }
-    const completed = step.missions.filter((mission) => developmentEvidence.completedMissionIds.has(mission.id)).length;
+
+    const completed = step.missions.filter((mission) => effectiveCompletedMissionIds.has(mission.id)).length;
     const nextMission = step.missions.find((mission, index) => {
-      if (developmentEvidence.completedMissionIds.has(mission.id)) return false;
-      const previousComplete = index === 0 || developmentEvidence.completedMissionIds.has(step.missions[index - 1].id);
+      if (effectiveCompletedMissionIds.has(mission.id)) return false;
+      const previousComplete = index === 0 || effectiveCompletedMissionIds.has(step.missions[index - 1].id);
       const missionPrereqs = (mission.prerequisiteCompetencyIds || []).every((id) => isCompetencyVerified(id, skills));
       return previousComplete && missionPrereqs;
     });
@@ -153,7 +158,7 @@ export const SongVaultView: React.FC<SongVaultViewProps> = ({ onAskCoachAboutSon
       <div className="bg-[#171612] border border-stone-800 rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 text-stone-100">
         <div>
           <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
-            C3.3 Groove Development & Creativity
+            C3.3.1 Groove Development & Creativity
           </span>
           <h2 className="text-2xl font-black text-white mt-2 mb-1">Play the curriculum inside music</h2>
           <p className="text-sm text-stone-300 max-w-3xl leading-6">

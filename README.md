@@ -42,3 +42,7 @@ Coach Chat also retries temporary Gemini capacity errors automatically and prese
 ## C3.3 — Groove Development & Creativity
 
 C3.3 deepens each 4/4 musical-development stage into sequential missions. Groove stages now move from a trusted base pattern into audible variations, controlled A/B switching, learner-created one-element variations, section-based choices, phrase-length fill work, rudiment orchestration, restraint and full-arrangement ownership. Mission evidence is stored separately from canonical curriculum certification; older successful C3.2 application evidence is grandfathered so existing progress is preserved.
+
+## C3.3.1 — Progress Integrity Repair
+
+C3.3.1 corrects legacy C3.2 migration. A successful pre-mission Step completion now preserves musical-application evidence and credits only Mission 1, rather than falsely marking every later C3.3 mission complete. Explicit C3.3 mission attempts are then merged normally, so Mission 2+ must be earned through their own qualifying evidence. Canonical curriculum prerequisites and certification are unchanged.
