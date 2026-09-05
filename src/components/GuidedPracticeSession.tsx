@@ -1277,7 +1277,7 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
               {/* Skill/Fill */}
               <div className="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/30 space-y-1">
                 <span className="text-[9px] font-extrabold uppercase tracking-wider text-amber-800 block">
-                  2. Vocabulary Fill
+                  {currentExercise.challengeType === 'musical-fill' ? '2. Vocabulary Fill' : '2. Required Pattern'}
                 </span>
                 <p className="font-black text-stone-900 text-[11px] leading-snug">
                   {currentExercise.entryExitInstructions?.skillFill || `Execute pattern on target beat`}
@@ -1358,60 +1358,26 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
           </div>
         )}
 
-        {/* Pattern / Sticking & Accent Display */}
+        {/* CURRENT REQUIRED PATTERN — never substitute optional transfer sticking here. */}
         {currentExercise.sticking && (
           <div className="bg-stone-900 text-stone-100 rounded-2xl p-4 space-y-3 text-center border border-stone-800 shadow-inner">
             <div className="flex items-center justify-between border-b border-stone-800 pb-2">
               <span className="text-[10px] font-bold uppercase tracking-widest text-amber-400">
-                {currentExercise.transferInstructions?.accentPattern ? 'Sticking & Accent Map' : 'Sticking Pattern'}
+                Required Pattern
               </span>
-              {currentExercise.transferInstructions?.accentPattern && (
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
-                  Accented Pattern
-                </span>
-              )}
+              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                Play this now
+              </span>
             </div>
 
-            {/* Accent Pattern / Badges */}
-            {currentExercise.transferInstructions?.accentNotes ? (
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-center gap-1.5 py-1">
-                  {currentExercise.transferInstructions.accentNotes.map((note, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex flex-col items-center justify-center min-w-[2.75rem] px-2 py-1.5 rounded-xl border transition-all ${
-                        note.isAccented
-                          ? 'bg-amber-400 text-stone-950 border-amber-300 font-black scale-105 shadow-md'
-                          : 'bg-stone-800 text-stone-300 border-stone-700 font-bold opacity-80'
-                      }`}
-                    >
-                      <span className="text-[8px] font-mono uppercase tracking-wider text-stone-900 font-extrabold">
-                        {note.isAccented ? '> ACCENT' : 'TAP'}
-                      </span>
-                      <span className="text-lg sm:text-xl font-mono font-black">
-                        {note.isAccented ? `>${note.hand}` : note.hand}
-                      </span>
-                      {note.zone && (
-                        <span className={`text-[8px] font-extrabold uppercase mt-0.5 px-1 rounded ${
-                          note.isAccented ? 'bg-stone-900 text-amber-300' : 'text-stone-400'
-                        }`}>
-                          {note.zone}
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <div className="text-xs font-mono font-bold text-amber-300">
-                  Pattern: {currentExercise.transferInstructions.accentPattern}
-                </div>
-              </div>
-            ) : (
-              <div className="text-2xl sm:text-3xl font-mono font-black tracking-widest text-amber-300 py-1 select-all">
-                {currentExercise.sticking}
-              </div>
-            )}
+            <div className="text-2xl sm:text-3xl font-mono font-black tracking-widest text-amber-300 py-1 select-all">
+              {currentExercise.sticking}
+            </div>
 
-            {/* Pad Adaptation Note if on Practice Pad */}
+            <p className="text-[10px] text-stone-400 leading-relaxed">
+              This is the limb/sticking pattern required by the current exercise. Counting is shown separately below.
+            </p>
+
             {currentExercise.padAdaptationNote && (
               <div className="text-[11px] text-amber-200/90 italic pt-1 border-t border-stone-800">
                 💡 Pad Prompt: {currentExercise.padAdaptationNote}
@@ -1423,6 +1389,68 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
         {/* TRANSFER INSTRUCTION MODEL: ORCHESTRATION MAP, REPETITION CYCLE & SUCCESS TARGET */}
         {currentExercise.transferInstructions && (
           <div className="space-y-3 pt-1">
+            <div className={`rounded-2xl border-2 p-3.5 ${
+              currentExercise.progressionStage === 'TRANSFER'
+                ? 'bg-violet-500/10 border-violet-500/30'
+                : 'bg-stone-50 border-stone-200'
+            }`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-wider text-violet-800">
+                    {currentExercise.progressionStage === 'TRANSFER'
+                      ? 'Transfer / Orchestration Layer'
+                      : 'Optional Transfer / Later Application'}
+                  </div>
+                  <p className="text-[10px] text-stone-600 mt-1 leading-relaxed">
+                    {currentExercise.progressionStage === 'TRANSFER'
+                      ? 'This section shows how the required pattern is moved or accented for this transfer exercise. It does not replace the Required Pattern above.'
+                      : 'Not required for the current exercise. Use this later to explore orchestration after the Required Pattern is controlled.'}
+                  </p>
+                </div>
+                <span className="shrink-0 text-[9px] font-black uppercase tracking-wider px-2 py-1 rounded-full bg-white border border-stone-200 text-stone-600">
+                  {currentExercise.progressionStage === 'TRANSFER' ? 'Current extension' : 'Later'}
+                </span>
+              </div>
+            </div>
+
+            {currentExercise.transferInstructions.accentNotes && (
+              <div className="bg-stone-900 text-stone-100 rounded-2xl p-4 space-y-3 text-center border border-stone-800 shadow-inner">
+                <div className="flex items-center justify-between border-b border-stone-800 pb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-violet-300">
+                    Transfer Accent Map
+                  </span>
+                  <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded bg-violet-500/20 text-violet-200">
+                    ORCHESTRATION
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-1.5 py-1">
+                  {currentExercise.transferInstructions.accentNotes.map((note, idx) => (
+                    <div
+                      key={idx}
+                      className={`flex flex-col items-center justify-center min-w-[2.75rem] px-2 py-1.5 rounded-xl border ${
+                        note.isAccented
+                          ? 'bg-violet-300 text-stone-950 border-violet-200 font-black scale-105 shadow-md'
+                          : 'bg-stone-800 text-stone-300 border-stone-700 font-bold opacity-80'
+                      }`}
+                    >
+                      <span className="text-[8px] font-mono uppercase tracking-wider font-extrabold">
+                        {note.isAccented ? '> ACCENT' : 'TAP'}
+                      </span>
+                      <span className="text-lg sm:text-xl font-mono font-black">
+                        {note.isAccented ? `>${note.hand}` : note.hand}
+                      </span>
+                      {note.zone && (
+                        <span className="text-[8px] font-extrabold uppercase mt-0.5 px-1 rounded">{note.zone}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="text-xs font-mono font-bold text-violet-200">
+                  Transfer pattern: {currentExercise.transferInstructions.accentPattern}
+                </div>
+              </div>
+            )}
+
             {/* Orchestration Map */}
             {currentExercise.transferInstructions.orchestrationMap && (
               <div className="bg-[#f6f6f4] border-2 border-stone-300 rounded-2xl p-4 space-y-2.5">
@@ -1515,7 +1543,7 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
         {currentExercise.counting && (
           <div className="bg-stone-100 rounded-2xl p-3 text-center space-y-1 border border-stone-200">
             <span className="text-[10px] font-bold uppercase tracking-wider text-stone-500 block">
-              Subdivision Counting
+              Counting / Subdivision — How to Count the Required Pattern
             </span>
             <div className="text-sm font-mono font-bold text-stone-800">
               {currentExercise.counting}

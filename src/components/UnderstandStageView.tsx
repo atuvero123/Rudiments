@@ -222,8 +222,11 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
           ))}
         </div>
 
-        <div className="text-xs font-mono font-bold text-amber-300/90 pt-1">
-          {teachingDef.sticking}
+        <div className="pt-2 border-t border-stone-800/80 space-y-1">
+          <div className="text-[9px] font-black uppercase tracking-wider text-emerald-300">Required Pattern — Play This Now</div>
+          <div className="text-xs font-mono font-bold text-amber-300/90">
+            {teachingDef.sticking}
+          </div>
         </div>
       </div>
 

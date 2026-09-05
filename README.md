@@ -50,3 +50,8 @@ C3.3.1 corrects legacy C3.2 migration. A successful pre-mission Step completion 
 ## C4 — Assessment, Advancement & Daily Coaching Hardening
 
 C4 closes the curriculum loop: ordinary practice builds readiness, but only a completed practical verification at the canonical standard certifies a competency. Today and Path now share the same advancement-readiness state, successful verification automatically moves the canonical path forward, failed verification creates a repair path without deleting progress, and Profile & Progress shows recent formal curriculum advances. See `C4_BUILD_REPORT.md`.
+
+
+## C4.1 — Pattern & Teaching Clarity
+
+C4.1 separates **what the learner must play now** from later transfer/orchestration ideas. Guided Practice now labels the active sticking as **Required Pattern — Play this now**, counting is explicitly described as how to count that required pattern, and transfer/accent/orchestration material has its own clearly identified layer. The placement generator also now derives timing-foundation patterns from canonical teaching definitions instead of using the old generic R-L-K fill fallback. Quarter-Note Pulse therefore remains quarter notes throughout warm-up, calibration, placement and landing practice.

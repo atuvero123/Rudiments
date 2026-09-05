@@ -257,7 +257,7 @@ export function generatePracticeSession(input: GenerateSessionInput): PracticeSe
       difficulty: 'Easy',
     });
 
-    const transferModel15 = primaryDecision.currentStage === 'TRANSFER'
+    const transferModel15 = primaryDecision.currentStage === 'TRANSFER' && supportsSpatialTransfer(primarySkill)
       ? generateTransferInstructions(primarySkill, equipment, 'TRANSFER', primaryDecision.recurringFriction)
       : undefined;
 
@@ -394,7 +394,7 @@ export function generatePracticeSession(input: GenerateSessionInput): PracticeSe
       }
     }
 
-    const transferModel = stage === 'TRANSFER'
+    const transferModel = stage === 'TRANSFER' && supportsSpatialTransfer(primarySkill)
       ? generateTransferInstructions(primarySkill, equipment, 'TRANSFER', primaryDecision.recurringFriction)
       : undefined;
 
@@ -514,7 +514,17 @@ export function generatePracticeSession(input: GenerateSessionInput): PracticeSe
 }
 
 // Helpers for pattern stickings and counting
+function supportsSpatialTransfer(skill: GranularSkill): boolean {
+  // Spatial accent/orchestration maps are meaningful for patterns that are
+  // actually moved between limbs/surfaces. Timing and reading foundations
+  // should not suddenly become tom/pad-zone transfer drills.
+  return ['rudiments', 'fills', 'coordination', 'dynamics'].includes(skill.parentTrack);
+}
+
 function getStickingForSkill(skillId: string): string {
+  if (skillId === 'time-quarter-pulse') return 'R R R R';
+  if (skillId === 'time-8th-subdivision') return 'R L R L R L R L';
+  if (skillId === 'time-44') return 'R R R R';
   if (skillId.includes('single-stroke')) return 'R L R L R L R L';
   if (skillId.includes('double-stroke')) return 'R R L L R R L L';
   if (skillId.includes('single-paradiddle')) return 'R L R R L R L L';
@@ -532,6 +542,8 @@ function getStickingForSkill(skillId: string): string {
 }
 
 function getCountingForSkill(skillId: string): string {
+  if (skillId === 'time-quarter-pulse' || skillId === 'time-44') return '1 2 3 4';
+  if (skillId === 'time-8th-subdivision') return '1 & 2 & 3 & 4 &';
   if (skillId.includes('rlk') || skillId.includes('rkl') || skillId.includes('68')) {
     return '1-trip-let  2-trip-let  3-trip-let  4-trip-let';
   }
@@ -542,6 +554,8 @@ function getCountingForSkill(skillId: string): string {
 }
 
 function getSubdivisionForSkill(skillId: string): string {
+  if (skillId === 'time-quarter-pulse' || skillId === 'time-44') return 'Quarter Notes';
+  if (skillId === 'time-8th-subdivision') return '8th Notes';
   if (skillId.includes('rlk') || skillId.includes('rkl') || skillId.includes('68')) {
     return 'Triplets';
   }

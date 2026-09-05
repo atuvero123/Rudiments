@@ -18,7 +18,8 @@ import {
   ExercisePedagogicalRole,
   CurriculumDecision,
 } from '../types';
-import { generateTransferInstructions } from './transferEngine';
+import { generateTransferInstructions, getStickingPatternForSkill } from './transferEngine';
+import { findTeachingDefinition } from './teachingDefinitions';
 
 const PLACEMENT_ATTEMPTS_STORAGE_KEY = 'RUDIMENT_PLACEMENT_ATTEMPTS_V1';
 const PLACEMENT_MEMORY_STORAGE_KEY = 'RUDIMENT_PLACEMENT_MEMORY_V1';
@@ -365,13 +366,18 @@ export function generatePlacementExercise(
     startPoint = 'beat_1';
   }
 
-  // Define Sticking / Pattern text
-  let rawSticking = 'R L K   R L K';
-  if (skill.id.includes('six-stroke')) rawSticking = 'R L L R R L';
-  else if (skill.id.includes('single-paradiddle')) rawSticking = 'R L R R L R L L';
-  else if (skill.id.includes('double-stroke')) rawSticking = 'R R L L R R L L';
-  else if (skill.id.includes('flam')) rawSticking = 'lR rL lR rL';
-  else if (skill.id.includes('drag')) rawSticking = 'llR rrL llR rrL';
+  // Required pattern must come from the skill being taught. Previous builds
+  // used a generic R-L-K fallback here, which made timing foundations look
+  // like linear-fill exercises. Canonical teaching metadata is authoritative.
+  const teachingDef = findTeachingDefinition(skill.id) || findTeachingDefinition(skill.name);
+  const baseSticking = teachingDef?.sticking || getStickingPatternForSkill(skill.id, skill.name);
+  const beatsInTargetPhrase = phraseLength === '1 beat' ? 1 : phraseLength === '2 beats' ? 2 : (teachingDef?.beatsPerBar || 4);
+  const notesNeeded = teachingDef ? Math.max(1, teachingDef.subdivisionCount * beatsInTargetPhrase) : undefined;
+  const baseTokens = baseSticking.split(/\s+/).filter(Boolean);
+  const rawSticking = notesNeeded ? baseTokens.slice(0, notesNeeded).join(' ') : baseSticking;
+  const exerciseCounting = teachingDef?.countTokens.join(' ') || (skill.id.includes('rlk') ? '1-trip-let 2-trip-let 3-trip-let 4-trip-let' : '1 e & a 2 e & a 3 e & a 4 e & a');
+  const exerciseSubdivision = teachingDef?.subdivision || (skill.id.includes('rlk') ? 'Triplets' : '16th Notes');
+  const isPulseFoundation = skill.id === 'time-quarter-pulse';
 
   let placementType: PlacementType = 'one_beat_fill';
   if (phraseLength === '2 beats') placementType = 'two_beat_fill';
@@ -388,55 +394,81 @@ export function generatePlacementExercise(
   let landingBeat = '1 (Next Bar)';
 
   if (phraseLength === '1 beat') {
-    entryText = isPad
+    entryText = isPulseFoundation
+      ? 'Play steady quarter-note pulse on Beats 1, 2 and 3.'
+      : isPad
       ? 'Play 3 beats of light pad groove pulse (Beats 1–3: 1 & 2 & 3 &).'
       : 'Play 3 beats of steady kick/snare/hat groove (Beats 1–3).';
 
-    fillText = isPad
+    fillText = isPulseFoundation
+      ? `Play one ${skill.name} stroke exactly on Beat 4 (${rawSticking}).`
+      : isPad
       ? `Execute ${skill.name} on Beat 4 strictly (${rawSticking}).`
       : `Execute ${skill.name} across Beat 4.`;
 
-    exitText = isPad
+    exitText = isPulseFoundation
+      ? 'Land the next Beat 1 cleanly and continue the same quarter-note pulse without changing subdivision.'
+      : isPad
       ? 'Accent Beat 1 strongly on the pad to simulate crash + kick landing, then return to groove.'
       : 'Land crash + kick downbeat on Beat 1 of the next bar, then resume groove.';
 
-    whereFits = `Groove: Beats 1–3 | Fill: Beat 4 | Target: Beat 1 Downbeat`;
-    counts = ['1', '&', '2', '&', '3', '&', '4', '&', '|| 1'];
-    grooveBeats = ['1', '&', '2', '&', '3', '&'];
-    fillBeats = ['4', '&'];
+    whereFits = isPulseFoundation
+      ? `Pulse: Beats 1–3 | Target Stroke: Beat 4 | Continue: Beat 1 Downbeat`
+      : `Groove: Beats 1–3 | Fill: Beat 4 | Target: Beat 1 Downbeat`;
+    counts = isPulseFoundation ? ['1', '2', '3', '4', '|| 1'] : ['1', '&', '2', '&', '3', '&', '4', '&', '|| 1'];
+    grooveBeats = isPulseFoundation ? ['1', '2', '3'] : ['1', '&', '2', '&', '3', '&'];
+    fillBeats = isPulseFoundation ? ['4'] : ['4', '&'];
   } else if (phraseLength === '2 beats') {
-    entryText = isPad
+    entryText = isPulseFoundation
+      ? 'Play steady quarter-note pulse on Beats 1 and 2.'
+      : isPad
       ? 'Play 2 beats of light pad groove pulse (Beats 1–2: 1 & 2 &).'
       : 'Play 2 beats of steady groove (Beats 1–2).';
 
-    fillText = isPad
+    fillText = isPulseFoundation
+      ? `Play ${skill.name} exactly on Beats 3 and 4 (${rawSticking}).`
+      : isPad
       ? `Execute ${skill.name} phrasing across Beats 3 & 4 (${rawSticking}).`
       : `Execute ${skill.name} fill across Beats 3 & 4.`;
 
-    exitText = isPad
+    exitText = isPulseFoundation
+      ? 'Land the next Beat 1 cleanly and continue the quarter-note pulse.'
+      : isPad
       ? 'Accent Beat 1 strongly to simulate crash + kick, then return to groove.'
       : 'Land crash + kick on Beat 1 of the next bar and return to groove.';
 
-    whereFits = `Groove: Beats 1–2 | Fill: Beats 3–4 | Target: Beat 1 Downbeat`;
-    counts = ['1', '&', '2', '&', '3', '&', '4', '&', '|| 1'];
-    grooveBeats = ['1', '&', '2', '&'];
-    fillBeats = ['3', '&', '4', '&'];
+    whereFits = isPulseFoundation
+      ? `Pulse: Beats 1–2 | Target Strokes: Beats 3–4 | Continue: Beat 1 Downbeat`
+      : `Groove: Beats 1–2 | Fill: Beats 3–4 | Target: Beat 1 Downbeat`;
+    counts = isPulseFoundation ? ['1', '2', '3', '4', '|| 1'] : ['1', '&', '2', '&', '3', '&', '4', '&', '|| 1'];
+    grooveBeats = isPulseFoundation ? ['1', '2'] : ['1', '&', '2', '&'];
+    fillBeats = isPulseFoundation ? ['3', '4'] : ['3', '&', '4', '&'];
   } else {
     // 1 bar fill in a 4-bar phrase
-    entryText = isPad
+    entryText = isPulseFoundation
+      ? 'Play three bars of steady quarter-note pulse (Bars 1–3).'
+      : isPad
       ? 'Play 3 bars of continuous light pad groove (Bars 1–3).'
       : 'Play 3 bars of steady groove (Bars 1–3).';
 
-    fillText = `Execute 1 full bar of ${skill.name} in Bar 4.`;
+    fillText = isPulseFoundation
+      ? `Play four steady ${skill.name} strokes through Bar 4 (${rawSticking}).`
+      : `Execute 1 full bar of ${skill.name} in Bar 4.`;
 
-    exitText = isPad
+    exitText = isPulseFoundation
+      ? 'Land Beat 1 of Bar 5 cleanly and continue the same quarter-note pulse.'
+      : isPad
       ? 'Accent Beat 1 of Bar 5 strongly (simulated crash downbeat) and return to groove.'
       : 'Land crash + kick on Beat 1 of Bar 5 and return cleanly to groove.';
 
-    whereFits = `Groove: Bars 1–3 | Fill: Bar 4 | Target: Beat 1 (Bar 5)`;
-    counts = ['Bar 1', 'Bar 2', 'Bar 3', 'Bar 4 (Fill)', '|| Bar 5 (Beat 1)'];
+    whereFits = isPulseFoundation
+      ? `Pulse: Bars 1–3 | Target Pulse Bar: Bar 4 | Continue: Beat 1 (Bar 5)`
+      : `Groove: Bars 1–3 | Fill: Bar 4 | Target: Beat 1 (Bar 5)`;
+    counts = isPulseFoundation
+      ? ['Bar 1', 'Bar 2', 'Bar 3', 'Bar 4 (Target Pulse)', '|| Bar 5 (Beat 1)']
+      : ['Bar 1', 'Bar 2', 'Bar 3', 'Bar 4 (Fill)', '|| Bar 5 (Beat 1)'];
     grooveBeats = ['Bar 1', 'Bar 2', 'Bar 3'];
-    fillBeats = ['Bar 4 (Fill)'];
+    fillBeats = isPulseFoundation ? ['Bar 4 (Target Pulse)'] : ['Bar 4 (Fill)'];
     landingBeat = '1 (Bar 5)';
   }
 
@@ -444,7 +476,7 @@ export function generatePlacementExercise(
     placementType,
     startPoint,
     phraseLength,
-    subdivision: skill.id.includes('rlk') ? 'Triplets' : '16th Notes',
+    subdivision: exerciseSubdivision,
     targetLanding: 'crash_on_1',
     entryContext: entryText,
     exitContext: exitText,
@@ -458,10 +490,12 @@ export function generatePlacementExercise(
   };
 
   const padNote = isPad
-    ? 'Pad Mode: Light taps = groove pulse; Beat 4 = fill phrase; Accent Beat 1 = crash landing.'
+    ? isPulseFoundation
+      ? 'Pad Mode: keep one relaxed stroke per quarter note; the target phrase changes placement emphasis, not the subdivision.'
+      : 'Pad Mode: Light taps = groove pulse; Beat 4 = fill phrase; Accent Beat 1 = crash landing.'
     : undefined;
 
-  const transferInstructions = stage === 'TRANSFER'
+  const transferInstructions = stage === 'TRANSFER' && ['rudiments', 'fills', 'coordination', 'dynamics'].includes(skill.parentTrack)
     ? generateTransferInstructions(skill, equipment, 'TRANSFER', mem.recurringPlacementFriction)
     : undefined;
 
@@ -472,10 +506,10 @@ export function generatePlacementExercise(
     skillIds: [skill.id],
     purpose: `Learn exact placement and beat-1 landing for ${skill.name} inside a ${phraseLength} space.`,
     instructions: `${entryText} ${fillText} ${exitText}`,
-    sticking: transferInstructions?.baseSticking || rawSticking,
-    counting: skill.id.includes('rlk') ? '1-trip-let 2-trip-let 3-trip-let 4-trip-let' : '1 e & a 2 e & a 3 e & a 4 e & a',
-    timeSignature: '4/4',
-    subdivision: skill.id.includes('rlk') ? 'Triplets' : '16th Notes',
+    sticking: rawSticking,
+    counting: exerciseCounting,
+    timeSignature: teachingDef?.meter || '4/4',
+    subdivision: exerciseSubdivision,
     tempo: bpm,
     durationSeconds: 180,
     exerciseType: 'application',
@@ -483,7 +517,7 @@ export function generatePlacementExercise(
     difficulty: phraseLength === '1 beat' ? 'Easy' : phraseLength === '2 beats' ? 'Moderate' : 'Challenging',
     padAdaptationNote: padNote,
     progressionStage: stage,
-    challengeType: 'musical-fill',
+    challengeType: isPulseFoundation ? 'groove-phrase' : 'musical-fill',
     musicalPlacement,
     entryExitInstructions: {
       entry: entryText,
@@ -583,6 +617,12 @@ export function buildPlacementSession(
   const sessionId = `pl-sess-${skill.id}-${Date.now()}`;
   const exercises: PracticeExercise[] = [];
 
+  const canonicalTeachingDef = findTeachingDefinition(skill.id) || findTeachingDefinition(skill.name);
+  const isTimingFoundation = skill.parentTrack === 'timeSignatures';
+  const foundationSticking = canonicalTeachingDef?.sticking || getStickingPatternForSkill(skill.id, skill.name);
+  const foundationCounting = canonicalTeachingDef?.countTokens.join(' ') || '1 & 2 & 3 & 4 &';
+  const foundationSubdivision = canonicalTeachingDef?.subdivision || '8th Notes';
+
   // 1. Warm-Up / Groove Pulse Sync (90s)
   exercises.push({
     id: `${sessionId}-warmup`,
@@ -594,13 +634,15 @@ export function buildPlacementSession(
     purpose: isPad
       ? 'Establish a relaxed 4/4 groove pulse on the pad to lock in micro-timing.'
       : 'Lock in steady kick/hat/snare groove at working tempo before fill placement.',
-    instructions: isPad
+    instructions: isTimingFoundation
+      ? `Play the current foundation pattern only (${foundationSticking}) and lock it to the click. Keep shoulders down and motion relaxed.`
+      : isPad
       ? 'Play light alternating 8th-note taps (Beats 1–4). Keep shoulders down and wrists relaxed.'
       : 'Play a steady standard 8th-note groove (Bass drum on 1 & 3, Snare on 2 & 4). Lock with metronome.',
-    sticking: 'R L R L R L R L',
-    counting: '1 & 2 & 3 & 4 &',
-    timeSignature: '4/4',
-    subdivision: '8th Notes',
+    sticking: isTimingFoundation ? foundationSticking : 'R L R L R L R L',
+    counting: isTimingFoundation ? foundationCounting : '1 & 2 & 3 & 4 &',
+    timeSignature: canonicalTeachingDef?.meter || '4/4',
+    subdivision: isTimingFoundation ? foundationSubdivision : '8th Notes',
     tempo: placementBpm,
     isSuggestedStartingTempo: false,
     durationSeconds: 90,
@@ -619,16 +661,10 @@ export function buildPlacementSession(
     whyThisExercise: `Calibrate clean stick heights and note spacing for ${skill.name} in isolation before musical insertion.`,
     purpose: `Calibrate clean stick heights and note spacing for ${skill.name} in isolation before musical insertion.`,
     instructions: `Execute ${skill.name} cleanly against the click at ${placementBpm} BPM. Focus on relaxed wrists and dynamic balance.`,
-    sticking: skill.id.includes('six-stroke')
-      ? 'R L L R R L'
-      : skill.id.includes('paradiddle')
-      ? 'R L R R L R L L'
-      : 'R L R L',
-    counting: skill.id.includes('rlk')
-      ? '1-trip-let 2-trip-let'
-      : '1 e & a 2 e & a 3 e & a 4 e & a',
-    timeSignature: '4/4',
-    subdivision: skill.id.includes('rlk') ? 'Triplets' : '16th Notes',
+    sticking: canonicalTeachingDef?.sticking || getStickingPatternForSkill(skill.id, skill.name),
+    counting: canonicalTeachingDef?.countTokens.join(' ') || (skill.id.includes('rlk') ? '1-trip-let 2-trip-let' : '1 e & a 2 e & a 3 e & a 4 e & a'),
+    timeSignature: canonicalTeachingDef?.meter || '4/4',
+    subdivision: canonicalTeachingDef?.subdivision || (skill.id.includes('rlk') ? 'Triplets' : '16th Notes'),
     tempo: placementBpm,
     isSuggestedStartingTempo: false,
     durationSeconds: 90,
@@ -652,8 +688,12 @@ export function buildPlacementSession(
     id: `${sessionId}-placement-main`,
     title: `${skill.name} — Phrase Insertion (${targetLength})`,
     pedagogicalRole: 'PRIMARY TARGET',
-    whyThisExercise: `Execute the primary targeted fill insertion on the exact beat count with full timing control.`,
-    purpose: `Insert ${skill.name} cleanly into the phrase on the target beat without losing the groove pulse.`,
+    whyThisExercise: skill.id === 'time-quarter-pulse'
+      ? `Place the target quarter-note pulse on the exact beat without adding extra notes or changing subdivision.`
+      : `Execute the primary targeted fill insertion on the exact beat count with full timing control.`,
+    purpose: skill.id === 'time-quarter-pulse'
+      ? `Keep the quarter-note pulse continuous while emphasizing the target phrase location and returning cleanly to Beat 1.`
+      : `Insert ${skill.name} cleanly into the phrase on the target beat without losing the groove pulse.`,
     durationSeconds: 150,
   });
 
@@ -669,9 +709,15 @@ export function buildPlacementSession(
   grooveReturnEx.id = `${sessionId}-placement-return`;
   grooveReturnEx.title = `${skill.name} — Downbeat Landing & Groove Return`;
   grooveReturnEx.pedagogicalRole = assistanceMode === 'none' ? 'INDEPENDENCE TEST' : 'REINFORCEMENT';
-  grooveReturnEx.whyThisExercise = 'Reinforce crash landing on Beat 1 and seamless groove timekeeping recovery.';
-  grooveReturnEx.purpose = `Execute ${targetLength} fill, land crash on Beat 1, and immediately return to steady groove timekeeper without hesitation or rushing.`;
-  grooveReturnEx.instructions = isPad
+  grooveReturnEx.whyThisExercise = skill.id === 'time-quarter-pulse'
+    ? 'Reinforce an uninterrupted quarter-note pulse through the phrase boundary and Beat 1.'
+    : 'Reinforce crash landing on Beat 1 and seamless groove timekeeping recovery.';
+  grooveReturnEx.purpose = skill.id === 'time-quarter-pulse'
+    ? `Keep the same quarter-note pulse through the ${targetLength} target phrase, land Beat 1 cleanly, and continue without rushing or adding notes.`
+    : `Execute ${targetLength} fill, land crash on Beat 1, and immediately return to steady groove timekeeper without hesitation or rushing.`;
+  grooveReturnEx.instructions = skill.id === 'time-quarter-pulse'
+    ? `Play 2 bars of steady quarter-note pulse, emphasize the target ${targetLength} phrase without adding subdivisions, land Beat 1 cleanly, then continue the same pulse for 2 bars.`
+    : isPad
     ? `Play 2 bars of pad groove pulse, insert ${skill.name} as a ${targetLength} fill, accent Beat 1 strongly (crash), then immediately resume 2 bars of steady groove pulse.`
     : `Play 2 bars of groove, execute ${skill.name} as a ${targetLength} fill, land crash on Beat 1, then immediately play 2 bars of steady groove without dropping tempo.`;
   grooveReturnEx.durationSeconds = 150;

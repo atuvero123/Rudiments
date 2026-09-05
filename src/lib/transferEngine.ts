@@ -15,6 +15,9 @@ export function getStickingPatternForSkill(skillId: string, skillName: string): 
   const id = skillId.toLowerCase();
   const name = skillName.toLowerCase();
 
+  if (id === 'time-quarter-pulse' || name.includes('quarter note pulse')) return 'R R R R';
+  if (id === 'time-8th-subdivision' || name.includes('8th note subdivision') || name.includes('eighth note subdivision')) return 'R L R L R L R L';
+  if (id === 'time-44' || name.includes('4/4 bar structure')) return 'R R R R';
   if (id.includes('six-stroke') || name.includes('six stroke')) return 'R L L R R L';
   if (id.includes('single-paradiddle') || name.includes('single paradiddle')) return 'R L R R L R L L';
   if (id.includes('double-paradiddle') || name.includes('double paradiddle')) return 'R L R L R R L R L R L L';
@@ -226,7 +229,7 @@ export function generateTransferInstructions(
   ];
 
   // Derive Execution Success Target
-  let executionTarget = `Keep doubles relaxed and subdivision even while moving the accented notes between ${isPad ? 'pad zones' : 'kit voices'}.`;
+  let executionTarget = `Keep the required pattern relaxed and subdivision even while moving the accented notes between ${isPad ? 'pad zones' : 'kit voices'}.`;
 
   if (recurringFriction) {
     if (recurringFriction.includes('Tension') || recurringFriction.includes('Hard')) {
