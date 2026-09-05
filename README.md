@@ -37,3 +37,8 @@ C3 adds original no-drum curriculum play-alongs and arrangement coaching. The cu
 C3.2 adds a curriculum-gated 4/4 musical-development path on top of the existing original no-drum play-alongs. The pathway develops pulse → backbeat → groove variation → fill phrasing → rudiment application → constrained creativity → full arrangement performance. Today launches the musical-development step associated with the current canonical competency.
 
 Coach Chat also retries temporary Gemini capacity errors automatically and preserves the learner's question for a one-tap retry if the service remains busy.
+
+
+## C3.3 — Groove Development & Creativity
+
+C3.3 deepens each 4/4 musical-development stage into sequential missions. Groove stages now move from a trusted base pattern into audible variations, controlled A/B switching, learner-created one-element variations, section-based choices, phrase-length fill work, rudiment orchestration, restraint and full-arrangement ownership. Mission evidence is stored separately from canonical curriculum certification; older successful C3.2 application evidence is grandfathered so existing progress is preserved.

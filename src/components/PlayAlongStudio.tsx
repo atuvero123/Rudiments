@@ -27,7 +27,8 @@ import {
 } from '../lib/playAlongEngine';
 import { isCompetencyVerified } from '../lib/canonicalProgressEngine';
 import { CURRICULUM_COMPETENCIES_BY_ID } from '../data/canonicalCurriculum';
-import { getMusicalDevelopmentStep } from '../data/musicalDevelopment';
+import { getMusicalDevelopmentStep, MusicalDevelopmentMission } from '../data/musicalDevelopment';
+import { previewPlayAlongVariation } from '../lib/musicalVariationPreview';
 
 interface PlayAlongStudioProps {
   track: PlayAlongTrack;
@@ -52,6 +53,10 @@ interface StoredPlayAlongAttempt {
   developmentStepId?: string | null;
   selectedVariationId?: string | null;
   constraintControl?: 'BROKE' | 'MOSTLY' | 'FOLLOWED';
+  developmentMissionId?: string | null;
+  ownership?: 'COPIED' | 'CHOSE' | 'CREATED';
+  creativeElement?: string | null;
+  creativeLocation?: string | null;
 }
 
 const HISTORY_KEY = 'RUDIMENT_PLAYALONG_HISTORY_V1';
@@ -228,8 +233,71 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
   const [constraintControl, setConstraintControl] = useState<'BROKE' | 'MOSTLY' | 'FOLLOWED' | null>(null);
   const [saved, setSaved] = useState(false);
   const [selectedVariationId, setSelectedVariationId] = useState<string | null>(null);
+  const [activeMissionId, setActiveMissionId] = useState<string | null>(null);
+  const [ownership, setOwnership] = useState<'COPIED' | 'CHOSE' | 'CREATED' | null>(null);
+  const [creativeElement, setCreativeElement] = useState<string>('');
+  const [creativeLocation, setCreativeLocation] = useState<string>('');
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [previewingVariationId, setPreviewingVariationId] = useState<string | null>(null);
   const transportRef = useRef<PlayAlongTransport | null>(null);
   const lastPromptBarRef = useRef<number>(0);
+
+  const completedMissionIds = useMemo(() => {
+    const completed = new Set<string>();
+    if (!developmentStep) return completed;
+    const history = loadHistory();
+    const hasLegacySuccessfulStepAttempt = history.some((attempt) =>
+      attempt.developmentStepId === developmentStep.id &&
+      !attempt.developmentMissionId &&
+      attempt.rating !== 'STRUGGLED' &&
+      attempt.transitionControl !== 'LOST' &&
+      attempt.musicalChoice !== 'OVERPLAYED' &&
+      attempt.constraintControl === 'FOLLOWED'
+    );
+    if (hasLegacySuccessfulStepAttempt) {
+      developmentStep.missions.forEach((missionItem) => completed.add(missionItem.id));
+      return completed;
+    }
+    history.forEach((attempt) => {
+      const missionItem = developmentStep.missions.find((candidate) => candidate.id === attempt.developmentMissionId);
+      const creatorPassed = !missionItem?.creatorPrompt || attempt.ownership === 'CREATED';
+      if (
+        attempt.developmentStepId === developmentStep.id &&
+        attempt.developmentMissionId &&
+        attempt.rating !== 'STRUGGLED' &&
+        attempt.transitionControl !== 'LOST' &&
+        attempt.musicalChoice !== 'OVERPLAYED' &&
+        attempt.constraintControl === 'FOLLOWED' &&
+        creatorPassed
+      ) {
+        completed.add(attempt.developmentMissionId);
+      }
+    });
+    return completed;
+  }, [developmentStep?.id, historyRevision]);
+
+  const missionPrerequisitesMet = (missionItem: MusicalDevelopmentMission) =>
+    (missionItem.prerequisiteCompetencyIds || []).every((id) => isCompetencyVerified(id, skills));
+
+  const missionAvailable = (missionItem: MusicalDevelopmentMission) => {
+    if (!developmentStep) return false;
+    const index = developmentStep.missions.findIndex((candidate) => candidate.id === missionItem.id);
+    const previousComplete = index <= 0 || completedMissionIds.has(developmentStep.missions[index - 1].id);
+    return previousComplete && missionPrerequisitesMet(missionItem);
+  };
+
+  const recommendedMission = developmentStep?.missions.find((missionItem) =>
+    missionAvailable(missionItem) && !completedMissionIds.has(missionItem.id)
+  ) || developmentStep?.missions.find((missionItem) => missionAvailable(missionItem)) || developmentStep?.missions[0];
+
+  const activeMission = developmentStep?.missions.find((missionItem) => missionItem.id === activeMissionId) || recommendedMission;
+  const nextMissionAfterActive = activeMission && developmentStep
+    ? developmentStep.missions[developmentStep.missions.findIndex((missionItem) => missionItem.id === activeMission.id) + 1]
+    : undefined;
+  const currentPracticeConstraint = activeMission?.practiceConstraint || developmentStep?.practiceConstraint || '';
+  const creativePlan = activeMission?.creatorPrompt && creativeElement && creativeLocation
+    ? `${creativeElement} • ${creativeLocation}`
+    : '';
 
   const verifiedVariations = useMemo(() => track.variations.filter((variation) =>
     variation.prerequisiteCompetencyIds.every((id) => isCompetencyVerified(id, skills))
@@ -246,7 +314,8 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
     return verifiedVariations;
   }, [verifiedVariations, applicationMode]);
 
-  const preferredVariation = developmentStep?.preferredVariationIds
+  const preferredVariationIds = activeMission?.preferredVariationIds || developmentStep?.preferredVariationIds;
+  const preferredVariation = preferredVariationIds
     ?.map((id) => contextualVariations.find((variation) => variation.id === id))
     .find((variation): variation is PlayAlongVariation => Boolean(variation));
 
@@ -268,8 +337,10 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
     CREATIVITY_CHALLENGE: ['comp-perf-song-arrangement', 'comp-fill-recovery'],
     FULL_ARRANGEMENT: ['comp-perf-song-app', 'comp-perf-song-arrangement'],
   };
-  const applicationAvailable = (mode: PlayAlongApplicationMode) =>
-    (applicationRequirements[mode] || []).every((id) => isCompetencyVerified(id, skills));
+  const applicationAvailable = (mode: PlayAlongApplicationMode) => {
+    if (developmentStep && activeMission?.applicationMode === mode && missionPrerequisitesMet(activeMission)) return true;
+    return (applicationRequirements[mode] || []).every((id) => isCompetencyVerified(id, skills));
+  };
 
   const missingRequirements = (mode: PlayAlongApplicationMode) =>
     (applicationRequirements[mode] || [])
@@ -302,12 +373,22 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
   useEffect(() => transportRef.current?.setVolume(volume), [volume]);
 
   useEffect(() => {
-    if (developmentStep?.applicationMode) {
-      setApplicationMode(developmentStep.applicationMode);
-    } else if (initialApplicationMode) {
-      setApplicationMode(initialApplicationMode);
+    if (developmentStep && recommendedMission && !activeMissionId) setActiveMissionId(recommendedMission.id);
+  }, [developmentStep?.id, recommendedMission?.id]);
+
+  useEffect(() => {
+    if (activeMission) {
+      setApplicationMode(activeMission.applicationMode);
+      if (activeMission.recommendedCoachMode) setCoachMode(activeMission.recommendedCoachMode);
+      const creator = activeMission.creatorPrompt;
+      setCreativeElement(creator?.elementOptions[0] || '');
+      setCreativeLocation(creator?.locationOptions[0] || '');
+      setOwnership(null);
+      return;
     }
-  }, [developmentStep?.id, initialApplicationMode]);
+    if (developmentStep?.applicationMode) setApplicationMode(developmentStep.applicationMode);
+    else if (initialApplicationMode) setApplicationMode(initialApplicationMode);
+  }, [activeMission?.id, developmentStep?.id, initialApplicationMode]);
 
   useEffect(() => {
     if (!contextualVariations.length) {
@@ -315,11 +396,12 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
       return;
     }
     if (selectedVariationId && contextualVariations.some((v) => v.id === selectedVariationId)) return;
-    const preferred = developmentStep?.preferredVariationIds
+    const preferredIds = activeMission?.preferredVariationIds || developmentStep?.preferredVariationIds;
+    const preferred = preferredIds
       ?.map((id) => contextualVariations.find((variation) => variation.id === id))
       .find(Boolean);
     setSelectedVariationId((preferred || contextualVariations[0]).id);
-  }, [applicationMode, contextualVariations, developmentStep?.id]);
+  }, [applicationMode, contextualVariations, developmentStep?.id, activeMission?.id]);
 
   useEffect(() => {
     if (!snapshot || !isRunning || coachMode !== 'GUIDED' || !voiceEnabled) return;
@@ -346,6 +428,7 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
     setTransitionControl(null);
     setMusicalChoice(null);
     setConstraintControl(null);
+    setOwnership(null);
     await transportRef.current?.start();
     setIsRunning(true);
   };
@@ -365,11 +448,12 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
     setTransitionControl(null);
     setMusicalChoice(null);
     setConstraintControl(null);
+    setOwnership(null);
     lastPromptBarRef.current = 0;
   };
 
   const saveAttempt = () => {
-    if (!rating || !transitionControl || !musicalChoice || (developmentStep && !constraintControl)) return;
+    if (!rating || !transitionControl || !musicalChoice || (developmentStep && !constraintControl) || (activeMission?.ownershipCheck && !ownership)) return;
     const history = loadHistory();
     const attempt: StoredPlayAlongAttempt = {
       id: `playalong-${Date.now()}`,
@@ -384,10 +468,32 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
       developmentStepId: developmentStep?.id || null,
       selectedVariationId: selectedVariation?.id || null,
       constraintControl: constraintControl || undefined,
+      developmentMissionId: activeMission?.id || null,
+      ownership: ownership || undefined,
+      creativeElement: activeMission?.creatorPrompt ? creativeElement || null : null,
+      creativeLocation: activeMission?.creatorPrompt ? creativeLocation || null : null,
     };
     const next = [attempt, ...history].slice(0, 40);
     localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
     setSaved(true);
+    setHistoryRevision((value) => value + 1);
+  };
+
+  const previewVariation = async (variation: PlayAlongVariation) => {
+    if (isRunning || previewingVariationId) return;
+    setPreviewingVariationId(variation.id);
+    try {
+      await previewPlayAlongVariation(variation, track.bpm);
+      window.setTimeout(() => setPreviewingVariationId(null), Math.max(900, (60 / track.bpm) * 4 * 1000 + 250));
+    } catch {
+      setPreviewingVariationId(null);
+    }
+  };
+
+  const selectMission = (missionItem: MusicalDevelopmentMission) => {
+    if (!missionAvailable(missionItem) && !completedMissionIds.has(missionItem.id)) return;
+    reset();
+    setActiveMissionId(missionItem.id);
   };
 
   return (
@@ -430,22 +536,83 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
         <section className="rounded-2xl border border-violet-200 bg-violet-50 p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">4/4 Musical Development • Step {developmentStep.order} of 7</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">C3.3 Musical Development • Step {developmentStep.order} of 7</p>
               <h3 className="mt-1 text-lg font-black text-stone-900">{developmentStep.title}</h3>
               <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-600">{developmentStep.outcome}</p>
             </div>
-            <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase text-violet-700 shadow-sm">{developmentStep.stage}</span>
-          </div>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <div className="rounded-xl border border-violet-100 bg-white p-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">Constraint</p>
-              <p className="mt-1 text-xs leading-5 text-stone-700">{developmentStep.practiceConstraint}</p>
-            </div>
-            <div className="rounded-xl border border-violet-100 bg-white p-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">Evidence goal</p>
-              <p className="mt-1 text-xs leading-5 text-stone-700">{developmentStep.evidenceGoal}</p>
+            <div className="text-right">
+              <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase text-violet-700 shadow-sm">{developmentStep.stage}</span>
+              <p className="mt-2 text-[10px] font-bold text-stone-500">{completedMissionIds.size}/{developmentStep.missions.length} missions</p>
             </div>
           </div>
+
+          <div className="mt-4">
+            <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">Development sequence</p>
+            <p className="mt-1 text-xs text-stone-600">Build ownership one musical decision at a time. Later missions unlock only after the earlier mission is controlled.</p>
+            <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+              {developmentStep.missions.map((missionItem) => {
+                const complete = completedMissionIds.has(missionItem.id);
+                const available = missionAvailable(missionItem) || complete;
+                const active = activeMission?.id === missionItem.id;
+                const missing = (missionItem.prerequisiteCompetencyIds || []).filter((id) => !isCompetencyVerified(id, skills));
+                return (
+                  <button
+                    key={missionItem.id}
+                    type="button"
+                    disabled={!available}
+                    onClick={() => selectMission(missionItem)}
+                    className={`min-h-[104px] rounded-xl border p-3 text-left transition-all ${active ? 'border-violet-500 bg-white ring-2 ring-violet-200' : complete ? 'border-emerald-200 bg-emerald-50' : available ? 'border-violet-100 bg-white' : 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-60'}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-stone-500">Mission {missionItem.order}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${complete ? 'bg-emerald-600 text-white' : active ? 'bg-violet-600 text-white' : 'bg-stone-100 text-stone-500'}`}>{complete ? 'DONE' : active ? 'NOW' : available ? 'READY' : 'LOCKED'}</span>
+                    </div>
+                    <strong className="mt-2 block text-xs text-stone-900">{missionItem.shortTitle}</strong>
+                    <span className="mt-1 block text-[10px] leading-4 text-stone-500">{missionItem.objective}</span>
+                    {!available && missing.length > 0 && <span className="mt-2 block text-[9px] font-semibold text-stone-500">Verify: {missing.map((id) => CURRICULUM_COMPETENCIES_BY_ID.get(id)?.title || id).join(' • ')}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {activeMission && (
+            <div className="mt-4 grid gap-2 md:grid-cols-2">
+              <div className="rounded-xl border border-violet-100 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-violet-700">Current mission • {activeMission.title}</p>
+                <p className="mt-2 text-xs leading-5 text-stone-700"><strong>Rule:</strong> {activeMission.practiceConstraint}</p>
+              </div>
+              <div className="rounded-xl border border-violet-100 bg-white p-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-stone-500">Listen / feel for</p>
+                <p className="mt-2 text-xs leading-5 text-stone-700">{activeMission.evidenceFocus}</p>
+              </div>
+            </div>
+          )}
+
+          {activeMission?.creatorPrompt && (
+            <div className="mt-3 rounded-xl border border-fuchsia-200 bg-fuchsia-50 p-3">
+              <div className="flex items-start gap-2">
+                <Sparkles className="mt-0.5 h-4 w-4 text-fuchsia-600" />
+                <div className="flex-1">
+                  <p className="text-xs font-black text-stone-900">{activeMission.creatorPrompt.title}</p>
+                  <p className="mt-1 text-[10px] leading-4 text-stone-600">{activeMission.creatorPrompt.rule}</p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-stone-500">What will you change?
+                      <select value={creativeElement} onChange={(event) => setCreativeElement(event.target.value)} className="mt-1 min-h-[42px] w-full rounded-lg border border-fuchsia-200 bg-white px-2 text-xs normal-case text-stone-800">
+                        {activeMission.creatorPrompt.elementOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-stone-500">Where will you use it?
+                      <select value={creativeLocation} onChange={(event) => setCreativeLocation(event.target.value)} className="mt-1 min-h-[42px] w-full rounded-lg border border-fuchsia-200 bg-white px-2 text-xs normal-case text-stone-800">
+                        {activeMission.creatorPrompt.locationOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  {creativePlan && <p className="mt-3 rounded-lg bg-white p-2 text-[11px] font-semibold text-fuchsia-800">My plan: {creativePlan}</p>}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
       )}
 
@@ -469,28 +636,41 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
 
           <div className="lg:col-span-2">
             <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-stone-500">2. Application challenge</p>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {APPLICATION_OPTIONS.map((option) => {
-                const available = applicationAvailable(option.id);
-                return (
-                  <button
-                    key={option.id}
-                    disabled={!available}
-                    onClick={() => available && setApplicationMode(option.id)}
-                    className={`min-h-[70px] rounded-xl border p-2.5 text-left transition-all ${
-                      applicationMode === option.id
-                        ? 'border-amber-500 bg-amber-50'
-                        : available
-                          ? 'border-stone-200 bg-white'
-                          : 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-55'
-                    }`}
-                  >
-                    <strong className="block text-xs text-stone-900">{option.label}{!available ? ' · Locked' : ''}</strong>
-                    <span className="mt-1 block text-[10px] leading-4 text-stone-500">{available ? option.description : `Verify first: ${missingRequirements(option.id).join(' • ') || 'required curriculum skills'}`}</span>
-                  </button>
-                );
-              })}
-            </div>
+            {developmentStep && activeMission ? (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Mission-defined challenge</p>
+                    <h4 className="mt-1 text-sm font-black text-stone-900">{APPLICATION_OPTIONS.find((option) => option.id === activeMission.applicationMode)?.label || activeMission.applicationMode}</h4>
+                    <p className="mt-1 text-xs leading-5 text-stone-600">{activeMission.practiceConstraint}</p>
+                  </div>
+                  <span className="rounded-full bg-white px-2.5 py-1 text-[9px] font-black uppercase text-stone-600">No skipping ahead</span>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {APPLICATION_OPTIONS.map((option) => {
+                  const available = applicationAvailable(option.id);
+                  return (
+                    <button
+                      key={option.id}
+                      disabled={!available}
+                      onClick={() => available && setApplicationMode(option.id)}
+                      className={`min-h-[70px] rounded-xl border p-2.5 text-left transition-all ${
+                        applicationMode === option.id
+                          ? 'border-amber-500 bg-amber-50'
+                          : available
+                            ? 'border-stone-200 bg-white'
+                            : 'cursor-not-allowed border-stone-200 bg-stone-100 opacity-55'
+                      }`}
+                    >
+                      <strong className="block text-xs text-stone-900">{option.label}{!available ? ' · Locked' : ''}</strong>
+                      <span className="mt-1 block text-[10px] leading-4 text-stone-500">{available ? option.description : `Verify first: ${missingRequirements(option.id).join(' • ') || 'required curriculum skills'}`}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -537,6 +717,9 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
               {selectedVariation && ['GROOVE_VARIATION','RUDIMENT_FILL','CREATIVITY_CHALLENGE','FULL_ARRANGEMENT'].includes(applicationMode) && (
                 <p className="mt-2 rounded-lg bg-white/70 px-2 py-1.5 text-[10px] font-semibold text-stone-600">Current vocabulary focus: {selectedVariation.label}</p>
               )}
+              {creativePlan && (
+                <p className="mt-2 rounded-lg border border-fuchsia-200 bg-fuchsia-50 px-2 py-1.5 text-[10px] font-semibold text-fuchsia-800">Your created idea: {creativePlan}</p>
+              )}
             </div>
           </div>
         </div>
@@ -563,22 +746,35 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
           <div className="mt-3 space-y-2">
             {verifiedVariations.map((variation) => {
               const active = selectedVariation?.id === variation.id;
+              const previewing = previewingVariationId === variation.id;
               return (
-                <button
+                <div
                   key={variation.id}
-                  type="button"
-                  onClick={() => setSelectedVariationId(variation.id)}
                   className={`w-full rounded-xl border p-3 text-left transition-all ${active ? 'border-[#4a523a] bg-[#eef1e8] ring-1 ring-[#4a523a]/20' : 'border-emerald-200 bg-emerald-50'}`}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 text-emerald-600" /><strong className="text-xs text-stone-900">{variation.label}</strong></div>
-                    {active && <span className="rounded-full bg-[#4a523a] px-2 py-0.5 text-[9px] font-black uppercase text-white">Focus</span>}
+                  <div className="flex items-start justify-between gap-2">
+                    <button type="button" onClick={() => setSelectedVariationId(variation.id)} className="min-w-0 flex-1 text-left">
+                      <div className="flex items-center gap-2"><BadgeCheck className="h-4 w-4 shrink-0 text-emerald-600" /><strong className="text-xs text-stone-900">{variation.label}</strong></div>
+                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {active && <span className="rounded-full bg-[#4a523a] px-2 py-0.5 text-[9px] font-black uppercase text-white">Focus</span>}
+                      <button
+                        type="button"
+                        disabled={isRunning || Boolean(previewingVariationId)}
+                        onClick={() => previewVariation(variation)}
+                        className="inline-flex min-h-[34px] items-center gap-1 rounded-lg border border-stone-300 bg-white px-2 text-[9px] font-black text-stone-700 disabled:opacity-50"
+                      >
+                        <Volume2 className="h-3.5 w-3.5" /> {previewing ? 'Playing…' : 'Hear'}
+                      </button>
+                    </div>
                   </div>
-                  <p className="mt-1 text-[11px] leading-5 text-stone-600">{variation.description}</p>
-                  {variation.countPattern && <p className="mt-2 font-mono text-[10px] text-stone-700"><strong>Count:</strong> {variation.countPattern}</p>}
-                  {variation.stickingPattern && <p className="mt-1 font-mono text-[10px] text-stone-700"><strong>Pattern:</strong> {variation.stickingPattern}</p>}
-                  {variation.placementHint && <p className="mt-1 text-[10px] italic leading-4 text-stone-500">{variation.placementHint}</p>}
-                </button>
+                  <button type="button" onClick={() => setSelectedVariationId(variation.id)} className="mt-1 block w-full text-left">
+                    <p className="text-[11px] leading-5 text-stone-600">{variation.description}</p>
+                    {variation.countPattern && <p className="mt-2 font-mono text-[10px] text-stone-700"><strong>Count:</strong> {variation.countPattern}</p>}
+                    {variation.stickingPattern && <p className="mt-1 font-mono text-[10px] text-stone-700"><strong>Pattern:</strong> {variation.stickingPattern}</p>}
+                    {variation.placementHint && <p className="mt-1 text-[10px] italic leading-4 text-stone-500">{variation.placementHint}</p>}
+                  </button>
+                </div>
               );
             })}
             {verifiedVariations.length === 0 && <p className="rounded-xl bg-stone-50 p-3 text-xs text-stone-500">Stay with the basic groove/pulse. The curriculum will unlock more musical options as competencies are verified.</p>}
@@ -610,12 +806,22 @@ export const PlayAlongStudio: React.FC<PlayAlongStudioProps> = ({
             <div><p className="mb-2 text-xs font-bold text-stone-300">How musical were your fill/no-fill choices?</p><div className="grid grid-cols-3 gap-2">{([['OVERPLAYED','Overplayed'],['UNSURE','Unsure'],['MUSICAL','Served the song']] as const).map(([id,label])=><button key={id} onClick={()=>setMusicalChoice(id)} className={`min-h-[48px] rounded-xl border p-2 text-xs font-bold ${musicalChoice===id?'border-violet-400 bg-violet-500 text-white':'border-stone-700 bg-stone-900 text-stone-300'}`}>{label}</button>)}</div></div>
             {developmentStep && (
               <div>
-                <p className="mb-2 text-xs font-bold text-stone-300">Did you respect this step's practice constraint?</p>
-                <p className="mb-2 text-[10px] leading-4 text-stone-500">{developmentStep.practiceConstraint}</p>
+                <p className="mb-2 text-xs font-bold text-stone-300">Did you respect this {activeMission ? 'mission' : 'step'} practice constraint?</p>
+                <p className="mb-2 text-[10px] leading-4 text-stone-500">{currentPracticeConstraint}</p>
                 <div className="grid grid-cols-3 gap-2">{([['BROKE','Lost the constraint'],['MOSTLY','Mostly'],['FOLLOWED','Followed it']] as const).map(([id,label])=><button key={id} onClick={()=>setConstraintControl(id)} className={`min-h-[48px] rounded-xl border p-2 text-xs font-bold ${constraintControl===id?'border-emerald-400 bg-emerald-500 text-stone-950':'border-stone-700 bg-stone-900 text-stone-300'}`}>{label}</button>)}</div>
               </div>
             )}
-            <button disabled={!rating || !transitionControl || !musicalChoice || (developmentStep ? !constraintControl : false) || saved} onClick={saveAttempt} className="min-h-[50px] w-full rounded-xl bg-emerald-500 px-4 text-sm font-black text-stone-950 disabled:bg-stone-800 disabled:text-stone-500">{saved ? (developmentStep ? 'Musical development evidence saved' : 'Application attempt saved') : 'Save Play-Along Review'}</button>
+            {activeMission?.ownershipCheck && (
+              <div>
+                <p className="mb-2 text-xs font-bold text-stone-300">How much ownership did you have over the musical choice?</p>
+                <div className="grid grid-cols-3 gap-2">{([['COPIED','Copied the model'],['CHOSE','I chose it'],['CREATED','I created it']] as const).map(([id,label])=><button key={id} onClick={()=>setOwnership(id)} className={`min-h-[48px] rounded-xl border p-2 text-xs font-bold ${ownership===id?'border-fuchsia-400 bg-fuchsia-500 text-white':'border-stone-700 bg-stone-900 text-stone-300'}`}>{label}</button>)}</div>
+                {activeMission.creatorPrompt && creativePlan && <p className="mt-2 text-[10px] text-stone-500">Planned idea: {creativePlan}</p>}
+              </div>
+            )}
+            <button disabled={!rating || !transitionControl || !musicalChoice || (developmentStep ? !constraintControl : false) || (activeMission?.ownershipCheck ? !ownership : false) || saved} onClick={saveAttempt} className="min-h-[50px] w-full rounded-xl bg-emerald-500 px-4 text-sm font-black text-stone-950 disabled:bg-stone-800 disabled:text-stone-500">{saved ? (activeMission ? `Mission ${activeMission.order} evidence saved` : developmentStep ? 'Musical development evidence saved' : 'Application attempt saved') : 'Save Play-Along Review'}</button>
+            {saved && nextMissionAfterActive && (missionAvailable(nextMissionAfterActive) || completedMissionIds.has(nextMissionAfterActive.id)) && (
+              <button onClick={() => selectMission(nextMissionAfterActive)} className="min-h-[48px] w-full rounded-xl border border-violet-400 bg-violet-500 px-4 text-sm font-black text-white">Continue to Mission {nextMissionAfterActive.order}: {nextMissionAfterActive.shortTitle}</button>
+            )}
           </div>
         </section>
       )}

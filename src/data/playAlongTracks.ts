@@ -233,6 +233,14 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         placementHint: 'Use when the arrangement needs more lift than a quarter-note fill.',
       },
       {
+        id: '16th-fill', label: 'Sixteenth-note transition burst',
+        description: 'Use a short, even sixteenth-note burst without turning the whole transition into a speed test.',
+        prerequisiteCompetencyIds: ['comp-fill-16th', 'comp-fill-recovery'], kind: 'fill',
+        countPattern: '3 e & a 4 e & a -> CRASH 1',
+        stickingPattern: 'R L R L R L R L across snare / toms',
+        placementHint: 'Begin with the final half bar. Keep the subdivision relaxed and leave space before it.',
+      },
+      {
         id: 'single-stroke-fill', label: 'Single-stroke musical fill',
         description: 'Use even alternating singles as a short musical fill while preserving the phrase.',
         prerequisiteCompetencyIds: ['comp-rud-singles', 'comp-fill-recovery'], kind: 'rudiment',

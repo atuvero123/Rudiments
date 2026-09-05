@@ -29,42 +29,62 @@ export const SongVaultView: React.FC<SongVaultViewProps> = ({ onAskCoachAboutSon
   const activeCompetency = CURRICULUM_COMPETENCIES_BY_ID.get(curriculumPosition.activeCompetencyId);
   const recommendedTrack = recommendPlayAlongForCompetency(curriculumPosition.activeCompetencyId);
 
-  const completedDevelopmentStepIds = useMemo(() => {
-    const completed = new Set<string>();
+  const developmentEvidence = useMemo(() => {
+    const legacyCompletedSteps = new Set<string>();
+    const completedMissionIds = new Set<string>();
     try {
       const raw = localStorage.getItem('RUDIMENT_PLAYALONG_HISTORY_V1');
       const history = raw ? JSON.parse(raw) : [];
       if (Array.isArray(history)) {
         history.forEach((attempt: any) => {
-          if (
+          const successful =
             attempt?.developmentStepId &&
             attempt.rating !== 'STRUGGLED' &&
             attempt.transitionControl !== 'LOST' &&
             attempt.musicalChoice !== 'OVERPLAYED' &&
-            (!attempt.developmentStepId || attempt.constraintControl === 'FOLLOWED')
-          ) {
-            completed.add(attempt.developmentStepId);
-          }
+            attempt.constraintControl === 'FOLLOWED';
+          if (!successful) return;
+          if (attempt.developmentMissionId) {
+            const step = MUSICAL_DEVELOPMENT_44.find((candidate) => candidate.id === attempt.developmentStepId);
+            const mission = step?.missions.find((candidate) => candidate.id === attempt.developmentMissionId);
+            if (!mission?.creatorPrompt || attempt.ownership === 'CREATED') completedMissionIds.add(attempt.developmentMissionId);
+          } else legacyCompletedSteps.add(attempt.developmentStepId);
         });
       }
     } catch {
       // Musical-development history is optional; canonical curriculum remains authoritative.
     }
-    return completed;
+    return { legacyCompletedSteps, completedMissionIds };
   }, [historyRevision]);
+
+  const missionProgress = (step: MusicalDevelopmentStep) => {
+    if (developmentEvidence.legacyCompletedSteps.has(step.id)) {
+      return { completed: step.missions.length, total: step.missions.length, nextMission: undefined };
+    }
+    const completed = step.missions.filter((mission) => developmentEvidence.completedMissionIds.has(mission.id)).length;
+    const nextMission = step.missions.find((mission, index) => {
+      if (developmentEvidence.completedMissionIds.has(mission.id)) return false;
+      const previousComplete = index === 0 || developmentEvidence.completedMissionIds.has(step.missions[index - 1].id);
+      const missionPrereqs = (mission.prerequisiteCompetencyIds || []).every((id) => isCompetencyVerified(id, skills));
+      return previousComplete && missionPrereqs;
+    });
+    return { completed, total: step.missions.length, nextMission };
+  };
 
   const curriculumRecommendedDevelopmentStep = recommendMusicalDevelopmentStepForCompetency(curriculumPosition.activeCompetencyId);
 
   const developmentState = (step: MusicalDevelopmentStep) => {
     const missing = step.prerequisiteCompetencyIds.filter((id) => !isCompetencyVerified(id, skills));
     const currentPathPractice = step.id === curriculumRecommendedDevelopmentStep.id;
+    const progress = missionProgress(step);
     return {
       missing,
       currentPathPractice,
+      progress,
       available: missing.length === 0 || currentPathPractice,
-      // A current-path preview/practice attempt cannot mark the musical step complete
-      // until its canonical prerequisites have actually been verified.
-      completed: missing.length === 0 && completedDevelopmentStepIds.has(step.id),
+      // C3.3 mission completion deepens musical ownership but never replaces
+      // canonical curriculum prerequisites. Legacy C3.2 evidence is grandfathered.
+      completed: missing.length === 0 && progress.completed === progress.total,
     };
   };
 
@@ -133,11 +153,11 @@ export const SongVaultView: React.FC<SongVaultViewProps> = ({ onAskCoachAboutSon
       <div className="bg-[#171612] border border-stone-800 rounded-2xl p-5 sm:p-6 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 text-stone-100">
         <div>
           <span className="text-[10px] font-black uppercase tracking-widest text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">
-            C3.2 Musical Development Engine
+            C3.3 Groove Development & Creativity
           </span>
           <h2 className="text-2xl font-black text-white mt-2 mb-1">Play the curriculum inside music</h2>
           <p className="text-sm text-stone-300 max-w-3xl leading-6">
-            A progressive 4/4 application path now takes you from pulse → groove → variations → fills → rudiment application → creativity → full arrangement, using only curriculum-ready vocabulary.
+            Each unlocked stage now contains a sequence of musical missions: establish the base idea → hear/copy it → make controlled choices → create one variation → perform it inside the arrangement.
           </p>
         </div>
       </div>
@@ -190,6 +210,11 @@ export const SongVaultView: React.FC<SongVaultViewProps> = ({ onAskCoachAboutSon
                   {state.completed ? <BadgeCheck className="h-5 w-5 text-emerald-600" /> : !state.available ? <LockKeyhole className="h-5 w-5 text-stone-400" /> : recommended ? <ArrowRight className="h-5 w-5 text-violet-600" /> : null}
                 </div>
                 <p className="mt-2 text-[11px] leading-5 text-stone-600">{step.outcome}</p>
+                <div className="mt-2">
+                  <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-wider text-stone-500"><span>Musical missions</span><span>{state.progress.completed}/{state.progress.total}</span></div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-stone-200"><div className="h-full rounded-full bg-violet-500" style={{ width: `${state.progress.total ? Math.round((state.progress.completed / state.progress.total) * 100) : 0}%` }} /></div>
+                  {state.progress.nextMission && state.available && <p className="mt-1 text-[9px] font-semibold text-violet-700">Next: Mission {state.progress.nextMission.order} • {state.progress.nextMission.shortTitle}</p>}
+                </div>
                 {!state.available && <p className="mt-2 text-[10px] leading-4 text-stone-500"><strong>Unlock:</strong> {missingNames.join(' • ')}</p>}
                 {state.currentPathPractice && state.missing.length > 0 && <p className="mt-2 text-[10px] font-bold text-violet-700">Current curriculum application: you may practise this now, but it completes only after its prerequisites are verified.</p>}
                 {state.completed && <p className="mt-2 text-[10px] font-bold text-emerald-700">Musical application evidence recorded.</p>}
@@ -198,7 +223,7 @@ export const SongVaultView: React.FC<SongVaultViewProps> = ({ onAskCoachAboutSon
                   disabled={!state.available}
                   className={`mt-3 min-h-[40px] w-full rounded-lg text-[11px] font-black ${state.available ? 'bg-stone-900 text-white' : 'bg-stone-200 text-stone-400'}`}
                 >
-                  {state.completed ? 'Practice Again' : state.available ? 'Open Step' : 'Locked'}
+                  {state.completed ? 'Practice Again' : state.available ? state.progress.nextMission ? `Continue Mission ${state.progress.nextMission.order}` : 'Open Step' : 'Locked'}
                 </button>
               </article>
             );

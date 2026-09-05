@@ -51,3 +51,8 @@ The play-alongs are locally generated no-drum practice music. The reference Song
 After deployment, visit `/api/health` and confirm `apiVersion` is `c3.2`. `aiConfigured` should be `true` when `GEMINI_API_KEY` is available to the deployment. Optional: set `GEMINI_FALLBACK_MODEL` to another model name if you deliberately want a fallback during primary-model capacity events.
 
 The repository must contain only the JavaScript Vercel handlers under `api/`. Do not restore the legacy `.ts` API files; `.vercelignore` also guards against those stale routes.
+
+
+## C3.3 checks
+
+After deployment, `/api/health` should report `apiVersion: "c3.3"`. In Songs, the 4/4 Musical Development Path should show mission progress inside each stage. Open an available stage and verify that only the current/previously completed mission can be selected, that available vocabulary has a Hear preview, and that creator missions require an actual self-created choice to complete.
