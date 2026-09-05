@@ -316,6 +316,9 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
         coachAction: decision.action === 'recover' ? 'recovery' : decision.action === 'repeat' ? 'retry' : decision.action === 'reduce_tempo' ? 'regress' : decision.action === 'simplify' ? 'regress' : decision.action === 'end_skill_block' ? 'end_skill_block' : 'advance',
         nextBpm: decision.nextTempo,
         recoveryMode: decision.action === 'recover' || feeling === 'TOO_DIFFICULT',
+        instructionMode: partialResult?.instructionMode || currentInstructionMode,
+        assistanceLevel: partialResult?.assistanceLevel,
+        evidenceCategory: partialResult?.evidenceCategory,
       });
 
       // Update active Gap Closure Plan if this is a remediation drill

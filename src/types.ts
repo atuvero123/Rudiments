@@ -165,6 +165,13 @@ export interface PracticeAttemptEvidence {
 
   recoveryMode: boolean;
 
+  // C4: Preserve whether evidence came from the independent PLAY stage.
+  // This lets readiness use demonstrated independence instead of treating
+  // every guided/full-cue self-check as equivalent evidence.
+  instructionMode?: InstructionMode;
+  assistanceLevel?: AssistanceLevel;
+  evidenceCategory?: 'LEARNING_ACTIVITY' | 'GUIDED_PRACTICE' | 'SELF_ASSESSED_EXECUTION';
+
   progressionStage?: ProgressionStage;
   challengeType?: string;
 }

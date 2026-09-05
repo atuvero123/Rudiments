@@ -89,20 +89,11 @@ export function isCompetencyVerified(
     return true;
   }
 
-  const comp = CURRICULUM_COMPETENCIES_BY_ID.get(competencyId);
-  if (!comp) return false;
-
-  const skill = skills.find((s) => s.id === comp.skillId);
-  if (!skill) return false;
-
-  // If the skill has practical practice log or verified assessment source with sufficient status
-  if (
-    (skill.source === 'practice_log' || skill.source === 'assessment') &&
-    skillStatusAtLeast(skill.status, comp.targetStatus || 'CLEAN')
-  ) {
-    return true;
-  }
-
+  // C4 progression hardening: canonical verification is explicit evidence,
+  // not a side effect of a mutable skill status. Placement tests and practical
+  // verification/checkpoint runs write records into the verification store.
+  // Legacy SELF-REPORT / manual status changes remain useful context but do not
+  // silently certify curriculum prerequisites.
   return false;
 }
 

@@ -1,18 +1,23 @@
-# Rudiment Drum Coach C3 — Vercel Deployment
+# Rudiment Drum Coach C4 — Vercel Deployment
 
 This package is Vercel-native. The React/Vite frontend builds to `dist/`; AI endpoints are Vercel serverless functions under `api/`.
 
 ## Deploy through GitHub + Vercel
 
 1. Extract the ZIP and replace/update the complete contents of your GitHub project with this build.
-2. Commit/push all files, including the new `src/components/PlayAlongStudio.tsx`, `src/data/playAlongTracks.ts`, and `src/lib/playAlongEngine.ts`.
-3. In Vercel, redeploy the latest GitHub commit.
-4. Keep:
+2. Make sure the `/api` folder contains only:
+   - `chat.js`
+   - `checkpoint-assessment.js`
+   - `generate-plan.js`
+   - `health.js`
+3. Commit/push the files.
+4. In Vercel redeploy the latest GitHub commit.
+5. Keep:
    - Framework: Vite
    - Build Command: `npm run build`
    - Output Directory: `dist`
    - Install Command: default (`npm install`)
-5. In Project Settings → Environment Variables add `GEMINI_API_KEY` for Production (and Preview if desired), then redeploy after adding/changing it.
+6. Keep `GEMINI_API_KEY` enabled for Production (and Preview if desired).
 
 ## API test
 
@@ -20,39 +25,22 @@ Open:
 
 `https://YOUR-DOMAIN.vercel.app/api/health`
 
-C3 should return JSON containing:
+Expected C4 fields include:
 - `status: "ok"`
 - `runtime: "vercel-serverless"`
-- `apiVersion: "c3.0"`
+- `apiVersion: "c4.0"`
 - `aiConfigured: true` when the Gemini key is available
-- `transport: "google-rest-api"`
 
-If `aiConfigured` is false, add the environment variable and redeploy.
+## C4 progression validation
 
-## C3 app test
+1. Open **Today** and note the canonical active competency.
+2. Open **Path** and confirm it shows the same active competency.
+3. Inspect the new **C4 Advancement Readiness** card.
+4. Ordinary practice should build readiness but must not mark the competency Verified.
+5. When the readiness card reaches **Ready to Verify**, use **Run Verification**.
+6. Complete the full formal BPM/duration test and grade it honestly.
+7. A clean pass should immediately move Today/Path to the next canonical competency (or next unit if the unit has completed).
+8. A failed test must leave the competency active and create a repair state; it must not advance the curriculum.
+9. Confirm Songs/C3.3 mission evidence remains preserved and musical stages remain prerequisite-gated.
 
-1. Open Today.
-2. In Musical Application, tap the new play-along button.
-3. Confirm the recommended current-path track opens.
-4. Start Slow 4/4 Ballad at 64 BPM.
-5. Test Guided / Reduced / Performance.
-6. Test Groove Only and Musical Choice.
-7. If fill competencies are not verified, confirm 3+1 / 7+1 / Half-Bar / Beat-4 modes are visibly locked.
-8. Let a play-along finish and save its review.
-9. Open Songs directly and test all four play-alongs.
-10. Test `/api/health`, then Coach Chat.
-
-## Important
-
-The play-alongs are locally generated no-drum practice music. The reference Song Vault does not host or redistribute commercial recordings.
-
-## C3.2 checks
-
-After deployment, visit `/api/health` and confirm `apiVersion` is `c3.2`. `aiConfigured` should be `true` when `GEMINI_API_KEY` is available to the deployment. Optional: set `GEMINI_FALLBACK_MODEL` to another model name if you deliberately want a fallback during primary-model capacity events.
-
-The repository must contain only the JavaScript Vercel handlers under `api/`. Do not restore the legacy `.ts` API files; `.vercelignore` also guards against those stale routes.
-
-
-## C3.3.1 checks
-
-After deployment, `/api/health` should report `apiVersion: "c3.3.1"`. In Songs, the 4/4 Musical Development Path should show mission progress inside each stage. Open an available stage and verify that only the current/previously completed mission can be selected, that available vocabulary has a Hear preview, and that creator missions require an actual self-created choice to complete.
+See `C4_BUILD_REPORT.md` for the complete implementation report.

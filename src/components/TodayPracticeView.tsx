@@ -6,6 +6,7 @@ import {
   FocusModeOption,
   GranularSkill,
   ActiveLearningThread,
+  SelfCheckFeeling,
 } from '../types';
 import { useLearner } from '../context/LearnerContext';
 import { generatePracticeSession } from '../lib/practiceSessionGenerator';
@@ -28,6 +29,13 @@ import { getPlayAlongById, recommendPlayAlongForCompetency } from '../data/playA
 import { recommendMusicalDevelopmentStepForCompetency } from '../data/musicalDevelopment';
 import { RoadmapWhyThisNextCard } from './RoadmapWhyThisNextCard';
 import { CurriculumDecisionCard } from './CurriculumDecisionCard';
+import { AdvancementReadinessCard } from './AdvancementReadinessCard';
+import { CompetencyVerificationModal } from './CompetencyVerificationModal';
+import {
+  deriveCompetencyAdvancementReadiness,
+  getSkillStatusAfterCompetencyVerification,
+  recordCompetencyVerificationOutcome,
+} from '../lib/competencyAdvancementEngine';
 import {
   Play,
   Clock,
@@ -78,6 +86,9 @@ export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
 
   // Active Interactive Session State (fallback if context session not used)
   const [activeSession, setActiveSession] = useState<PracticeSession | null>(null);
+  const [showVerification, setShowVerification] = useState(false);
+  const [verificationRevision, setVerificationRevision] = useState(0);
+  const [advancementNotice, setAdvancementNotice] = useState<string | null>(null);
 
   // Setup Screen States
   const [durationMinutes, setDurationMinutes] = useState<number>(30);
@@ -106,6 +117,9 @@ export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
   >('PRIMARY_PATH');
 
   // Unified Canonical Curriculum Position & Today 3-Lane Generation
+  // verificationRevision intentionally forces a fresh deterministic read after a
+  // practical verification writes canonical evidence to localStorage.
+  void verificationRevision;
   const canonicalPosition = deriveCurrentCurriculumPosition(skills);
   const activeUnit =
     CURRICULUM_UNITS_BY_ID.get(canonicalPosition.activeUnitId) || CANONICAL_CURRICULUM_UNITS[0];
@@ -136,6 +150,44 @@ export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
       practiceCount: 0,
       currentComfortTempo: canonicalActiveComp.tempoStandard.bpm,
     } as GranularSkill);
+
+  const verificationSkill: GranularSkill =
+    skills.find((s) => s.id === canonicalActiveComp.skillId) || canonicalActiveSkill;
+  const advancementReadiness = deriveCompetencyAdvancementReadiness(canonicalActiveComp, skills);
+
+  const handleVerificationComplete = (result: {
+    startedAt: string;
+    durationSeconds: number;
+    completedRequiredRun: boolean;
+    selfAssessment: SelfCheckFeeling;
+    frictions: string[];
+  }) => {
+    const outcome = recordCompetencyVerificationOutcome({
+      competency: canonicalActiveComp,
+      skill: verificationSkill,
+      skills,
+      ...result,
+    });
+
+    if (outcome.passed) {
+      updateSkill(verificationSkill.id, {
+        status: getSkillStatusAfterCompetencyVerification(verificationSkill.status, canonicalActiveComp.targetStatus),
+        source: 'assessment',
+        dateLastPracticed: new Date().toISOString().split('T')[0],
+      });
+      const nextComp = CURRICULUM_COMPETENCIES_BY_ID.get(outcome.attempt.nextActiveCompetencyId);
+      setAdvancementNotice(
+        outcome.advancementEvent?.unitAdvanced
+          ? `Verified ${canonicalActiveComp.title}. Unit complete — the curriculum advanced to ${nextComp?.title || 'the next unit'}.`
+          : `Verified ${canonicalActiveComp.title}. Next target: ${nextComp?.title || 'the next competency'}.`
+      );
+    } else {
+      setAdvancementNotice(`Verification not passed. A focused repair plan has been created for ${canonicalActiveComp.title}; no curriculum progress was lost.`);
+    }
+
+    setShowVerification(false);
+    setVerificationRevision((value) => value + 1);
+  };
 
   // New Thing Protection Dialog State
   const [pendingExploreSkill, setPendingExploreSkill] = useState<GranularSkill | null>(null);
@@ -602,6 +654,19 @@ COACH NOTE: Focus on relaxed wrists and strict subdivision accuracy.
         </div>
       </div>
 
+      {/* C4 — EVIDENCE -> READINESS -> PRACTICAL VERIFICATION -> ADVANCEMENT */}
+      <AdvancementReadinessCard
+        competency={canonicalActiveComp}
+        readiness={advancementReadiness}
+        onVerify={() => setShowVerification(true)}
+      />
+
+      {advancementNotice && (
+        <div className={`rounded-2xl border p-4 text-xs font-bold ${advancementNotice.startsWith('Verified') ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+          {advancementNotice}
+        </div>
+      )}
+
       {/* BU2F-R2F ADAPTIVE CURRICULUM DECISION CARD */}
       {currentCurriculumDecision && (
         <CurriculumDecisionCard
@@ -1059,6 +1124,14 @@ COACH NOTE: Focus on relaxed wrists and strict subdivision accuracy.
           </div>
         </div>
       )}
+      <CompetencyVerificationModal
+        isOpen={showVerification}
+        competency={canonicalActiveComp}
+        skill={verificationSkill}
+        readiness={advancementReadiness}
+        onClose={() => setShowVerification(false)}
+        onComplete={handleVerificationComplete}
+      />
     </div>
   );
 };

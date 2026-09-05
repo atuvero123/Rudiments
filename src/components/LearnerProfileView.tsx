@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLearner } from '../context/LearnerContext';
 import { PracticeEquipment, PracticePriority } from '../types';
+import { CurriculumProgressOverview } from './CurriculumProgressOverview';
 import {
   User,
   Clock,
@@ -18,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export const LearnerProfileView: React.FC = () => {
-  const { profile, updateProfile, resetToDefaults } = useLearner();
+  const { profile, skills, updateProfile, resetToDefaults } = useLearner();
 
   const [typicalTime, setTypicalTime] = useState(profile.typicalPracticeTime);
   const [equipment, setEquipment] = useState<PracticeEquipment>(profile.equipment);
@@ -129,6 +130,8 @@ export const LearnerProfileView: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <CurriculumProgressOverview skills={skills} />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Practice Context & Priority */}

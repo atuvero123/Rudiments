@@ -20,6 +20,7 @@ import { getActiveGapClosurePlan } from './gapClosureEngine';
 import { getSkillEvidenceMemory } from './evidenceEngine';
 import { buildPlacementSession } from './placementEngine';
 import { selectBestAnchorGrooveForSkill } from './roadmapEngine';
+import { deriveCompetencyAdvancementReadiness } from './competencyAdvancementEngine';
 
 /**
  * Generates the 3 canonical practice lanes for Today's practice:
@@ -51,7 +52,24 @@ export function generateTodayPracticeLanes(
   } as GranularSkill);
 
   const primaryMemory = getSkillEvidenceMemory(primarySkill.id);
+  const advancementReadiness = deriveCompetencyAdvancementReadiness(primaryCompetency, skills);
   const primaryBpm = primaryMemory?.currentWorkingBpm || primarySkill.currentComfortTempo || primaryCompetency.tempoStandard.bpm;
+  const primaryIntent =
+    advancementReadiness.state === 'READY_TO_VERIFY'
+      ? 'Verification Ready — Consolidate or Test'
+      : advancementReadiness.state === 'NEARLY_READY'
+      ? 'Close Final Readiness Gap'
+      : advancementReadiness.state === 'REPAIR_REQUIRED'
+      ? 'Stabilize Before Verification'
+      : 'Active Technical & Pocket Development';
+  const primaryReason =
+    advancementReadiness.state === 'READY_TO_VERIFY'
+      ? `Evidence is ready for the formal ${advancementReadiness.targetStandardText} verification. Ordinary practice can consolidate; use Run Verification when prepared.`
+      : advancementReadiness.state === 'NEARLY_READY'
+      ? `${advancementReadiness.metRequirements}/${advancementReadiness.totalRequirements} advancement requirements are met. Today's work should close the remaining readiness gap.`
+      : advancementReadiness.state === 'REPAIR_REQUIRED'
+      ? `Recent friction (${advancementReadiness.recurringFriction || 'execution instability'}) should be stabilized before a verification attempt.`
+      : `Core progression target for ${activeUnit.title}. Focus on relaxed, repeatable execution.`;
 
   const primaryLane: PracticeLaneItem = {
     laneType: 'PRIMARY_PATH',
@@ -64,8 +82,8 @@ export function generateTodayPracticeLanes(
     suggestedTempo: primaryBpm,
     tempoStandardText: primaryCompetency.tempoStandard.standardText,
     subdivision: primaryCompetency.subdivision,
-    intent: 'Active Technical & Pocket Development',
-    reason: `Core progression target for ${activeUnit.title}. Focus on relaxed, repeatable execution.`,
+    intent: primaryIntent,
+    reason: primaryReason,
     equipment: equipment,
     isBlockingGap: false,
     isUnlocked: true,

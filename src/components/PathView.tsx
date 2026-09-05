@@ -51,15 +51,26 @@ import {
 import { useLearner } from '../context/LearnerContext';
 import { buildPlacementSession } from '../lib/placementEngine';
 import { PlacementTestModal } from './PlacementTestModal';
+import { AdvancementReadinessCard } from './AdvancementReadinessCard';
+import { CompetencyVerificationModal } from './CompetencyVerificationModal';
+import {
+  deriveCompetencyAdvancementReadiness,
+  getSkillStatusAfterCompetencyVerification,
+  recordCompetencyVerificationOutcome,
+} from '../lib/competencyAdvancementEngine';
 
 interface PathViewProps {
   onStartPracticeCompetency?: (competency: CurriculumCompetency) => void;
 }
 
 export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency }) => {
-  const { profile, skills, startGuidedSession } = useLearner();
+  const { profile, skills, startGuidedSession, updateSkill } = useLearner();
+  const [verificationRevision, setVerificationRevision] = useState(0);
+  const [showCompetencyVerification, setShowCompetencyVerification] = useState(false);
+  const [advancementNotice, setAdvancementNotice] = useState<string | null>(null);
 
   // Deterministic canonical curriculum position from evidence
+  void verificationRevision;
   const canonicalPosition = deriveCurrentCurriculumPosition(skills);
 
   // Load placement assessment
@@ -88,6 +99,53 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
   const activeCompetency =
     CURRICULUM_COMPETENCIES_BY_ID.get(canonicalPosition.activeCompetencyId) ||
     CANONICAL_CURRICULUM_COMPETENCIES[0];
+  const activeSkill = skills.find((s) => s.id === activeCompetency.skillId) || ({
+    id: activeCompetency.skillId,
+    name: activeCompetency.title,
+    parentTrack: 'rudiments',
+    category: 'Curriculum',
+    description: activeCompetency.description,
+    status: 'LEARNING',
+    confidence: 2,
+    practiceCount: 0,
+    currentComfortTempo: activeCompetency.tempoStandard.bpm,
+  } as any);
+  const advancementReadiness = deriveCompetencyAdvancementReadiness(activeCompetency, skills);
+
+  const handleCompetencyVerificationComplete = (result: {
+    startedAt: string;
+    durationSeconds: number;
+    completedRequiredRun: boolean;
+    selfAssessment: SelfCheckFeeling;
+    frictions: string[];
+  }) => {
+    const outcome = recordCompetencyVerificationOutcome({
+      competency: activeCompetency,
+      skill: activeSkill,
+      skills,
+      ...result,
+    });
+    if (outcome.passed) {
+      updateSkill(activeSkill.id, {
+        status: getSkillStatusAfterCompetencyVerification(activeSkill.status, activeCompetency.targetStatus),
+        source: 'assessment',
+        dateLastPracticed: new Date().toISOString().split('T')[0],
+      });
+      const nextComp = CURRICULUM_COMPETENCIES_BY_ID.get(outcome.attempt.nextActiveCompetencyId);
+      const nextUnit = CURRICULUM_UNITS_BY_ID.get(outcome.attempt.nextActiveUnitId);
+      setExpandedUnitId(outcome.attempt.nextActiveUnitId);
+      if (nextUnit) setSelectedBand(nextUnit.band);
+      setAdvancementNotice(
+        outcome.advancementEvent?.unitAdvanced
+          ? `Verified ${activeCompetency.title}. The unit is complete and the next unit is now active.`
+          : `Verified ${activeCompetency.title}. Next target: ${nextComp?.title || 'next competency'}.`
+      );
+    } else {
+      setAdvancementNotice(`Verification not passed. ${activeCompetency.title} remains active and a repair plan was created.`);
+    }
+    setShowCompetencyVerification(false);
+    setVerificationRevision((value) => value + 1);
+  };
 
   // Deterministic unit status based on real evidence and unlocking
   const getUnitStatus = (unit: CurriculumUnit): 'COMPLETED' | 'IN_PROGRESS' | 'UNLOCKED' | 'LOCKED' => {
@@ -396,6 +454,18 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
         </div>
       </div>
 
+      <AdvancementReadinessCard
+        competency={activeCompetency}
+        readiness={advancementReadiness}
+        onVerify={() => setShowCompetencyVerification(true)}
+      />
+
+      {advancementNotice && (
+        <div className={`rounded-2xl border p-4 text-xs font-bold ${advancementNotice.startsWith('Verified') ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+          {advancementNotice}
+        </div>
+      )}
+
       {/* 4. CURRICULUM BAND TABS & ROADMAP ACCORDION */}
       <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-stone-200 pb-2">
@@ -595,6 +665,15 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
         tests={availableTests}
         estimatedBand={assessment.estimatedBand}
         onComplete={handlePlacementCompleted}
+      />
+
+      <CompetencyVerificationModal
+        isOpen={showCompetencyVerification}
+        competency={activeCompetency}
+        skill={activeSkill}
+        readiness={advancementReadiness}
+        onClose={() => setShowCompetencyVerification(false)}
+        onComplete={handleCompetencyVerificationComplete}
       />
     </div>
   );

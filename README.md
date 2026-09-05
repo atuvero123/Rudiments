@@ -46,3 +46,7 @@ C3.3 deepens each 4/4 musical-development stage into sequential missions. Groove
 ## C3.3.1 — Progress Integrity Repair
 
 C3.3.1 corrects legacy C3.2 migration. A successful pre-mission Step completion now preserves musical-application evidence and credits only Mission 1, rather than falsely marking every later C3.3 mission complete. Explicit C3.3 mission attempts are then merged normally, so Mission 2+ must be earned through their own qualifying evidence. Canonical curriculum prerequisites and certification are unchanged.
+
+## C4 — Assessment, Advancement & Daily Coaching Hardening
+
+C4 closes the curriculum loop: ordinary practice builds readiness, but only a completed practical verification at the canonical standard certifies a competency. Today and Path now share the same advancement-readiness state, successful verification automatically moves the canonical path forward, failed verification creates a repair path without deleting progress, and Profile & Progress shows recent formal curriculum advances. See `C4_BUILD_REPORT.md`.
