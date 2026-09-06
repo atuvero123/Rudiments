@@ -7,6 +7,7 @@ import {
 } from '../types';
 import {
   CURRICULUM_COMPETENCIES_BY_ID,
+  CURRICULUM_COMPETENCIES_BY_SKILL_ID,
 } from '../data/canonicalCurriculum';
 import {
   deriveCurrentCurriculumPosition,
@@ -57,6 +58,19 @@ export interface CompetencyAdvancementReadiness {
   highestQualifyingBpm: number | null;
   missingPrerequisiteIds: string[];
   recurringFriction: string | null;
+}
+
+
+export interface CompetencyPracticeAuthority {
+  competencyId: string;
+  skillId: string;
+  readinessState: CompetencyAdvancementState;
+  targetBpm: number;
+  tempoCeiling: number | null;
+  recommendedPracticeBpm: number;
+  verificationPriority: boolean;
+  suppressLegacyProgression: boolean;
+  guidance: string;
 }
 
 export interface CompetencyVerificationAttempt {
@@ -359,6 +373,68 @@ export function deriveCompetencyAdvancementReadiness(
     highestQualifyingBpm,
     missingPrerequisiteIds,
     recurringFriction: activeGapPlan ? 'active verification repair plan' : unresolvedFailedVerification ? 'failed formal verification' : memory.primaryRecurringFriction?.tag || null,
+  };
+}
+
+
+/**
+ * C4.2 — Canonical advancement authority for ordinary practice.
+ *
+ * While a canonical competency is still unverified, ordinary adaptive practice
+ * must never outrun the formal certification standard. Once readiness reaches
+ * READY_TO_VERIFY, the verification test becomes the primary next action and
+ * legacy tempo/progression systems are explicitly subordinate.
+ */
+export function deriveCompetencyPracticeAuthorityForSkill(
+  skillId: string,
+  skills: GranularSkill[]
+): CompetencyPracticeAuthority | null {
+  const competency = CURRICULUM_COMPETENCIES_BY_SKILL_ID.get(skillId);
+  if (!competency) return null;
+
+  const readiness = deriveCompetencyAdvancementReadiness(competency, skills);
+  const memory = getSkillEvidenceMemory(skillId);
+  const observedBpm =
+    memory.currentWorkingBpm ||
+    readiness.highestQualifyingBpm ||
+    skills.find((skill) => skill.id === skillId)?.currentComfortTempo ||
+    readiness.targetBpm;
+
+  if (readiness.state === 'VERIFIED') {
+    return {
+      competencyId: competency.id,
+      skillId,
+      readinessState: readiness.state,
+      targetBpm: readiness.targetBpm,
+      tempoCeiling: null,
+      recommendedPracticeBpm: observedBpm,
+      verificationPriority: false,
+      suppressLegacyProgression: false,
+      guidance: `${competency.title} is already verified. Maintenance or stretch work may continue without the pre-verification tempo ceiling.`,
+    };
+  }
+
+  // Keep ordinary practice in the certification neighbourhood. The learner may
+  // warm up below the target, but the adaptive engine cannot push beyond it.
+  const nearTargetFloor = Math.max(30, readiness.targetBpm - 5);
+  const recommendedPracticeBpm = Math.min(
+    readiness.targetBpm,
+    Math.max(nearTargetFloor, observedBpm)
+  );
+  const verificationPriority = readiness.state === 'READY_TO_VERIFY';
+
+  return {
+    competencyId: competency.id,
+    skillId,
+    readinessState: readiness.state,
+    targetBpm: readiness.targetBpm,
+    tempoCeiling: readiness.targetBpm,
+    recommendedPracticeBpm,
+    verificationPriority,
+    suppressLegacyProgression: verificationPriority,
+    guidance: verificationPriority
+      ? `Formal verification now has priority: ${readiness.targetStandardText}. Hold ordinary practice at or below ${readiness.targetBpm} BPM and use it only to warm up or consolidate.`
+      : `Continue building evidence at or below the ${readiness.targetBpm} BPM certification standard.`,
   };
 }
 

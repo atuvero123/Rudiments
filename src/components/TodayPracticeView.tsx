@@ -667,40 +667,55 @@ COACH NOTE: Focus on relaxed wrists and strict subdivision accuracy.
         </div>
       )}
 
-      {/* BU2F-R2F ADAPTIVE CURRICULUM DECISION CARD */}
-      {currentCurriculumDecision && (
-        <CurriculumDecisionCard
-          decision={currentCurriculumDecision}
-          targetSkill={activeTargetSkill}
-          onPracticeDecision={() =>
-            currentCurriculumDecision &&
-            launchCurriculumDecisionPractice(currentCurriculumDecision, equipment)
-          }
-          onPracticeSupportingGroove={() =>
-            activeTargetSkill &&
-            launchSupportingGrooveMiniLesson(
-              activeTargetSkill,
-              currentCurriculumDecision.supportingContext?.anchorGroove,
-              equipment
-            )
-          }
-        />
-      )}
+      {/* C4.2: once canonical readiness is complete, verification becomes the
+          single progression authority. Legacy Vary/Extend/Roadmap advice is
+          hidden so it cannot compete with the formal certification gate. */}
+      {advancementReadiness.state === 'READY_TO_VERIFY' ? (
+        <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 sm:p-5 text-emerald-950 space-y-2 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-wider">C4.2 Advancement Authority</div>
+          <div className="font-black text-base">Verification is now the primary next action.</div>
+          <p className="text-xs font-medium leading-relaxed">
+            Your evidence gate is complete. Ordinary guided practice is now optional consolidation only and is capped at {advancementReadiness.targetBpm} BPM. The curriculum will not ask you to Vary, Extend, or collect more legacy checkpoint evidence before this formal test.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* BU2F-R2F ADAPTIVE CURRICULUM DECISION CARD */}
+          {currentCurriculumDecision && (
+            <CurriculumDecisionCard
+              decision={currentCurriculumDecision}
+              targetSkill={activeTargetSkill}
+              onPracticeDecision={() =>
+                currentCurriculumDecision &&
+                launchCurriculumDecisionPractice(currentCurriculumDecision, equipment)
+              }
+              onPracticeSupportingGroove={() =>
+                activeTargetSkill &&
+                launchSupportingGrooveMiniLesson(
+                  activeTargetSkill,
+                  currentCurriculumDecision.supportingContext?.anchorGroove,
+                  equipment
+                )
+              }
+            />
+          )}
 
-      {/* WHY THIS NEXT ROADMAP CARD */}
-      {currentRoadmapDecision && (
-        <RoadmapWhyThisNextCard
-          decision={currentRoadmapDecision}
-          targetSkill={activeTargetSkill}
-          onPracticeSupportingGroove={() =>
-            activeTargetSkill &&
-            launchSupportingGrooveMiniLesson(
-              activeTargetSkill,
-              currentRoadmapDecision.supportingSkill?.anchorGroove,
-              equipment
-            )
-          }
-        />
+          {/* WHY THIS NEXT ROADMAP CARD */}
+          {currentRoadmapDecision && (
+            <RoadmapWhyThisNextCard
+              decision={currentRoadmapDecision}
+              targetSkill={activeTargetSkill}
+              onPracticeSupportingGroove={() =>
+                activeTargetSkill &&
+                launchSupportingGrooveMiniLesson(
+                  activeTargetSkill,
+                  currentRoadmapDecision.supportingSkill?.anchorGroove,
+                  equipment
+                )
+              }
+            />
+          )}
+        </>
       )}
 
       {/* SETUP FORM CARD */}
@@ -970,15 +985,36 @@ COACH NOTE: Focus on relaxed wrists and strict subdivision accuracy.
           )}
         </div>
 
-        {/* START GUIDED PRACTICE BUTTON */}
-        <button
-          id="btn-start-guided-practice"
-          onClick={handleStartGuidedSession}
-          className="w-full py-4 bg-[#4a523a] hover:bg-[#3d4430] text-white font-black text-base rounded-2xl shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 min-h-[52px] cursor-pointer"
-        >
-          <Play className="w-5 h-5 fill-current" />
-          <span>START GUIDED PRACTICE SESSION</span>
-        </button>
+        {/* C4.2 PRIMARY ACTION: verification outranks ordinary practice once ready. */}
+        {advancementReadiness.state === 'READY_TO_VERIFY' ? (
+          <div className="space-y-2">
+            <button
+              id="btn-run-formal-verification"
+              onClick={() => setShowVerification(true)}
+              className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-base rounded-2xl shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 min-h-[52px] cursor-pointer"
+            >
+              <ShieldAlert className="w-5 h-5" />
+              <span>RUN FORMAL VERIFICATION · {advancementReadiness.targetBpm} BPM · {advancementReadiness.targetDurationSeconds}s</span>
+            </button>
+            <button
+              id="btn-start-guided-practice"
+              onClick={handleStartGuidedSession}
+              className="w-full py-3 bg-stone-100 hover:bg-stone-200 text-stone-800 font-black text-xs rounded-2xl border border-stone-300 transition-all flex items-center justify-center gap-2 min-h-[46px] cursor-pointer"
+            >
+              <Play className="w-4 h-4" />
+              <span>OPTIONAL WARM-UP / CONSOLIDATION — NO SPEED CHASING</span>
+            </button>
+          </div>
+        ) : (
+          <button
+            id="btn-start-guided-practice"
+            onClick={handleStartGuidedSession}
+            className="w-full py-4 bg-[#4a523a] hover:bg-[#3d4430] text-white font-black text-base rounded-2xl shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 min-h-[52px] cursor-pointer"
+          >
+            <Play className="w-5 h-5 fill-current" />
+            <span>START GUIDED PRACTICE SESSION</span>
+          </button>
+        )}
 
         {/* Legacy Written Plan Option */}
         <div className="text-center pt-2 border-t border-stone-100">

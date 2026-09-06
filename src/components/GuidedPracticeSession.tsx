@@ -21,7 +21,6 @@ import {
 } from '../lib/evidenceEngine';
 import { finalizePlacementSessionEvidence, derivePlacementEvidenceMemory } from '../lib/placementEngine';
 import { generateNextTimeRecommendation } from '../lib/continuityEngine';
-import { deriveSkillReadiness } from '../lib/readinessEngine';
 import {
   recordRemediationProgress,
   getActiveGapClosurePlan,
@@ -31,6 +30,11 @@ import { useLearner } from '../context/LearnerContext';
 import { evaluateCurriculumDecision } from '../lib/curriculumDecisionEngine';
 import { CurriculumDecisionCard } from './CurriculumDecisionCard';
 import { findTeachingDefinition } from '../lib/teachingDefinitions';
+import { CURRICULUM_COMPETENCIES_BY_SKILL_ID } from '../data/canonicalCurriculum';
+import {
+  deriveCompetencyAdvancementReadiness,
+  deriveCompetencyPracticeAuthorityForSkill,
+} from '../lib/competencyAdvancementEngine';
 import {
   Play,
   Pause,
@@ -96,6 +100,10 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
 
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const currentExercise: PracticeExercise | undefined = session.exercises?.[currentExerciseIndex];
+  const currentSkillId = currentExercise?.skillIds?.[0] || session.skillId || session.selectedSkillIds?.[0] || '';
+  const currentPracticeAuthority = currentSkillId
+    ? deriveCompetencyPracticeAuthorityForSkill(currentSkillId, skills)
+    : null;
 
   // C2: exercises with a canonical teaching definition are governed by the
   // six-stage Understand -> Count -> Watch -> Follow -> Play -> Evaluate flow.
@@ -239,7 +247,14 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
       feeling,
       issues,
       currentTempo,
-      completedSoFar
+      completedSoFar,
+      {
+        tempoCeiling: currentPracticeAuthority?.tempoCeiling,
+        verificationPriority: currentPracticeAuthority?.verificationPriority,
+        verificationStandardText: currentPracticeAuthority?.verificationPriority
+          ? CURRICULUM_COMPETENCIES_BY_SKILL_ID.get(currentSkillId)?.tempoStandard.standardText
+          : undefined,
+      }
     );
 
     const tempoChange = decision.nextTempo - currentTempo;
@@ -271,11 +286,22 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
     };
 
     // Mutate upcoming exercise queue dynamically
-    const mutatedExercises = updateExerciseQueueWithAdaptiveDecision(
+    let mutatedExercises = updateExerciseQueueWithAdaptiveDecision(
       updatedSession,
       currentExerciseIndex,
       decision
     );
+
+    // C4.2: the formal certification standard is a hard ceiling for ordinary
+    // pre-verification practice. Warm-ups/cool-downs may sit below it, but no
+    // adaptive decision can push an unverified competency past the test tempo.
+    if (currentPracticeAuthority?.tempoCeiling) {
+      mutatedExercises = mutatedExercises.map((exercise, index) =>
+        index > currentExerciseIndex && exercise.phase !== 'COOL DOWN'
+          ? { ...exercise, tempo: Math.min(exercise.tempo, currentPracticeAuthority.tempoCeiling!) }
+          : exercise
+      );
+    }
 
     updatedSession = {
       ...updatedSession,
@@ -404,7 +430,19 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
   // ================= 1. SESSION COMPLETION SCREEN =================
   if (isSessionComplete) {
     const exercisesCount = session.exercises?.length || 0;
-    const workingRangeInfo = computeSessionWorkingRange(session);
+    const primarySessionSkillId = session.skillId || session.selectedSkillIds?.[0] || session.exercises?.[0]?.skillIds?.[0] || '';
+    const completionAuthority = primarySessionSkillId
+      ? deriveCompetencyPracticeAuthorityForSkill(primarySessionSkillId, skills)
+      : null;
+    const completionCompetency = CURRICULUM_COMPETENCIES_BY_SKILL_ID.get(primarySessionSkillId);
+    const completionReadiness = completionCompetency
+      ? deriveCompetencyAdvancementReadiness(completionCompetency, skills)
+      : null;
+    const workingRangeInfo = computeSessionWorkingRange(session, {
+      tempoCeiling: completionAuthority?.tempoCeiling,
+      verificationPriority: completionAuthority?.verificationPriority,
+      verificationStandardText: completionReadiness?.targetStandardText,
+    });
 
     const temposUsed = session.exercises?.map((e) => e.result?.tempoUsed || e.tempo) || [70];
     const minTempo = Math.min(...temposUsed);
@@ -581,12 +619,20 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
               💡 Coach Continuation Recommendation for Next Time:
             </span>
             <p className="font-bold text-stone-900 text-sm leading-snug">
-              {generateNextTimeRecommendation(session)}
+              {completionAuthority?.verificationPriority
+                ? `NEXT TIME: Formal verification has priority. Do not push beyond ${completionReadiness?.targetBpm || completionAuthority.targetBpm} BPM; use ordinary practice only as a short warm-up or consolidation.`
+                : generateNextTimeRecommendation(session)}
             </p>
           </div>
 
           {/* BU2F-R2F Adaptive Curriculum Next Target Recommendation */}
-          {(() => {
+          {completionAuthority?.verificationPriority ? (
+            <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950 space-y-1.5">
+              <div className="font-black uppercase tracking-wider text-[10px]">C4.2 Advancement Authority Active</div>
+              <div className="font-black text-sm">Formal verification is the next progression action.</div>
+              <div>Legacy Vary / Extend / checkpoint progression is paused for this competency until the canonical verification result is recorded.</div>
+            </div>
+          ) : (() => {
             const primarySkillId = session.skillId || session.selectedSkillIds?.[0] || '';
             const skillObj = skills.find((s) => s.id === primarySkillId);
             if (!skillObj) return null;
@@ -609,7 +655,10 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
             const primarySkillId = session.skillId || session.selectedSkillIds?.[0] || '';
             const skillObj = skills.find((s) => s.id === primarySkillId);
             const placementMem = derivePlacementEvidenceMemory(primarySkillId);
-            const readiness = skillObj ? deriveSkillReadiness(skillObj) : null;
+            const canonicalComp = CURRICULUM_COMPETENCIES_BY_SKILL_ID.get(primarySkillId);
+            const canonicalReadiness = canonicalComp
+              ? deriveCompetencyAdvancementReadiness(canonicalComp, skills)
+              : null;
 
             const totalInsertions =
               placementMem.successfulOneBeatPlacements +
@@ -621,7 +670,7 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
             const hasMetGroove = placementMem.cleanGrooveReturns >= 2;
             const hasMetFriction = (placementMem.totalPlacementAttempts || 0) >= 2 && !placementMem.recurringPlacementFriction;
 
-            const isAllApplicableMet = readiness?.metRequirementsCount === readiness?.totalRequirementsCount;
+            const isVerificationPriority = canonicalReadiness?.state === 'READY_TO_VERIFY';
 
             return (
               <div className="bg-[#1e2316] text-stone-100 p-5 rounded-2xl space-y-4 border border-[#4a523a]/40 shadow-lg">
@@ -759,25 +808,25 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
                 {/* Status Guidance Banner */}
                 <div
                   className={`p-3 rounded-xl text-xs font-medium border flex items-center justify-between gap-2 ${
-                    isAllApplicableMet
+                    isVerificationPriority
                       ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200 font-bold'
                       : 'bg-stone-800/80 border-stone-700 text-stone-300'
                   }`}
                 >
                   <span>
-                    {isAllApplicableMet ? (
+                    {isVerificationPriority ? (
                       <span>
-                        ✓ Placement evidence requirements satisfied. APPLICABLE checkpoint is now ready for formal evaluation.
+                        ✓ C4 canonical readiness is complete. Formal verification now has priority; no additional placement evidence is required before the test.
                       </span>
                     ) : (
                       <span>
-                        <strong>Next Step:</strong> Continue placement practice — more repeated clean placement evidence required before APPLICABLE checkpoint.
+                        <strong>C4 Evidence Status:</strong> Placement metrics below are supporting evidence only. Follow the canonical Advancement Readiness card for the actual verification gate.
                       </span>
                     )}
                   </span>
-                  {isAllApplicableMet && (
+                  {isVerificationPriority && (
                     <span className="bg-emerald-600 text-white text-[10px] font-black uppercase px-2 py-0.5 rounded shrink-0">
-                      Checkpoint Ready
+                      Verify Now
                     </span>
                   )}
                 </div>

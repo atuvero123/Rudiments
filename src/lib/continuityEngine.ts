@@ -18,6 +18,7 @@ import { deriveSkillReadiness } from './readinessEngine';
 import { getActiveGapClosurePlan } from './gapClosureEngine';
 import { getOrInitializePlacementAssessment } from './drummerPlacementEngine';
 import { CURRICULUM_COMPETENCIES_BY_SKILL_ID } from '../data/canonicalCurriculum';
+import { deriveCompetencyPracticeAuthorityForSkill } from './competencyAdvancementEngine';
 
 const CONTINUATION_STORAGE_KEY = 'RUDIMENT_CONTINUATION_RECOMMENDATIONS_V1';
 
@@ -265,6 +266,13 @@ export function deriveSkillContinuityDecision(
     }
   }
 
+
+  // C4.2: canonical certification is the tempo authority for an unverified skill.
+  const advancementAuthority = deriveCompetencyPracticeAuthorityForSkill(skill.id, allSkills);
+  if (advancementAuthority?.tempoCeiling) {
+    recommendedStartingTempo = Math.min(recommendedStartingTempo, advancementAuthority.tempoCeiling);
+  }
+
   // 5. Session Intent Derivation
   let sessionIntent: SessionIntent = 'establish_baseline';
   let sessionIntentLabel = 'Establish Baseline';
@@ -297,9 +305,18 @@ export function deriveSkillContinuityDecision(
     sessionIntentLabel = 'Push Progression';
   }
 
+  if (advancementAuthority?.verificationPriority) {
+    sessionIntent = 'checkpoint_prep';
+    sessionIntentLabel = 'Formal Verification Priority';
+    recommendedStartingTempo = advancementAuthority.recommendedPracticeBpm;
+  }
+
+
   // 6. Formulate "Why Today" Explanation
   let whyChosenExplanation = '';
-  if (readiness.readinessState === 'READY_FOR_CHECKPOINT') {
+  if (advancementAuthority?.verificationPriority) {
+    whyChosenExplanation = `${skill.name} is ready for canonical verification. Ordinary practice is now consolidation only; the formal test is the primary next action.`;
+  } else if (readiness.readinessState === 'READY_FOR_CHECKPOINT') {
     whyChosenExplanation = `${skill.name} has demonstrated all evidence requirements for the ${readiness.targetStatus} Checkpoint! Today runs a checkpoint simulation.`;
   } else if (readiness.readinessState === 'NEARLY_READY') {
     whyChosenExplanation = `${skill.name} is nearly ready for the ${readiness.targetStatus} Checkpoint (${readiness.metRequirementsCount}/${readiness.totalRequirementsCount} requirements met). Today targets the remaining gap.`;
@@ -322,12 +339,20 @@ export function deriveSkillContinuityDecision(
   let exerciseFocusPlan: string[] = [];
 
   if (sessionIntent === 'checkpoint_prep') {
-    todayAim = `Solidify all criteria for the ${readiness.targetStatus} Checkpoint at ${recommendedStartingTempo} BPM.`;
-    exerciseFocusPlan = [
-      'Wrist & fulcrum alignment check to ensure zero physical tension',
-      `Sustained steady-stream execution at ${recommendedStartingTempo} BPM matching checkpoint criteria`,
-      'Musical transition and downbeat landing simulation without tempo drop',
-    ];
+    todayAim = advancementAuthority?.verificationPriority
+      ? `Warm up and consolidate at or below ${advancementAuthority.targetBpm} BPM, then take the formal verification test.`
+      : `Solidify all criteria for the ${readiness.targetStatus} Checkpoint at ${recommendedStartingTempo} BPM.`;
+    exerciseFocusPlan = advancementAuthority?.verificationPriority
+      ? [
+          'Short relaxed warm-up with no speed chasing',
+          `One or two controlled runs at ${recommendedStartingTempo}-${advancementAuthority.targetBpm} BPM`,
+          `Formal verification at ${advancementAuthority.targetBpm} BPM when ready`,
+        ]
+      : [
+          'Wrist & fulcrum alignment check to ensure zero physical tension',
+          `Sustained steady-stream execution at ${recommendedStartingTempo} BPM matching checkpoint criteria`,
+          'Musical transition and downbeat landing simulation without tempo drop',
+        ];
   } else if (sessionIntent === 'establish_baseline') {
     todayAim = `Identify a clean, relaxed starting tempo for ${skill.name}.`;
     exerciseFocusPlan = [
@@ -374,8 +399,9 @@ export function deriveSkillContinuityDecision(
 
   // 8. Next Time Recommendation
   const savedNext = getNextTimeRecommendation(skill.id);
-  const nextTimeRecommendation =
-    savedNext ||
+  const nextTimeRecommendation = advancementAuthority?.verificationPriority
+    ? `NEXT TIME: Do not push beyond ${advancementAuthority.targetBpm} BPM. Take the formal verification test; use ordinary practice only as a short warm-up or consolidation.`
+    : savedNext ||
     (recurringFriction
       ? `NEXT TIME: Maintain ${recommendedStartingTempo} BPM. Address ${recurringFriction} before pushing speed.`
       : sessionIntent === 'rebuild'

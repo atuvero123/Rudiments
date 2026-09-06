@@ -1,4 +1,4 @@
-# Rudiment Drum Coach C4.1 — Vercel Deployment
+# Rudiment Drum Coach C4.2 — Vercel Deployment
 
 This package is Vercel-native. The React/Vite frontend builds to `dist/`; AI endpoints are Vercel serverless functions under `api/`.
 
@@ -28,7 +28,7 @@ Open:
 Expected C4 fields include:
 - `status: "ok"`
 - `runtime: "vercel-serverless"`
-- `apiVersion: "c4.1"`
+- `apiVersion: "c4.2"`
 - `aiConfigured: true` when the Gemini key is available
 
 ## C4 progression validation
@@ -46,6 +46,6 @@ Expected C4 fields include:
 See `C4_BUILD_REPORT.md` for the complete implementation report.
 
 
-## C4.1 teaching-clarity validation
+## C4.2 teaching-clarity validation
 
 For Quarter-Note Pulse, start a normal practice session and inspect a placement/phrase exercise. The visible **Required Pattern** must remain quarter-note based (for example `R` on a one-beat target or `R R R R` for a full bar). It must not display `R L K` or a sixteenth-note transfer pattern as the current requirement. Any real transfer/orchestration layer is labeled separately and does not replace the Required Pattern.

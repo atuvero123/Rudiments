@@ -20,7 +20,10 @@ import { getActiveGapClosurePlan } from './gapClosureEngine';
 import { getSkillEvidenceMemory } from './evidenceEngine';
 import { buildPlacementSession } from './placementEngine';
 import { selectBestAnchorGrooveForSkill } from './roadmapEngine';
-import { deriveCompetencyAdvancementReadiness } from './competencyAdvancementEngine';
+import {
+  deriveCompetencyAdvancementReadiness,
+  deriveCompetencyPracticeAuthorityForSkill,
+} from './competencyAdvancementEngine';
 
 /**
  * Generates the 3 canonical practice lanes for Today's practice:
@@ -53,10 +56,14 @@ export function generateTodayPracticeLanes(
 
   const primaryMemory = getSkillEvidenceMemory(primarySkill.id);
   const advancementReadiness = deriveCompetencyAdvancementReadiness(primaryCompetency, skills);
-  const primaryBpm = primaryMemory?.currentWorkingBpm || primarySkill.currentComfortTempo || primaryCompetency.tempoStandard.bpm;
+  const practiceAuthority = deriveCompetencyPracticeAuthorityForSkill(primarySkill.id, skills);
+  const rawPrimaryBpm = primaryMemory?.currentWorkingBpm || primarySkill.currentComfortTempo || primaryCompetency.tempoStandard.bpm;
+  const primaryBpm = practiceAuthority?.tempoCeiling
+    ? Math.min(rawPrimaryBpm, practiceAuthority.tempoCeiling)
+    : rawPrimaryBpm;
   const primaryIntent =
     advancementReadiness.state === 'READY_TO_VERIFY'
-      ? 'Verification Ready — Consolidate or Test'
+      ? 'Formal Verification Priority'
       : advancementReadiness.state === 'NEARLY_READY'
       ? 'Close Final Readiness Gap'
       : advancementReadiness.state === 'REPAIR_REQUIRED'
@@ -64,7 +71,7 @@ export function generateTodayPracticeLanes(
       : 'Active Technical & Pocket Development';
   const primaryReason =
     advancementReadiness.state === 'READY_TO_VERIFY'
-      ? `Evidence is ready for the formal ${advancementReadiness.targetStandardText} verification. Ordinary practice can consolidate; use Run Verification when prepared.`
+      ? `Formal verification is now the primary next action: ${advancementReadiness.targetStandardText}. Optional ordinary practice is capped at ${advancementReadiness.targetBpm} BPM and should only warm up or consolidate.`
       : advancementReadiness.state === 'NEARLY_READY'
       ? `${advancementReadiness.metRequirements}/${advancementReadiness.totalRequirements} advancement requirements are met. Today's work should close the remaining readiness gap.`
       : advancementReadiness.state === 'REPAIR_REQUIRED'
@@ -224,13 +231,32 @@ export function buildTodayCurriculumSession(
     practiceCount: 0,
   } as GranularSkill);
 
-  // Use placement session generator to construct the full 3-step or 4-step musical session
-  const session = buildPlacementSession(primarySkill, profile, '1 beat');
+  // Use placement session generator to construct the full 3-step or 4-step musical session.
+  // C4.2 gives the canonical advancement engine authority over ordinary practice:
+  // unverified competencies cannot be pushed beyond their formal standard, and
+  // READY_TO_VERIFY sessions become consolidation/warm-up rather than speed chasing.
+  const primaryComp = CURRICULUM_COMPETENCIES_BY_ID.get(primaryLane.competencyId || '');
+  const primaryReadiness = primaryComp
+    ? deriveCompetencyAdvancementReadiness(primaryComp, skills)
+    : null;
+  const primaryAuthority = deriveCompetencyPracticeAuthorityForSkill(primarySkill.id, skills);
+  const governedBpm = primaryAuthority?.tempoCeiling
+    ? Math.min(primaryLane.suggestedTempo, primaryAuthority.tempoCeiling)
+    : primaryLane.suggestedTempo;
+  const session = buildPlacementSession(
+    primarySkill,
+    profile,
+    '1 beat',
+    governedBpm,
+    primaryReadiness?.state === 'READY_TO_VERIFY' ? 'reduced' : undefined
+  );
 
   // Augment the session metadata with canonical curriculum details
   session.id = `sess-today-${Date.now()}`;
   session.focusTopic = `Today's Curriculum Practice: ${primaryLane.targetSkillName}`;
-  session.notes = `Structured 3-lane session: Primary Path (${primaryLane.percentageAllocation}%), Repair (${repairLane.percentageAllocation}%), Musical Application (${perfLane.percentageAllocation}%).`;
+  session.notes = primaryReadiness?.state === 'READY_TO_VERIFY'
+    ? `C4.2 verification-priority consolidation session. Tempo is capped at ${primaryReadiness.targetBpm} BPM; formal verification remains the primary next action.`
+    : `Structured 3-lane session: Primary Path (${primaryLane.percentageAllocation}%), Repair (${repairLane.percentageAllocation}%), Musical Application (${perfLane.percentageAllocation}%).`;
 
   return session;
 }

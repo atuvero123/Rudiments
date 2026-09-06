@@ -27,6 +27,12 @@ export interface AdaptiveDecision {
   nextExerciseOverride?: PracticeExercise;
 }
 
+export interface AdaptiveTempoAuthority {
+  tempoCeiling?: number | null;
+  verificationPriority?: boolean;
+  verificationStandardText?: string;
+}
+
 /**
  * Checks whether the learner has met the implementation gate for a skill.
  * Gate Requirement: At least 1 CLEAN_AND_RELAXED or 2 MOSTLY_CLEAN rounds on the skill stage.
@@ -56,7 +62,8 @@ export function calculateAdaptiveDecision(
   feeling: SelfCheckFeeling,
   issueTags: string[],
   currentTempo: number,
-  completedExercises: PracticeExercise[]
+  completedExercises: PracticeExercise[],
+  authority?: AdaptiveTempoAuthority
 ): AdaptiveDecision {
   const primarySkillId = currentExercise.skillIds[0] || 'skill';
   
@@ -128,18 +135,32 @@ export function calculateAdaptiveDecision(
     }
 
     // Otherwise, advance with +2 to +4 BPM increase or move to next stage
-    const nextTempo = Math.min(220, currentTempo + (isApplication ? 2 : 4));
+    const requestedTempo = Math.min(220, currentTempo + (isApplication ? 2 : 4));
+    const nextTempo = authority?.tempoCeiling
+      ? Math.min(requestedTempo, authority.tempoCeiling)
+      : requestedTempo;
+    const verificationCeilingReached = Boolean(
+      authority?.verificationPriority &&
+      authority?.tempoCeiling &&
+      nextTempo >= authority.tempoCeiling
+    );
     return {
       action: 'advance',
       previousTempo: currentTempo,
       nextTempo,
-      reason: 'Sufficient clean evidence demonstrated. Advancing tempo / implementation stage.',
+      reason: verificationCeilingReached
+        ? 'Canonical verification authority active. Tempo progression is capped at the formal standard.'
+        : 'Sufficient clean evidence demonstrated. Advancing tempo / implementation stage.',
       frictionTags: issueTags,
       successfulRounds,
-      coachingMessage: isApplication
+      coachingMessage: verificationCeilingReached
+        ? `Clean control confirmed at the verification ceiling. Hold at ${nextTempo} BPM; the formal verification test is the next progression action.`
+        : isApplication
         ? `Clean musical placement achieved! Pushing placement tempo to ${nextTempo} BPM.`
         : `Great control and even spacing! Pushing tempo up to ${nextTempo} BPM.`,
-      buttonLabel: isApplication ? `ADVANCE PLACEMENT TO ${nextTempo} BPM` : `ADVANCE TO ${nextTempo} BPM`,
+      buttonLabel: verificationCeilingReached
+        ? `HOLD AT ${nextTempo} BPM — VERIFY NEXT`
+        : isApplication ? `ADVANCE PLACEMENT TO ${nextTempo} BPM` : `ADVANCE TO ${nextTempo} BPM`,
     };
   }
 
@@ -409,7 +430,10 @@ export function updateExerciseQueueWithAdaptiveDecision(
 /**
  * Computes working range established in the session for session summary.
  */
-export function computeSessionWorkingRange(session: PracticeSession): {
+export function computeSessionWorkingRange(
+  session: PracticeSession,
+  authority?: AdaptiveTempoAuthority
+): {
   workingBpm: number;
   summaryText: string;
   nextSessionGuidance: string;
@@ -433,11 +457,18 @@ export function computeSessionWorkingRange(session: PracticeSession): {
   const skillName = session.focusTopic.split('(')[0].trim() || 'Focus Skill';
 
   if (cleanOrMostly.length > 0) {
-    const workingBpm = Math.max(...cleanOrMostly.map((e) => e.result?.tempoUsed || e.tempo));
+    const observedWorkingBpm = Math.max(...cleanOrMostly.map((e) => e.result?.tempoUsed || e.tempo));
+    const workingBpm = authority?.tempoCeiling
+      ? Math.min(observedWorkingBpm, authority.tempoCeiling)
+      : observedWorkingBpm;
     return {
       workingBpm,
-      summaryText: `Working range established today: ${workingBpm} BPM`,
-      nextSessionGuidance: `Stabilize ${skillName} at ${workingBpm} BPM before musical application.`,
+      summaryText: authority?.verificationPriority
+        ? `Verification-priority range: hold at or below ${workingBpm} BPM`
+        : `Working range established today: ${workingBpm} BPM`,
+      nextSessionGuidance: authority?.verificationPriority
+        ? `Do not chase a higher tempo. The next progression action is the formal verification test${authority.verificationStandardText ? `: ${authority.verificationStandardText}` : ''}.`
+        : `Stabilize ${skillName} at ${workingBpm} BPM before musical application.`,
     };
   }
 
