@@ -93,6 +93,10 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
 }) => {
   const isPad = exercise.equipmentRequired === 'Practice Pad';
   const title = exercise.title;
+  const isStructureMission =
+    exercise.curriculumMission?.competencyId === 'comp-meter-44' ||
+    exercise.skillIds?.includes('time-44') ||
+    exercise.skillId === 'time-44';
 
   // Exercise type detection for pedagogical tailoring
   const isWarmup = exercise.phase === 'WARM UP' || exercise.exerciseType === 'warmup';
@@ -226,6 +230,14 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
 
   // Static Sticking Reference array (for static display during playback)
   const stickingNotes = useMemo(() => {
+    if (isStructureMission) {
+      return [1, 2, 3, 4].map((beat) => ({
+        label: `${beat}`,
+        hand: 'R',
+        accent: beat === 1,
+        count: `Beat ${beat}`,
+      }));
+    }
     if (isSixStrokeRoll) {
       return [
         { label: '>R', hand: 'R', accent: true, count: '1 / 4' },
@@ -254,7 +266,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       { label: 'R', hand: 'R', accent: false, count: '&' },
       { label: 'R', hand: 'R', accent: false, count: 'a' },
     ];
-  }, [isSixStrokeRoll, exercise.sticking, teachingDef]);
+  }, [isStructureMission, isSixStrokeRoll, exercise.sticking, teachingDef]);
 
   const hasLandingTarget = useMemo(
     () => timeline.events.some((event) => event.role === 'landing'),
@@ -343,6 +355,12 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     // 2. Deterministic Phrase Guidance Cue
     if (state.isCountIn) {
       setTransitionCue(`Count-In: Beat ${state.countInBeat} of 4 — Prepare Entry`);
+    } else if (isStructureMission) {
+      setTransitionCue(
+        state.currentBeat === 1
+          ? `BAR ${state.currentBar} — BEAT 1: Reset the beat count; keep the same tempo`
+          : `BAR ${state.currentBar} — BEAT ${state.currentBeat}: Keep the quarter-note pulse even`
+      );
     } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'FULL') {
       setTransitionCue('PLAY ALONG: Match the tutor note-for-note in real time');
     } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED') {
@@ -387,7 +405,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     }
 
     animationFrameRef.current = requestAnimationFrame(runTransportAnimation);
-  }, [timeline.title, isSixStrokeRoll, isPad, showDiagnostics]);
+  }, [timeline.title, isSixStrokeRoll, isPad, isStructureMission, instructionMode, assistanceLevel, showDiagnostics]);
 
   // Handle Play/Pause Toggle with Async Audio Initialization.
   // Evidence is gated: independent evaluation is unlocked only after a complete
@@ -466,7 +484,34 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     let actionText = '';
     let actionType = 'repeat';
 
-    if (reflection === 'LOST_PULSE') {
+    if (isStructureMission) {
+      if (reflection === 'ENTRY_TIMING_ISSUE') {
+        message =
+          'The pulse survived, but the barline was unclear. Repeat while completing Beat 4 fully, then let the next Beat 1 reset the count without changing tempo.';
+        actionText = 'Repeat the Barline Reset';
+        actionType = 'repeat_entry';
+      } else if (reflection === 'MISSED_LANDING') {
+        message =
+          'You kept playing but lost the bar number. Use visible bar landmarks again, then reduce the visual help only after you can name the current bar confidently.';
+        actionText = 'Restore Bar Landmarks';
+        actionType = 'repeat_landing';
+      } else if (reflection === 'ROUGH_RECOVERY') {
+        message =
+          'Individual bars are forming, but the larger phrase grouping is still blurry. Group the bars as 4 + 4 and feel Bar 1 / Bar 5 as structural landmarks.';
+        actionText = 'Rebuild Phrase Grouping';
+        actionType = 'repeat_recovery';
+      } else {
+        message =
+          'Beat count and bar count stayed clear. Keep the same tempo and fade one layer of guidance before moving to independent structure tracking.';
+        actionText =
+          assistanceLevel === 'FULL'
+            ? 'Advance to Reduced Cues'
+            : assistanceLevel === 'REDUCED'
+            ? 'Advance to Minimal Cues'
+            : 'Try Independent Play';
+        actionType = 'advance_level';
+      }
+    } else if (reflection === 'LOST_PULSE') {
       message =
         'Placement broke the groove time. Slower tempo (-5 BPM) with Full Cues recommended to internalize entry.';
       actionText = 'Reduce Tempo & Use Full Cues';
@@ -535,7 +580,9 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       phrasePosition: exercise.musicalPlacement?.startPoint,
     };
 
-    recordSinglePlacementAttemptEvidence(attemptEvidence);
+    if (!isStructureMission) {
+      recordSinglePlacementAttemptEvidence(attemptEvidence);
+    }
   };
 
   const handleApplyFollowAdvice = () => {
@@ -573,10 +620,17 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     const isSuccess = independentRating === 'CLEAN' || independentRating === 'ALMOST';
 
     const frictions: string[] = [];
-    if (!independentChecklist.includes('groove_stable')) frictions.push('Lost Groove');
-    if (!independentChecklist.includes('entry_clean')) frictions.push('Entry Rushed/Late');
-    if (!independentChecklist.includes('landing_on_1')) frictions.push('Missed Beat 1');
-    if (!independentChecklist.includes('smooth_recovery')) frictions.push('Hesitated on Beat 2');
+    if (isStructureMission) {
+      if (!independentChecklist.includes('groove_stable')) frictions.push('Lost pulse');
+      if (!independentChecklist.includes('entry_clean')) frictions.push('Dropped beat 4');
+      if (!independentChecklist.includes('landing_on_1')) frictions.push('Rushed barline');
+      if (!independentChecklist.includes('smooth_recovery')) frictions.push('Lost track of bar number');
+    } else {
+      if (!independentChecklist.includes('groove_stable')) frictions.push('Lost Groove');
+      if (!independentChecklist.includes('entry_clean')) frictions.push('Entry Rushed/Late');
+      if (!independentChecklist.includes('landing_on_1')) frictions.push('Missed Beat 1');
+      if (!independentChecklist.includes('smooth_recovery')) frictions.push('Hesitated on Beat 2');
+    }
 
     const feeling: SelfCheckFeeling =
       independentRating === 'CLEAN'
@@ -610,7 +664,9 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       phrasePosition: exercise.musicalPlacement?.startPoint,
     };
 
-    recordSinglePlacementAttemptEvidence(attemptEvidence);
+    if (!isStructureMission) {
+      recordSinglePlacementAttemptEvidence(attemptEvidence);
+    }
 
     onCheckIn('PLAY', {
       selfCheck: feeling,
@@ -1088,6 +1144,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   ? `BAR ${currentBar} OF ${timeline.totalBars} ${
                       loopMode !== '1x' ? `(Rep ${completedLoops + 1})` : ''
                     }`
+                  : isStructureMission
+                  ? `${timeline.totalBars}-Bar Structure`
                   : `2-Bar Phrase Cycle`}
               </span>
             </div>
@@ -1101,7 +1159,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   phraseStage !== 'COUNT_IN' &&
                   phraseStage !== 'PREPARE' &&
                   phraseStage !== 'IDLE';
-                const isLandingBeat = currentBar === 2 && beatNum === 1;
+                const isLandingBeat = !isStructureMission && currentBar === 2 && beatNum === 1;
+                const isStructureBarStart = isStructureMission && beatNum === 1;
 
                 return (
                   <div
@@ -1139,7 +1198,11 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                           : 'text-stone-500'
                       }`}
                     >
-                      {isLandingBeat
+                      {isStructureMission
+                        ? isStructureBarStart
+                          ? `BAR ${currentBar} START`
+                          : 'PULSE'
+                        : isLandingBeat
                         ? '🎯 LAND CRASH'
                         : isCalibration
                         ? currentBar === 1
@@ -1169,7 +1232,17 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               <span className={`font-black ${
                 assistanceLevel === 'REDUCED' ? 'text-amber-400' : assistanceLevel === 'MINIMAL' ? 'text-emerald-400' : 'text-sky-400'
               }`}>
-                {instructionMode === 'WATCH'
+                {isStructureMission
+                  ? instructionMode === 'WATCH'
+                    ? 'Bar Pulse Demonstration:'
+                    : instructionMode === 'PLAY'
+                    ? 'Independent Bar Pulse Memory:'
+                    : assistanceLevel === 'FULL'
+                    ? 'Beat & Bar Pulse Reference:'
+                    : assistanceLevel === 'REDUCED'
+                    ? 'Reduced Bar-Tracking Aid:'
+                    : 'Minimal Bar-Tracking Reference:'
+                  : instructionMode === 'WATCH'
                   ? 'Demonstration Sticking Reference:'
                   : instructionMode === 'PLAY'
                   ? 'Independent Memory Sticking:'
@@ -1180,7 +1253,11 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   : 'Minimal Reference (Play from Pulse):'}
               </span>
               <span className="font-mono text-stone-300">
-                {isSixStrokeRoll ? 'Six Stroke Roll (>R L L R R >L)' : 'Phrase Sticking'}
+                {isStructureMission
+                  ? 'Beat 1 → 2 → 3 → 4'
+                  : isSixStrokeRoll
+                  ? 'Six Stroke Roll (>R L L R R >L)'
+                  : 'Phrase Sticking'}
               </span>
             </div>
 
@@ -1208,7 +1285,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                     {st.label}
                   </span>
                   <span className="text-[8px] font-mono opacity-70 block mt-0.5">
-                    {st.accent ? 'Accent' : 'Tap'}
+                    {isStructureMission ? (st.accent ? 'Bar Start' : 'Pulse') : st.accent ? 'Accent' : 'Tap'}
                   </span>
                 </div>
               ))}
@@ -1362,7 +1439,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               </span>
               <div>
                 <h3 className="text-sm font-black text-white">
-                  Follow Cues: Placement Reflection
+                  {isStructureMission ? 'Follow Cues: Bar-Tracking Reflection' : 'Follow Cues: Placement Reflection'}
                 </h3>
                 <span className="text-[10px] text-stone-400 font-mono">
                   Assistance: {assistanceLevel} • Tempo: {currentTempo} BPM
@@ -1373,35 +1450,64 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
 
           <div className="space-y-2">
             <span className="text-xs font-bold text-stone-300 block">
-              How did the phrase placement feel during guided practice?
+              {isStructureMission
+                ? 'How well did you keep beat count and bar count separate during guided practice?'
+                : 'How did the phrase placement feel during guided practice?'}
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {[
-                {
-                  id: 'CLEAN_COMFORTABLE' as FollowCuesReflection,
-                  label: 'Clean & Locked',
-                  desc: 'Groove, fill entry, and Beat 1 landing felt steady and relaxed',
-                  color: 'hover:border-emerald-400 focus:border-emerald-400',
-                },
-                {
-                  id: 'ENTRY_TIMING_ISSUE' as FollowCuesReflection,
-                  label: 'Rushed / Late Entry',
-                  desc: 'Hesitated on Beat 4 entry or rushed into the sticking',
-                  color: 'hover:border-amber-400 focus:border-amber-400',
-                },
-                {
-                  id: 'MISSED_LANDING' as FollowCuesReflection,
-                  label: 'Missed Beat 1 Landing',
-                  desc: 'Lost the downbeat anchor crash on Bar 2 Beat 1',
-                  color: 'hover:border-rose-400 focus:border-rose-400',
-                },
-                {
-                  id: 'ROUGH_RECOVERY' as FollowCuesReflection,
-                  label: 'Hesitant Groove Recovery',
-                  desc: 'Landed Beat 1, but stumbled returning to Beat 2 groove',
-                  color: 'hover:border-purple-400 focus:border-purple-400',
-                },
-              ].map((opt) => (
+              {(isStructureMission
+                ? [
+                    {
+                      id: 'CLEAN_COMFORTABLE' as FollowCuesReflection,
+                      label: 'Beat & Bar Count Locked',
+                      desc: 'Beat 1–4 stayed even and every new bar was clear without changing tempo.',
+                      color: 'hover:border-emerald-400 focus:border-emerald-400',
+                    },
+                    {
+                      id: 'ENTRY_TIMING_ISSUE' as FollowCuesReflection,
+                      label: 'Barline Felt Unclear',
+                      desc: 'The pulse stayed moving, but the exact reset from Beat 4 to the next Beat 1 was uncertain.',
+                      color: 'hover:border-amber-400 focus:border-amber-400',
+                    },
+                    {
+                      id: 'MISSED_LANDING' as FollowCuesReflection,
+                      label: 'Lost the Bar Number',
+                      desc: 'Beat counting continued, but I lost track of which bar I was in.',
+                      color: 'hover:border-rose-400 focus:border-rose-400',
+                    },
+                    {
+                      id: 'ROUGH_RECOVERY' as FollowCuesReflection,
+                      label: 'Phrase Grouping Blurred',
+                      desc: 'Individual bars were clear, but the larger 4-bar or 8-bar grouping became uncertain.',
+                      color: 'hover:border-purple-400 focus:border-purple-400',
+                    },
+                  ]
+                : [
+                    {
+                      id: 'CLEAN_COMFORTABLE' as FollowCuesReflection,
+                      label: 'Clean & Locked',
+                      desc: 'Groove, fill entry, and Beat 1 landing felt steady and relaxed',
+                      color: 'hover:border-emerald-400 focus:border-emerald-400',
+                    },
+                    {
+                      id: 'ENTRY_TIMING_ISSUE' as FollowCuesReflection,
+                      label: 'Rushed / Late Entry',
+                      desc: 'Hesitated on Beat 4 entry or rushed into the sticking',
+                      color: 'hover:border-amber-400 focus:border-amber-400',
+                    },
+                    {
+                      id: 'MISSED_LANDING' as FollowCuesReflection,
+                      label: 'Missed Beat 1 Landing',
+                      desc: 'Lost the downbeat anchor crash on Bar 2 Beat 1',
+                      color: 'hover:border-rose-400 focus:border-rose-400',
+                    },
+                    {
+                      id: 'ROUGH_RECOVERY' as FollowCuesReflection,
+                      label: 'Hesitant Groove Recovery',
+                      desc: 'Landed Beat 1, but stumbled returning to Beat 2 groove',
+                      color: 'hover:border-purple-400 focus:border-purple-400',
+                    },
+                  ]).map((opt) => (
                 <button
                   key={opt.id}
                   onClick={() => handleSelectFollowReflection(opt.id)}
@@ -1465,12 +1571,19 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               Verify your execution landmarks:
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {[
-                { id: 'groove_stable', label: '1. Steady Groove Pulse (Beats 1–3)' },
-                { id: 'entry_clean', label: '2. Clean Sticking Execution (Beat 4)' },
-                { id: 'landing_on_1', label: '3. Downbeat Anchor Crash (Bar 2 Beat 1)' },
-                { id: 'smooth_recovery', label: '4. Immediate Groove Return (Bar 2 Beat 2)' },
-              ].map((item) => {
+              {(isStructureMission
+                ? [
+                    { id: 'groove_stable', label: '1. Quarter-note pulse stayed even through every beat' },
+                    { id: 'entry_clean', label: '2. Beat 4 completed fully before the next bar began' },
+                    { id: 'landing_on_1', label: '3. Every new Beat 1 was recognised as a bar-start reset' },
+                    { id: 'smooth_recovery', label: '4. Bar/phrase number stayed clear without stopping the pulse' },
+                  ]
+                : [
+                    { id: 'groove_stable', label: '1. Steady Groove Pulse (Beats 1–3)' },
+                    { id: 'entry_clean', label: '2. Clean Sticking Execution (Beat 4)' },
+                    { id: 'landing_on_1', label: '3. Downbeat Anchor Crash (Bar 2 Beat 1)' },
+                    { id: 'smooth_recovery', label: '4. Immediate Groove Return (Bar 2 Beat 2)' },
+                  ]).map((item) => {
                 const isChecked = independentChecklist.includes(item.id);
                 return (
                   <button

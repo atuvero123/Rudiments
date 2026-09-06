@@ -185,7 +185,11 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
         <div className="bg-stone-900 p-3 rounded-2xl border border-stone-800 space-y-1">
           <span className="text-[10px] uppercase font-bold text-stone-400">Equipment</span>
           <p className="font-mono font-black text-amber-300 text-base">
-            {isPad ? 'Practice Pad' : 'Full Kit'}
+            {exercise.equipmentRequired === 'Practice Pad'
+              ? 'Practice Pad'
+              : exercise.equipmentRequired === 'Full Drum Kit'
+              ? 'Full Kit'
+              : 'Pad or Kit'}
           </p>
           <span className="text-[10px] text-stone-400">{teachingDef.drumSurfaces.join(', ')}</span>
         </div>
