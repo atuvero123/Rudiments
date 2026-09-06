@@ -48,6 +48,7 @@ import { UnderstandStageView } from './UnderstandStageView';
 import { CountingTutorView } from './CountingTutorView';
 import { InteractiveDrumPad } from './InteractiveDrumPad';
 import { EvaluateStageView } from './EvaluateStageView';
+import { CurriculumPhraseVisualizer } from './CurriculumPhraseVisualizer';
 
 interface VisualRhythmTutorProps {
   exercise: PracticeExercise;
@@ -67,6 +68,22 @@ export type PhraseStage =
   | 'LEARNER_SPACE'
   | 'IDLE';
 export type LoopMode = '1x' | '2x' | '4x' | 'inf';
+
+function getMissionInitialTeachingStage(exercise: PracticeExercise, hasDefinition = true): TeachingStage {
+  const stage = exercise.curriculumMission?.stage;
+  if (!stage) return hasDefinition ? 'UNDERSTAND' : 'WATCH';
+  if (stage === 'UNDERSTAND') return 'UNDERSTAND';
+  if (stage === 'INTERNALIZE') return 'COUNT';
+  if (stage === 'HEAR') return 'WATCH';
+  if (stage === 'FOLLOW' || stage === 'REDUCED') return 'FOLLOW';
+  return 'PLAY';
+}
+
+function getTeachingStageInstructionMode(stage: TeachingStage): InstructionMode {
+  if (stage === 'FOLLOW') return 'FOLLOW';
+  if (stage === 'PLAY' || stage === 'EVALUATE') return 'PLAY';
+  return 'WATCH';
+}
 
 export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   exercise,
@@ -97,17 +114,42 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   }, [exercise.id, exercise.skillIds, exercise.title]);
 
   const teachingDef = useMemo(() => {
-    return matchedTeachingDef || getTeachingDefinition(exercise.title || exercise.id);
-  }, [matchedTeachingDef, exercise.id, exercise.title]);
+    const base = matchedTeachingDef || getTeachingDefinition(exercise.title || exercise.id);
+    const structure = exercise.curriculumMission?.structure;
+
+    // C6: phrase/bar-structure missions need the master clock to travel across
+    // the actual mission bar count (4/8/16/24), not loop a two-bar teaching
+    // demo. Expand the canonical first-bar event template across the mission.
+    if (matchedTeachingDef && exercise.curriculumMission?.competencyId === 'comp-meter-44' && structure) {
+      const baseBarEvents = base.events.filter((event) => (event.bar || 1) === 1);
+      const landmarks = new Set(structure.highlightLandmarkBars || [1]);
+      const expandedEvents = Array.from({ length: structure.totalBars }, (_, index) => index + 1).flatMap((bar) =>
+        baseBarEvents.map((event) => ({
+          ...event,
+          bar,
+          accent: event.beat === 1 ? landmarks.has(bar) : event.accent,
+          label: event.beat === 1 ? `Bar ${bar} (1)` : event.label,
+          description: event.beat === 1
+            ? landmarks.has(bar)
+              ? `Phrase landmark — Bar ${bar} Beat 1`
+              : `Bar ${bar} Beat 1`
+            : event.description,
+        }))
+      );
+      return { ...base, bars: structure.totalBars, events: expandedEvents };
+    }
+
+    return base;
+  }, [matchedTeachingDef, exercise.id, exercise.title, exercise.curriculumMission]);
 
   const timeline: RhythmTimeline = useMemo(() => {
     return matchedTeachingDef
-      ? buildTimelineFromTeachingDefinition(matchedTeachingDef, isPad)
+      ? buildTimelineFromTeachingDefinition(teachingDef, isPad)
       : buildRhythmTimeline(exercise);
-  }, [exercise, isPad, matchedTeachingDef]);
+  }, [exercise, isPad, matchedTeachingDef, teachingDef]);
 
   // 2. Primary Teaching Continuum: UNDERSTAND -> COUNT -> WATCH -> FOLLOW -> PLAY -> EVALUATE
-  const [teachingStage, setTeachingStage] = useState<TeachingStage>('UNDERSTAND');
+  const [teachingStage, setTeachingStage] = useState<TeachingStage>(() => getMissionInitialTeachingStage(exercise, true));
   const [isCoachThenYou, setIsCoachThenYou] = useState<boolean>(false);
   const [isCoachTurn, setIsCoachTurn] = useState<boolean>(true);
   const [isLearnerTurn, setIsLearnerTurn] = useState<boolean>(false);
@@ -120,10 +162,10 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   }, [isCoachThenYou]);
 
   // 3. Musical Practice Sub-Modes: WATCH | FOLLOW | PLAY (Independent)
-  const [instructionMode, setInstructionMode] = useState<InstructionMode>('WATCH');
+  const [instructionMode, setInstructionMode] = useState<InstructionMode>(() => getTeachingStageInstructionMode(getMissionInitialTeachingStage(exercise, true)));
 
   // Assistance Fading for FOLLOW mode: FULL -> REDUCED -> MINIMAL
-  const [assistanceLevel, setAssistanceLevel] = useState<AssistanceLevel>('FULL');
+  const [assistanceLevel, setAssistanceLevel] = useState<AssistanceLevel>(() => exercise.curriculumMission?.assistanceTarget || 'FULL');
 
   // Independent Play pulse toggle
   const [independentPulseEnabled, setIndependentPulseEnabled] = useState<boolean>(true);
@@ -194,7 +236,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         { label: '>L', hand: 'L', accent: true, count: 'la' },
       ];
     }
-    const canonicalSticking = matchedTeachingDef?.sticking || exercise.sticking;
+    const canonicalSticking = teachingDef?.sticking || exercise.sticking;
     if (canonicalSticking) {
       const parts = canonicalSticking.split(/\s+/).filter(Boolean);
       if (parts.length > 0) {
@@ -212,7 +254,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       { label: 'R', hand: 'R', accent: false, count: '&' },
       { label: 'R', hand: 'R', accent: false, count: 'a' },
     ];
-  }, [isSixStrokeRoll, exercise.sticking, matchedTeachingDef]);
+  }, [isSixStrokeRoll, exercise.sticking, teachingDef]);
 
   const hasLandingTarget = useMemo(
     () => timeline.events.some((event) => event.role === 'landing'),
@@ -261,9 +303,10 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     // Canonical curriculum exercises begin with teaching. Legacy/unmapped
     // exercises begin at Watch so they can never inherit Quarter-Note Pulse
     // explanations from the backwards-compatible teaching fallback.
-    setTeachingStage(matchedTeachingDef ? 'UNDERSTAND' : 'WATCH');
-    setInstructionMode('WATCH');
-    setAssistanceLevel('FULL');
+    const initialStage = getMissionInitialTeachingStage(exercise, Boolean(matchedTeachingDef));
+    setTeachingStage(initialStage);
+    setInstructionMode(getTeachingStageInstructionMode(initialStage));
+    setAssistanceLevel(exercise.curriculumMission?.assistanceTarget || 'FULL');
     setIndependentRunCompleted(false);
     setIndependentLoopsCompleted(0);
     setShowIndependentCheckIn(false);
@@ -376,7 +419,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       clapEnabled: false,
       isCoachThenYou,
       teachingStage,
-      teachingDefinition: matchedTeachingDef,
+      teachingDefinition: teachingDef,
       isPad,
       loopLimit: maxLoopsCount,
       onLoopComplete: (completed) => {
@@ -638,6 +681,15 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           );
         })}
       </div>
+
+      {exercise.curriculumMission?.structure && (
+        <CurriculumPhraseVisualizer
+          mission={exercise.curriculumMission}
+          currentBar={currentBar}
+          currentBeat={currentBeat}
+          isPlaying={isPlaying}
+        />
+      )}
 
       {/* ================= STAGE 1: UNDERSTAND ================= */}
       {teachingStage === 'UNDERSTAND' ? (

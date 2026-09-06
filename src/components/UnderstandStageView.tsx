@@ -191,44 +191,63 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
         </div>
       </div>
 
-      {/* Sticking & Visual Notation Ribbon */}
-      <div className="bg-stone-900 rounded-2xl p-4 border border-stone-800 space-y-2 text-center">
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-stone-400 font-bold border-b border-stone-800 pb-1.5">
-          <span>Sticking & Dynamic Map</span>
-          <span>Click any note to hear sound</span>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-2 py-2">
-          {teachingDef.events.map((ev, idx) => (
-            <button
-              key={idx}
-              onClick={() => handlePlaySingleSurface(ev.surface, ev.accent)}
-              className={`flex flex-col items-center justify-center min-w-[3rem] px-2.5 py-2 rounded-xl border transition-all cursor-pointer active:scale-95 ${
-                ev.accent
-                  ? 'bg-amber-400 text-stone-950 border-amber-300 font-black shadow-md'
-                  : 'bg-stone-950 text-stone-200 border-stone-800 hover:border-stone-700 font-bold'
-              }`}
-            >
-              <span className="text-[9px] uppercase font-mono tracking-wider opacity-80">
-                {ev.accent ? '> ACCENT' : 'TAP'}
-              </span>
-              <span className="text-base sm:text-lg font-mono font-black">
-                {ev.accent ? `>${ev.hand}` : ev.hand}
-              </span>
-              <span className="text-[9px] font-mono opacity-80 mt-0.5">
-                {ev.countToken}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        <div className="pt-2 border-t border-stone-800/80 space-y-1">
-          <div className="text-[9px] font-black uppercase tracking-wider text-emerald-300">Required Pattern — Play This Now</div>
-          <div className="text-xs font-mono font-bold text-amber-300/90">
-            {teachingDef.sticking}
+      {/* Contextual execution reference. C6 avoids meaningless sticking panels on conceptual skills. */}
+      {exercise.curriculumMission?.patternDisplay === 'BAR_STRUCTURE' ? (
+        <div className="bg-stone-900 rounded-2xl p-4 border border-stone-800 space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-sky-300 font-black">Musical Structure — Track This, Not a Sticking Pattern</div>
+          <div className="grid grid-cols-4 gap-2">
+            {[1, 2, 3, 4].map((beat) => (
+              <div key={beat} className={`rounded-xl border py-3 text-center font-mono font-black ${beat === 1 ? 'bg-amber-400 text-stone-950 border-amber-300' : 'bg-stone-950 text-stone-300 border-stone-800'}`}>
+                <span className="text-[9px] uppercase block opacity-70">Beat</span>
+                <span className="text-lg">{beat}</span>
+              </div>
+            ))}
+          </div>
+          <div className="text-xs text-stone-300 font-medium">
+            Count <strong>1 2 3 4</strong>, then the beat count resets to 1 while the <strong>bar number advances</strong>. Your job is to feel both layers at the same time.
           </div>
         </div>
-      </div>
+      ) : exercise.curriculumMission?.patternDisplay === 'NONE' ? null : (
+        <div className="bg-stone-900 rounded-2xl p-4 border border-stone-800 space-y-2 text-center">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-stone-400 font-bold border-b border-stone-800 pb-1.5">
+            <span>{exercise.curriculumMission?.patternDisplay === 'SUGGESTED' ? 'Suggested Sticking — Optional' : 'Required Pattern — Play This'}</span>
+            <span>Click any note to hear sound</span>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2 py-2">
+            {teachingDef.events.map((ev, idx) => (
+              <button
+                key={idx}
+                onClick={() => handlePlaySingleSurface(ev.surface, ev.accent)}
+                className={`flex flex-col items-center justify-center min-w-[3rem] px-2.5 py-2 rounded-xl border transition-all cursor-pointer active:scale-95 ${
+                  ev.accent
+                    ? 'bg-amber-400 text-stone-950 border-amber-300 font-black shadow-md'
+                    : 'bg-stone-950 text-stone-200 border-stone-800 hover:border-stone-700 font-bold'
+                }`}
+              >
+                <span className="text-[9px] uppercase font-mono tracking-wider opacity-80">
+                  {ev.accent ? '> ACCENT' : 'TAP'}
+                </span>
+                <span className="text-base sm:text-lg font-mono font-black">
+                  {ev.accent ? `>${ev.hand}` : ev.hand}
+                </span>
+                <span className="text-[9px] font-mono opacity-80 mt-0.5">
+                  {ev.countToken}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="pt-2 border-t border-stone-800/80 space-y-1">
+            <div className="text-[9px] font-black uppercase tracking-wider text-emerald-300">
+              {exercise.curriculumMission?.patternDisplay === 'SUGGESTED' ? 'Suggested Sticking — Optional' : 'Required Pattern — Play This Now'}
+            </div>
+            <div className="text-xs font-mono font-bold text-amber-300/90">
+              {teachingDef.sticking}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Deep Pedagogical Explanations */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">

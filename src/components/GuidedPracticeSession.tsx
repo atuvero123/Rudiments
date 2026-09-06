@@ -35,6 +35,7 @@ import {
   deriveCompetencyAdvancementReadiness,
   deriveCompetencyPracticeAuthorityForSkill,
 } from '../lib/competencyAdvancementEngine';
+import { recordCurriculumMissionEvidence } from '../lib/curriculumPracticeIntelligence';
 import {
   Play,
   Pause,
@@ -271,6 +272,18 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
       instructionMode: partialResult?.instructionMode || currentInstructionMode,
       visualTutorUsed: partialResult?.visualTutorUsed ?? true,
     };
+
+    if (currentExercise.curriculumMission) {
+      recordCurriculumMissionEvidence({
+        sessionId: session.id,
+        exercise: currentExercise,
+        assessment: feeling,
+        bpm: result.tempoUsed,
+        assistanceLevel: partialResult?.assistanceLevel || currentExercise.curriculumMission.assistanceTarget,
+        issueTags: issues,
+        completedAt: result.completedAt,
+      });
+    }
 
     // Save exercise result in current exercise
     const updatedExercises = [...(session.exercises || [])];

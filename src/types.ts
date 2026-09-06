@@ -677,6 +677,47 @@ export interface PracticeIntent {
   };
 }
 
+export type CurriculumMissionStage =
+  | 'UNDERSTAND'
+  | 'INTERNALIZE'
+  | 'HEAR'
+  | 'FOLLOW'
+  | 'REDUCED'
+  | 'INDEPENDENT'
+  | 'MUSICAL_APPLICATION'
+  | 'EVIDENCE';
+
+export type CurriculumPatternDisplay = 'REQUIRED' | 'SUGGESTED' | 'NONE' | 'BAR_STRUCTURE';
+
+export interface CurriculumStructureSection {
+  label: string;
+  startBar: number;
+  bars: number;
+}
+
+export interface CurriculumMissionMetadata {
+  competencyId: string;
+  missionId: string;
+  missionNumber: number;
+  missionTitle: string;
+  stage: CurriculumMissionStage;
+  assistanceTarget: AssistanceLevel;
+  conceptualTarget?: boolean;
+  executionTarget?: boolean;
+  musicalApplication?: boolean;
+  patternDisplay?: CurriculumPatternDisplay;
+  requiredPatternLabel?: string;
+  structure?: {
+    totalBars: number;
+    phraseGroupSize: number;
+    beatsPerBar: number;
+    highlightLandmarkBars?: number[];
+    sections?: CurriculumStructureSection[];
+    showBarNumbers?: boolean;
+    showBeatNumbers?: boolean;
+  };
+}
+
 export interface PracticeExercise {
   id: string;
   title: string;
@@ -707,6 +748,7 @@ export interface PracticeExercise {
     exit: string;
   };
   transferInstructions?: TransferInstructionModel;
+  curriculumMission?: CurriculumMissionMetadata;
   result?: ExerciseResult;
   isGapClosure?: boolean;
   gapClosureTargetCriterion?: string;
@@ -818,6 +860,13 @@ export interface PracticeSession {
   sessionSource?: string;
   skillId?: string;
   practiceIntent?: PracticeIntent;
+  curriculumPractice?: {
+    competencyId: string;
+    placementBand: CurriculumBand;
+    journeyVersion: 'C6';
+    missionCount: number;
+    personalizedDepth: 'FOUNDATION' | 'CONDENSED' | 'DIAGNOSTIC';
+  };
 }
 
 export interface RudimentPattern {

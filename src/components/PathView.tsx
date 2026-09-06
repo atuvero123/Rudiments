@@ -61,6 +61,8 @@ import {
   getSkillStatusAfterCompetencyVerification,
   recordCompetencyVerificationOutcome,
 } from '../lib/competencyAdvancementEngine';
+import { buildC6CompetencySession } from '../lib/curriculumPracticeIntelligence';
+import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 
 interface PathViewProps {
   onStartPracticeCompetency?: (competency: CurriculumCompetency) => void;
@@ -201,6 +203,20 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       onStartPracticeCompetency(comp);
       return;
     }
+
+    // C6: 4/4 bar structure now uses the governed curriculum learning journey
+    // rather than reusing the phrase-insertion engine. Placement personalizes
+    // teaching depth only; it never certifies or skips this competency.
+    if (comp.id === 'comp-meter-44') {
+      const session = buildC6CompetencySession(
+        comp,
+        profile,
+        placementSummary.highestVerifiedBand
+      );
+      startGuidedSession(session);
+      return;
+    }
+
     const skill = skills.find((s) => s.id === comp.skillId) || {
       id: comp.skillId,
       name: comp.title,
@@ -494,15 +510,22 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
           </div>
         </div>
 
-        {/* Sticking / Exercise Pattern */}
-        {activeCompetency.stickingPattern && (
+        {/* Contextual execution reference — C6 avoids arbitrary sticking for conceptual competencies. */}
+        {activeCompetency.id === 'comp-meter-44' ? (
+          <div className="bg-white p-3 rounded-xl border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <span className="text-[11px] font-bold text-stone-500 uppercase">Musical Structure:</span>
+            <span className="font-black text-stone-900 bg-stone-100 px-3 py-1 rounded-md font-mono">
+              Beat 1-2-3-4 → next bar • phrases grouped 4 + 4
+            </span>
+          </div>
+        ) : activeCompetency.stickingPattern ? (
           <div className="bg-white p-3 rounded-xl border border-stone-200 flex items-center justify-between gap-4 text-xs font-mono">
-            <span className="text-[11px] font-bold text-stone-500 uppercase font-sans">Sticking Pattern:</span>
+            <span className="text-[11px] font-bold text-stone-500 uppercase font-sans">Required Pattern — Play This:</span>
             <span className="font-black text-stone-900 bg-stone-100 px-3 py-1 rounded-md">
               {activeCompetency.stickingPattern}
             </span>
           </div>
-        )}
+        ) : null}
 
         {/* Pass Criteria List */}
         <div className="bg-white/80 p-4 rounded-2xl border border-stone-200 space-y-2">
@@ -527,6 +550,10 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
         readiness={advancementReadiness}
         onVerify={() => setShowCompetencyVerification(true)}
       />
+
+      {activeCompetency.id === 'comp-meter-44' && (
+        <CurriculumEvidenceLedgerCard competency={activeCompetency} />
+      )}
 
       {advancementNotice && (
         <div className={`rounded-2xl border p-4 text-xs font-bold ${advancementNotice.startsWith('Verified') ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
