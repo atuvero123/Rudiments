@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Compass,
   CheckCircle2,
@@ -37,9 +37,12 @@ import {
 import {
   CANONICAL_PLACEMENT_TESTS,
   getOrInitializePlacementAssessment,
-  getPlacementTestsForEstimation,
   evaluatePlacementResults,
   savePlacementAssessment,
+  savePlacementTestProgress,
+  reconcilePlacementAssessment,
+  getPlacementCalibrationSummary,
+  getPlacementTestsForAssessment,
   STRAND_DEFINITIONS,
 } from '../lib/drummerPlacementEngine';
 import {
@@ -78,6 +81,16 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
     getOrInitializePlacementAssessment(profile, skills)
   );
 
+  useEffect(() => {
+    const refreshed = reconcilePlacementAssessment(profile, skills, assessment);
+    savePlacementAssessment(refreshed);
+    setAssessment(refreshed);
+    // Re-run only when the live learner evidence/profile changes; assessment itself is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skills, profile.selfReportedLevel, profile.yearsPlaying]);
+
+  const placementSummary = getPlacementCalibrationSummary(assessment, skills);
+
   // Selected Band Tab for Browsing
   const [selectedBand, setSelectedBand] = useState<CurriculumBand>(
     canonicalPosition.verifiedBand || 'BEGINNER'
@@ -91,7 +104,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
   // Placement Test Modal State
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
 
-  const availableTests = getPlacementTestsForEstimation(assessment.estimatedBand);
+  const availableTests = getPlacementTestsForAssessment(assessment, skills);
 
   // Active Unit & Competency details derived from canonical source of truth
   const activeUnit =
@@ -145,6 +158,9 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
     }
     setShowCompetencyVerification(false);
     setVerificationRevision((value) => value + 1);
+    const refreshedPlacement = reconcilePlacementAssessment(profile, skills, assessment);
+    savePlacementAssessment(refreshedPlacement);
+    setAssessment(refreshedPlacement);
   };
 
   // Deterministic unit status based on real evidence and unlocking
@@ -196,8 +212,24 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
   };
 
   // Handle Placement Test Completion from Interactive Modal
+  const handlePlacementProgress = (result: PlacementTestResult) => {
+    // Persist every anchor result immediately without mutating the open modal's test list.
+    savePlacementTestProgress(assessment, result);
+  };
+
+  const refreshPlacementFromStorage = () => {
+    const refreshed = getOrInitializePlacementAssessment(profile, skills);
+    setAssessment(refreshed);
+  };
+
   const handlePlacementCompleted = (resultsArray: PlacementTestResult[]) => {
-    const newAssessment = evaluatePlacementResults(assessment.estimatedBand, resultsArray, skills);
+    const evaluated = evaluatePlacementResults(
+      assessment.estimatedBand,
+      resultsArray,
+      skills,
+      assessment.testResults
+    );
+    const newAssessment = reconcilePlacementAssessment(profile, skills, evaluated);
     savePlacementAssessment(newAssessment);
     setAssessment(newAssessment);
     setSelectedBand(newAssessment.verifiedBand);
@@ -229,7 +261,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             className="self-start sm:self-auto flex items-center gap-2 bg-[#4a523a] hover:bg-[#3d4430] text-white px-4 py-2.5 rounded-xl font-bold text-xs transition-all shadow-md active:scale-95 cursor-pointer whitespace-nowrap"
           >
             <ShieldCheck className="w-4 h-4 text-amber-300" />
-            <span>{assessment.placementCompleted ? 'Retake Placement Test' : 'Verify Level with Practical Test'}</span>
+            <span>{placementSummary.targetBandConfirmed ? 'Recalibrate Placement' : placementSummary.status === 'NOT_STARTED' ? `Start ${placementSummary.targetStageLabel}` : `Continue ${placementSummary.targetStageLabel}`}</span>
           </button>
         </div>
 
@@ -243,36 +275,34 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
               {assessment.estimatedBand}
             </span>
             <span className="text-[11px] text-stone-400">
-              Based on profile questionnaire ({profile.yearsPlaying} yrs)
+              Profile hypothesis only{profile.yearsPlaying ? ` • ${profile.yearsPlaying} yrs playing` : ''}
             </span>
           </div>
 
           <div className="bg-stone-800/80 rounded-2xl p-3.5 border border-[#4a523a]/60 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-[#a4b584] uppercase tracking-wider block">
-                Verified Level
+                Overall Placement
               </span>
               <span
                 className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                  assessment.placementCompleted && assessment.verifiedBand !== 'UNVERIFIED'
+                  placementSummary.status === 'VERIFIED'
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : placementSummary.status === 'CALIBRATING'
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                 }`}
               >
-                {assessment.placementCompleted && assessment.verifiedBand !== 'UNVERIFIED'
-                  ? 'VERIFIED'
-                  : 'PLACEMENT REQUIRED'}
+                {placementSummary.status === 'VERIFIED' ? 'VERIFIED' : placementSummary.status === 'CALIBRATING' ? 'CALIBRATING' : 'NOT TESTED'}
               </span>
             </div>
             <span className="text-base sm:text-lg font-black text-white mt-0.5 block">
-              {assessment.placementCompleted && assessment.verifiedBand !== 'UNVERIFIED'
-                ? assessment.verifiedBand
-                : 'Unverified'}
+              {placementSummary.displayLabel}
             </span>
             <span className="text-[11px] text-stone-400">
-              {assessment.placementCompleted && assessment.verifiedBand !== 'UNVERIFIED'
-                ? `${assessment.testResults.filter((r) => r.passed).length} of ${assessment.testResults.length} test criteria passed`
-                : 'Practical metronome test required'}
+              {placementSummary.targetBandConfirmed
+                ? `${assessment.estimatedBand} estimate confirmed by practical anchor evidence`
+                : `${placementSummary.canonicalVerifiedCount} curriculum competencies verified • next: ${placementSummary.targetStageLabel}`}
             </span>
           </div>
 
@@ -286,6 +316,32 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             <span className="text-[11px] text-stone-400 truncate block">
               Next: {activeCompetency.title}
             </span>
+          </div>
+        </div>
+
+        <div className="bg-black/25 rounded-2xl p-3.5 border border-stone-800 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-stone-400 block">Placement Calibration</span>
+              <p className="text-xs text-stone-300 mt-1">
+                Practical anchor tests confirm the profile estimate without skipping the canonical curriculum.
+              </p>
+            </div>
+            <span className="text-[10px] font-bold text-amber-300 whitespace-nowrap">Next: {placementSummary.targetStageLabel}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className={`rounded-xl border p-2 ${placementSummary.foundation.complete ? 'border-emerald-700/50 bg-emerald-900/20' : placementSummary.targetStage === 'FOUNDATION' ? 'border-amber-500/50 bg-amber-900/20' : 'border-stone-700 bg-stone-900/40'}`}>
+              <span className="text-[9px] uppercase font-black text-stone-400 block">Foundation</span>
+              <span className="text-xs font-black text-white">{placementSummary.foundation.passed}/{placementSummary.foundation.total}</span>
+            </div>
+            <div className={`rounded-xl border p-2 ${placementSummary.intermediate.complete ? 'border-emerald-700/50 bg-emerald-900/20' : placementSummary.targetStage === 'INTERMEDIATE' ? 'border-blue-500/50 bg-blue-900/20' : 'border-stone-700 bg-stone-900/40'}`}>
+              <span className="text-[9px] uppercase font-black text-stone-400 block">Intermediate</span>
+              <span className="text-xs font-black text-white">{Math.max(0, placementSummary.intermediate.passed - placementSummary.foundation.passed)}/{Math.max(0, placementSummary.intermediate.total - placementSummary.foundation.total)}</span>
+            </div>
+            <div className={`rounded-xl border p-2 ${placementSummary.advanced.complete ? 'border-emerald-700/50 bg-emerald-900/20' : placementSummary.targetStage === 'ADVANCED' ? 'border-purple-500/50 bg-purple-900/20' : 'border-stone-700 bg-stone-900/40'}`}>
+              <span className="text-[9px] uppercase font-black text-stone-400 block">Advanced</span>
+              <span className="text-xs font-black text-white">{Math.max(0, placementSummary.advanced.passed - placementSummary.intermediate.passed)}/{Math.max(0, placementSummary.advanced.total - placementSummary.intermediate.total)}</span>
+            </div>
           </div>
         </div>
 
@@ -325,15 +381,27 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-stone-900">{strand.strandName}</span>
-                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                  strand.verifiedBand === 'INTERMEDIATE'
-                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : strand.verifiedBand === 'ADVANCED'
-                    ? 'bg-purple-50 text-purple-700 border-purple-200'
-                    : 'bg-stone-100 text-stone-700 border-stone-300'
-                }`}>
-                  {strand.verifiedBand}
-                </span>
+                {(() => {
+                  const anchorTests = CANONICAL_PLACEMENT_TESTS.filter((test) => test.strandId === strand.strandId);
+                  const anchorPassed = anchorTests.filter((test) =>
+                    assessment.testResults.some((result) => result.testId === test.id && result.passed) ||
+                    isCompetencyVerified(test.associatedCompetencyId, skills)
+                  ).length;
+                  const label = anchorPassed === 0 ? 'UNVERIFIED' : strand.verifiedBand;
+                  return (
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                      label === 'INTERMEDIATE'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : label === 'ADVANCED'
+                        ? 'bg-purple-50 text-purple-700 border-purple-200'
+                        : label === 'UNVERIFIED'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-stone-100 text-stone-700 border-stone-300'
+                    }`}>
+                      {label}
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Progress Bar */}
@@ -661,9 +729,11 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       {/* 5. INTERACTIVE PRACTICAL PLACEMENT TEST MODAL (Audio, Metronome, Rubric) */}
       <PlacementTestModal
         isOpen={isTestModalOpen}
-        onClose={() => setIsTestModalOpen(false)}
+        onClose={() => { setIsTestModalOpen(false); refreshPlacementFromStorage(); }}
         tests={availableTests}
         estimatedBand={assessment.estimatedBand}
+        batteryLabel={`C5 ${placementSummary.targetStageLabel}`}
+        onResultSaved={handlePlacementProgress}
         onComplete={handlePlacementCompleted}
       />
 

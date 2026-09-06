@@ -48,6 +48,10 @@ export type PracticeEquipment = 'Practice Pad' | 'Full Drum Kit' | 'Both';
 export type PracticePriority = 'Skill Development' | 'Song / Performance Preparation' | 'Balanced';
 
 export interface LearnerProfile {
+  // Placement self-report (estimate only; never canonical verification)
+  selfReportedLevel?: SkillLevel;
+  yearsPlaying?: number;
+
   // Practice Context
   typicalPracticeTime: string;
   equipment: PracticeEquipment;
@@ -1488,6 +1492,9 @@ export interface PlacementTest {
   subdivision: string;
   durationBars: number;
   durationSeconds: number;
+  meter?: '4/4' | '6/8';
+  metronomePulsesPerBar?: number;
+  requiredEquipment?: PracticeEquipment;
   taskDescription: string;
   sticking?: string;
   counting?: string;

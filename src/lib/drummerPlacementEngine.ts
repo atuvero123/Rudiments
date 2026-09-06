@@ -36,6 +36,9 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     subdivision: '8th notes',
     durationBars: 8,
     durationSeconds: 24,
+    meter: '4/4',
+    metronomePulsesPerBar: 4,
+    requiredEquipment: 'Both',
     taskDescription:
       'Count 1 & 2 & 3 & 4 & aloud while playing alternating 8th notes locked strictly with the click.',
     sticking: 'R L R L R L R L',
@@ -57,6 +60,9 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     subdivision: '8th-note rock groove',
     durationBars: 16,
     durationSeconds: 48,
+    meter: '4/4',
+    metronomePulsesPerBar: 4,
+    requiredEquipment: 'Full Drum Kit',
     taskDescription:
       'Play 16 unbroken bars of 4/4 groove: kick on 1 and 3, firm snare backbeat on 2 and 4, steady 8th-note hi-hat.',
     sticking: 'RH Hi-Hat, LH Snare, RF Kick',
@@ -78,6 +84,9 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     subdivision: '16th notes',
     durationBars: 8,
     durationSeconds: 26,
+    meter: '4/4',
+    metronomePulsesPerBar: 4,
+    requiredEquipment: 'Practice Pad',
     taskDescription:
       'Play 4 bars of single strokes (R L R L) followed immediately by 4 bars of double strokes (R R L L) at 75 BPM.',
     sticking: '4 bars R L R L -> 4 bars R R L L',
@@ -99,6 +108,9 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     subdivision: '16th-note fill into Crash 1',
     durationBars: 8,
     durationSeconds: 28,
+    meter: '4/4',
+    metronomePulsesPerBar: 4,
+    requiredEquipment: 'Full Drum Kit',
     taskDescription:
       'Play 2 cycles: 3 bars groove + 1 bar 16th-note descending fill, crashing and returning to groove on Beat 1.',
     sticking: 'Groove -> R L R L around toms -> Crash+Kick on 1',
@@ -120,6 +132,9 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     subdivision: 'Syncopated 16ths',
     durationBars: 8,
     durationSeconds: 26,
+    meter: '4/4',
+    metronomePulsesPerBar: 4,
+    requiredEquipment: 'Full Drum Kit',
     taskDescription:
       'Play an 8-bar groove featuring kick on beat 1 and the "&" of beat 2 while maintaining uninterrupted 8th-note hi-hats.',
     sticking: 'Kick on 1 and 2-and; Snare on 2 and 4; HH steady 8ths',
@@ -140,7 +155,10 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     tempo: 60,
     subdivision: '6/8 dotted-quarter pulse',
     durationBars: 8,
-    durationSeconds: 32,
+    durationSeconds: 16,
+    meter: '6/8',
+    metronomePulsesPerBar: 2,
+    requiredEquipment: 'Full Drum Kit',
     taskDescription:
       'Play 8 bars of 6/8 groove: feel two main dotted-quarter pulses, snare backbeat on beat 4, smooth 8th note hi-hat.',
     sticking: 'RH 8ths on ride/hat, LH snare on 4, Kick on 1 and 5',
@@ -162,6 +180,9 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     subdivision: 'Linear triplets',
     durationBars: 4,
     durationSeconds: 14,
+    meter: '4/4',
+    metronomePulsesPerBar: 4,
+    requiredEquipment: 'Full Drum Kit',
     taskDescription:
       'Execute 4 continuous bars of R-L-K triplets across snare, high tom, and kick without overlapping notes.',
     sticking: 'R L K R L K R L K R L K',
@@ -185,6 +206,9 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     subdivision: '16th into 32nd-note bursts',
     durationBars: 8,
     durationSeconds: 30,
+    meter: '4/4',
+    metronomePulsesPerBar: 4,
+    requiredEquipment: 'Practice Pad',
     taskDescription:
       'Play 1 bar steady 16ths followed by 1 bar continuous 32nd-note single or double bursts without stiffening.',
     sticking: '16ths -> 32nd bursts (R L R L)',
@@ -206,6 +230,9 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     subdivision: 'Flam accents & tap doubles',
     durationBars: 8,
     durationSeconds: 24,
+    meter: '4/4',
+    metronomePulsesPerBar: 4,
+    requiredEquipment: 'Practice Pad',
     taskDescription:
       'Play alternating flam accents and low grace notes with low grace height (<2 in) and crisp downbeat accents.',
     sticking: 'lR L R rL R L',
@@ -227,6 +254,9 @@ export const CANONICAL_PLACEMENT_TESTS: PlacementTest[] = [
     subdivision: 'Swung Texas shuffle pocket',
     durationBars: 16,
     durationSeconds: 48,
+    meter: '4/4',
+    metronomePulsesPerBar: 4,
+    requiredEquipment: 'Full Drum Kit',
     taskDescription:
       'Play 16 unbroken bars of deep Texas shuffle pocket: swung ride/hat, backbeat on 2 & 4, and quiet ghosted triplet bounce.',
     sticking: 'RH Swung 8ths, LH Snare Backbeat + Ghosts, RF Kick',
@@ -283,8 +313,8 @@ export function estimateLearnerBand(
 } {
   // Check self-reported experience level or evidence from skills
   let baseBand: CurriculumBand = 'BEGINNER';
-  const years = (profile as any).yearsPlaying ?? 1;
-  const selfLevel = (profile as any).level ?? 'Beginner';
+  const years = profile.yearsPlaying ?? 0;
+  const selfLevel = profile.selfReportedLevel ?? 'Beginner';
 
   const cleanCount = skills.filter(
     (s) => s.status === 'CLEAN' || s.status === 'APPLICABLE' || s.status === 'MUSICAL' || s.status === 'MASTERED'
@@ -360,6 +390,254 @@ export function estimateLearnerBand(
   };
 }
 
+
+// ============================================================================
+// C5 — VERIFIED PLACEMENT & PROFILE CALIBRATION
+// ============================================================================
+
+export type PlacementBatteryStage = 'FOUNDATION' | 'INTERMEDIATE' | 'ADVANCED' | 'COMPLETE';
+
+export interface PlacementCalibrationSummary {
+  status: 'NOT_STARTED' | 'CALIBRATING' | 'VERIFIED';
+  displayLabel: string;
+  highestVerifiedBand: CurriculumBand;
+  targetStage: PlacementBatteryStage;
+  targetStageLabel: string;
+  targetBandConfirmed: boolean;
+  foundation: { passed: number; total: number; complete: boolean };
+  intermediate: { passed: number; total: number; complete: boolean };
+  advanced: { passed: number; total: number; complete: boolean };
+  canonicalVerifiedCount: number;
+  remainingTestIds: string[];
+}
+
+function latestPlacementResultMap(results: PlacementTestResult[]): Map<string, PlacementTestResult> {
+  const map = new Map<string, PlacementTestResult>();
+  [...results]
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .forEach((result) => map.set(result.testId, result));
+  return map;
+}
+
+export function mergePlacementResults(
+  existing: PlacementTestResult[],
+  incoming: PlacementTestResult[]
+): PlacementTestResult[] {
+  const merged = latestPlacementResultMap([...existing, ...incoming]);
+  return Array.from(merged.values()).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+}
+
+function placementTestIsSatisfied(
+  test: PlacementTest,
+  resultMap: Map<string, PlacementTestResult>,
+  skills: GranularSkill[]
+): boolean {
+  return resultMap.get(test.id)?.passed === true || isCompetencyVerified(test.associatedCompetencyId, skills);
+}
+
+export function getPlacementCalibrationSummary(
+  assessment: DrummerPlacementAssessment,
+  skills: GranularSkill[]
+): PlacementCalibrationSummary {
+  const resultMap = latestPlacementResultMap(assessment.testResults || []);
+  const byBand = (band: CurriculumBand) => CANONICAL_PLACEMENT_TESTS.filter((test) => test.band === band);
+  const summarize = (band: CurriculumBand) => {
+    const tests = byBand(band);
+    const passed = tests.filter((test) => placementTestIsSatisfied(test, resultMap, skills)).length;
+    return { passed, total: tests.length, complete: tests.length > 0 && passed === tests.length };
+  };
+
+  const foundation = summarize('BEGINNER');
+  const intermediateOnly = summarize('INTERMEDIATE');
+  const advancedOnly = summarize('ADVANCED');
+  const intermediate = {
+    passed: foundation.passed + intermediateOnly.passed,
+    total: foundation.total + intermediateOnly.total,
+    complete: foundation.complete && intermediateOnly.complete,
+  };
+  const advanced = {
+    passed: intermediate.passed + advancedOnly.passed,
+    total: intermediate.total + advancedOnly.total,
+    complete: intermediate.complete && advancedOnly.complete,
+  };
+
+  let highestVerifiedBand: CurriculumBand = 'BEGINNER';
+  let displayLabel = 'Not yet verified';
+  if (advanced.complete) {
+    highestVerifiedBand = 'ADVANCED';
+    displayLabel = 'Advanced verified';
+  } else if (intermediate.complete) {
+    highestVerifiedBand = 'INTERMEDIATE';
+    displayLabel = 'Intermediate verified';
+  } else if (foundation.complete) {
+    highestVerifiedBand = 'BEGINNER';
+    displayLabel = 'Beginner foundation verified';
+  }
+
+  let targetStage: PlacementBatteryStage = 'FOUNDATION';
+  if (foundation.complete) {
+    if (assessment.estimatedBand === 'BEGINNER') targetStage = 'COMPLETE';
+    else if (!intermediate.complete) targetStage = 'INTERMEDIATE';
+    else if (assessment.estimatedBand === 'INTERMEDIATE') targetStage = 'COMPLETE';
+    else if (!advanced.complete) targetStage = 'ADVANCED';
+    else targetStage = 'COMPLETE';
+  }
+
+  const targetBandConfirmed =
+    assessment.estimatedBand === 'BEGINNER'
+      ? foundation.complete
+      : assessment.estimatedBand === 'INTERMEDIATE'
+      ? intermediate.complete
+      : advanced.complete;
+
+  const canonicalVerifiedCount = CANONICAL_CURRICULUM_COMPETENCIES.filter((comp) =>
+    isCompetencyVerified(comp.id, skills)
+  ).length;
+  const anyEvidence = (assessment.testResults || []).length > 0 || canonicalVerifiedCount > 0;
+
+  const targetStageLabel =
+    targetStage === 'FOUNDATION'
+      ? 'Foundation Gate'
+      : targetStage === 'INTERMEDIATE'
+      ? 'Intermediate Confirmation'
+      : targetStage === 'ADVANCED'
+      ? 'Advanced Confirmation'
+      : 'Placement Complete';
+
+  const stageBand: CurriculumBand | null =
+    targetStage === 'FOUNDATION'
+      ? 'BEGINNER'
+      : targetStage === 'INTERMEDIATE'
+      ? 'INTERMEDIATE'
+      : targetStage === 'ADVANCED'
+      ? 'ADVANCED'
+      : null;
+  const remainingTestIds = stageBand
+    ? CANONICAL_PLACEMENT_TESTS.filter(
+        (test) => test.band === stageBand && !placementTestIsSatisfied(test, resultMap, skills)
+      ).map((test) => test.id)
+    : [];
+
+  return {
+    status: targetBandConfirmed ? 'VERIFIED' : anyEvidence ? 'CALIBRATING' : 'NOT_STARTED',
+    displayLabel,
+    highestVerifiedBand,
+    targetStage,
+    targetStageLabel,
+    targetBandConfirmed,
+    foundation,
+    intermediate,
+    advanced,
+    canonicalVerifiedCount,
+    remainingTestIds,
+  };
+}
+
+export function getPlacementTestsForAssessment(
+  assessment: DrummerPlacementAssessment,
+  skills: GranularSkill[]
+): PlacementTest[] {
+  const summary = getPlacementCalibrationSummary(assessment, skills);
+  if (summary.targetStage === 'COMPLETE') {
+    // Recalibration re-runs only the estimated band's anchor battery, not every historical test.
+    const band = assessment.estimatedBand;
+    return CANONICAL_PLACEMENT_TESTS.filter((test) => test.band === band);
+  }
+  const remaining = new Set(summary.remainingTestIds);
+  return CANONICAL_PLACEMENT_TESTS.filter((test) => remaining.has(test.id));
+}
+
+export function savePlacementTestProgress(
+  assessment: DrummerPlacementAssessment,
+  result: PlacementTestResult
+): DrummerPlacementAssessment {
+  // Read the latest persisted draft so a multi-test battery can save each result
+  // without the parent React state having to mutate the modal's test list mid-run.
+  const persisted = getStoredPlacementAssessment();
+  const base = persisted || assessment;
+  const mergedResults = mergePlacementResults(base.testResults || [], [result]);
+  if (result.passed) {
+    const test = CANONICAL_PLACEMENT_TESTS.find((item) => item.id === result.testId);
+    if (test) {
+      recordCanonicalVerification(
+        test.associatedCompetencyId,
+        'placement_test',
+        `Passed placement anchor: ${test.title}`
+      );
+    }
+  }
+  const draft = { ...base, testResults: mergedResults, version: 2 };
+  savePlacementAssessment(draft);
+  return draft;
+}
+
+function deriveLiveStrands(
+  estimatedBand: CurriculumBand,
+  skills: GranularSkill[],
+  testResults: PlacementTestResult[]
+): Record<StrandId, StrandLevel> {
+  const resultMap = latestPlacementResultMap(testResults || []);
+  const strands: Record<StrandId, StrandLevel> = {} as Record<StrandId, StrandLevel>;
+
+  (Object.keys(STRAND_DEFINITIONS) as StrandId[]).forEach((strandId) => {
+    const def = STRAND_DEFINITIONS[strandId];
+    const comps = CANONICAL_CURRICULUM_COMPETENCIES.filter((comp) => def.unitIds.includes(comp.unitId));
+    const verifiedCount = comps.filter((comp) => isCompetencyVerified(comp.id, skills)).length;
+    const tests = CANONICAL_PLACEMENT_TESTS.filter((test) => test.strandId === strandId);
+    const satisfiedTests = tests.filter((test) => placementTestIsSatisfied(test, resultMap, skills));
+
+    let verifiedBand: CurriculumBand = 'BEGINNER';
+    if (satisfiedTests.some((test) => test.band === 'ADVANCED')) verifiedBand = 'ADVANCED';
+    else if (satisfiedTests.some((test) => test.band === 'INTERMEDIATE')) verifiedBand = 'INTERMEDIATE';
+
+    const next = comps.find((comp) => !isCompetencyVerified(comp.id, skills)) || comps[0];
+    const activeUnit = next ? CANONICAL_CURRICULUM_UNITS.find((unit) => unit.id === next.unitId) : undefined;
+
+    strands[strandId] = {
+      strandId,
+      strandName: def.name,
+      estimatedBand,
+      verifiedBand,
+      verifiedCompetenciesCount: verifiedCount,
+      totalCompetenciesCount: comps.length,
+      activeUnitTitle: activeUnit?.title,
+      primaryNextCompetencyTitle: next?.title,
+      primaryNextCompetencyId: next?.id,
+    };
+  });
+
+  return strands;
+}
+
+export function reconcilePlacementAssessment(
+  profile: LearnerProfile,
+  skills: GranularSkill[],
+  assessment: DrummerPlacementAssessment
+): DrummerPlacementAssessment {
+  const estimation = estimateLearnerBand(profile, skills);
+  const currPos = deriveCurrentCurriculumPosition(skills);
+  const base = {
+    ...assessment,
+    estimatedBand: estimation.estimatedBand,
+    strands: deriveLiveStrands(estimation.estimatedBand, skills, assessment.testResults || []),
+    activeUnitId: currPos.activeUnitId,
+    activeCompetencyId: currPos.activeCompetencyId,
+    version: 2,
+  };
+  const summary = getPlacementCalibrationSummary(base, skills);
+  return {
+    ...base,
+    verifiedBand: summary.highestVerifiedBand,
+    placementCompleted: summary.targetBandConfirmed,
+    diagnosticNotes: summary.targetBandConfirmed
+      ? [`${summary.displayLabel}. Curriculum competencies still advance individually through their own verification evidence.`]
+      : [
+          `${summary.targetStageLabel} in progress. ${summary.remainingTestIds.length} placement anchor${summary.remainingTestIds.length === 1 ? '' : 's'} remain for this stage.`,
+          'Placement estimates do not bypass the canonical learning order.',
+        ],
+  };
+}
+
 /**
  * Returns tests appropriate for testing the drummer based on estimated band.
  * - Beginner: 4 foundational Beginner battery tests
@@ -389,10 +667,12 @@ export function getPlacementTestsForEstimation(estimatedBand: CurriculumBand): P
 export function evaluatePlacementResults(
   estimatedBand: CurriculumBand,
   testResults: PlacementTestResult[],
-  skills: GranularSkill[]
+  skills: GranularSkill[],
+  previousResults: PlacementTestResult[] = []
 ): DrummerPlacementAssessment {
+  const mergedTestResults = mergePlacementResults(previousResults, testResults);
   // Record verifications for passed tests
-  testResults.forEach((r) => {
+  mergedTestResults.forEach((r) => {
     if (r.passed) {
       const test = CANONICAL_PLACEMENT_TESTS.find((t) => t.id === r.testId);
       if (test) {
@@ -405,7 +685,7 @@ export function evaluatePlacementResults(
     }
   });
 
-  const passedTestIds = new Set(testResults.filter((r) => r.passed).map((r) => r.testId));
+  const passedTestIds = new Set(mergedTestResults.filter((r) => r.passed).map((r) => r.testId));
 
   // Check foundational beginner battery (pulse, basic groove, rudiments, fill recovery)
   const passedPulse = passedTestIds.has('pt-pulse-8th');
@@ -552,15 +832,16 @@ export function evaluatePlacementResults(
     strands,
     activeUnitId,
     activeCompetencyId,
-    placementCompleted: true,
+    placementCompleted: false,
     completedAt: new Date().toISOString(),
-    testResults,
+    testResults: mergedTestResults,
     diagnosticNotes,
-    version: 1,
+    version: 2,
   };
 
-  savePlacementAssessment(assessment);
-  return assessment;
+  const reconciled = reconcilePlacementAssessment({ selfReportedLevel: estimatedBand } as unknown as LearnerProfile, skills, assessment);
+  savePlacementAssessment(reconciled);
+  return reconciled;
 }
 
 /**
@@ -593,7 +874,9 @@ export function getOrInitializePlacementAssessment(
 ): DrummerPlacementAssessment {
   const existing = getStoredPlacementAssessment();
   if (existing) {
-    return existing;
+    const reconciled = reconcilePlacementAssessment(profile, skills, existing);
+    savePlacementAssessment(reconciled);
+    return reconciled;
   }
 
   const { estimatedBand, strands } = estimateLearnerBand(profile, skills);
@@ -608,9 +891,10 @@ export function getOrInitializePlacementAssessment(
     placementCompleted: false,
     testResults: [],
     diagnosticNotes: ['Placement pending practical verification test.'],
-    version: 1,
+    version: 2,
   };
 
-  savePlacementAssessment(initial);
-  return initial;
+  const reconciled = reconcilePlacementAssessment(profile, skills, initial);
+  savePlacementAssessment(reconciled);
+  return reconciled;
 }

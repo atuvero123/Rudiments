@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useLearner } from '../context/LearnerContext';
-import { PracticeEquipment, PracticePriority } from '../types';
+import { PracticeEquipment, PracticePriority, SkillLevel } from '../types';
 import { CurriculumProgressOverview } from './CurriculumProgressOverview';
 import {
   User,
@@ -21,6 +21,8 @@ import {
 export const LearnerProfileView: React.FC = () => {
   const { profile, skills, updateProfile, resetToDefaults } = useLearner();
 
+  const [selfReportedLevel, setSelfReportedLevel] = useState<SkillLevel>(profile.selfReportedLevel || 'Beginner');
+  const [yearsPlaying, setYearsPlaying] = useState<string>(profile.yearsPlaying ? String(profile.yearsPlaying) : '');
   const [typicalTime, setTypicalTime] = useState(profile.typicalPracticeTime);
   const [equipment, setEquipment] = useState<PracticeEquipment>(profile.equipment);
   const [responsibilities, setResponsibilities] = useState(profile.musicalResponsibilities);
@@ -49,6 +51,8 @@ export const LearnerProfileView: React.FC = () => {
 
   const handleSave = () => {
     updateProfile({
+      selfReportedLevel,
+      yearsPlaying: yearsPlaying.trim() ? Math.max(0, Number(yearsPlaying)) : undefined,
       typicalPracticeTime: typicalTime,
       equipment,
       musicalResponsibilities: responsibilities,
@@ -128,6 +132,51 @@ export const LearnerProfileView: React.FC = () => {
             <CheckCircle2 className="w-4 h-4" />
             <span>{savedSuccess ? 'Saved Changes!' : 'Save Profile'}</span>
           </button>
+        </div>
+      </div>
+
+      <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-5 shadow-sm space-y-3">
+        <div className="flex items-start gap-3">
+          <Shield className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h3 className="text-sm font-black text-stone-900">Starting-Level Estimate</h3>
+            <p className="text-xs text-stone-600 leading-relaxed">
+              This is a self-report used only to choose an appropriate placement battery. It never certifies a curriculum level or skips prerequisites.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div>
+            <label className="text-stone-700 font-bold block mb-1.5">How would you describe your current level?</label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['Beginner', 'Intermediate', 'Advanced'] as SkillLevel[]).map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setSelfReportedLevel(level)}
+                  className={`py-2 px-1 text-[11px] font-bold rounded-xl border text-center transition-all ${
+                    selfReportedLevel === level
+                      ? 'bg-[#3f4532] text-white border-[#3f4532]'
+                      : 'bg-white text-stone-700 border-stone-200 hover:border-stone-300'
+                  }`}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-stone-700 font-bold block mb-1.5">Years playing (optional)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={yearsPlaying}
+              onChange={(e) => setYearsPlaying(e.target.value)}
+              placeholder="e.g. 2"
+              className="w-full bg-white border border-stone-200 text-stone-900 p-2.5 rounded-xl font-semibold focus:outline-none focus:border-[#4a523a]"
+            />
+          </div>
         </div>
       </div>
 

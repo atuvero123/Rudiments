@@ -1,6 +1,7 @@
 import { LearnerProfile } from '../types';
 
 export const INITIAL_LEARNER_PROFILE: LearnerProfile = {
+  selfReportedLevel: 'Intermediate',
   typicalPracticeTime: '60–120 minutes (Sunday service song prep)',
   equipment: 'Both',
   primaryEquipmentNote: 'Practice Pad identified as primary daily tool; Full Drum Kit used occasionally & for worship team',

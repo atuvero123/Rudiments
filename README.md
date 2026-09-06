@@ -52,9 +52,18 @@ C3.3.1 corrects legacy C3.2 migration. A successful pre-mission Step completion 
 C4 closes the curriculum loop: ordinary practice builds readiness, but only a completed practical verification at the canonical standard certifies a competency. Today and Path now share the same advancement-readiness state, successful verification automatically moves the canonical path forward, failed verification creates a repair path without deleting progress, and Profile & Progress shows recent formal curriculum advances. See `C4_BUILD_REPORT.md`.
 
 
-## C4.2 — Pattern & Teaching Clarity
+## C4.1 — Pattern & Teaching Clarity
 
 C4.2 separates **what the learner must play now** from later transfer/orchestration ideas. Guided Practice now labels the active sticking as **Required Pattern — Play this now**, counting is explicitly described as how to count that required pattern, and transfer/accent/orchestration material has its own clearly identified layer. The placement generator also now derives timing-foundation patterns from canonical teaching definitions instead of using the old generic R-L-K fill fallback. Quarter-Note Pulse therefore remains quarter notes throughout warm-up, calibration, placement and landing practice.
 
 ## C4.2 Advancement Authority
 When a canonical competency reaches `READY_TO_VERIFY`, formal verification becomes the primary progression action. Ordinary practice remains available as capped warm-up/consolidation, but it cannot advance tempo beyond the certification standard or override the canonical gate. See `C4_2_BUILD_REPORT.md`.
+
+
+## C5 — Verified Placement & Profile Calibration
+
+C5 separates the learner's **profile estimate** from **verified placement**. The profile now contains an explicit self-reported starting level used only to choose the placement battery. Placement is staged: Foundation Gate (4 anchors) → Intermediate Confirmation (3 anchors) → Advanced Confirmation (3 anchors). Each result persists immediately, failed anchors can be retried without losing passes, and canonical competency verification from normal C4 progression can satisfy the same placement anchor so the learner is not forced to prove the identical competency twice.
+
+Overall placement never skips the canonical curriculum. Drummers can remain uneven across Pulse/Reading, Grooves, Rudiments, Fills and Coordination; each strand shows its own practical evidence. The placement modal also removes early grading, uses the real stated metronome tempo, identifies required equipment, and treats 6/8 as a two-pulse compound meter.
+
+See `C5_BUILD_REPORT.md` and `VERCEL_DEPLOY.md`.
