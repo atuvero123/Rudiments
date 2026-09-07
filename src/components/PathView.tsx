@@ -61,7 +61,7 @@ import {
   getSkillStatusAfterCompetencyVerification,
   recordCompetencyVerificationOutcome,
 } from '../lib/competencyAdvancementEngine';
-import { buildC7CompetencySession } from '../lib/curriculumPracticeIntelligence';
+import { buildC7CompetencySession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
 import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 
 interface PathViewProps {
@@ -540,9 +540,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
         onVerify={() => setShowCompetencyVerification(true)}
       />
 
-      {activeCompetency.id === 'comp-meter-44' && (
-        <CurriculumEvidenceLedgerCard competency={activeCompetency} />
-      )}
+      <CurriculumEvidenceLedgerCard competency={activeCompetency} />
 
       {advancementNotice && (
         <div className={`rounded-2xl border p-4 text-xs font-bold ${advancementNotice.startsWith('Verified') ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
@@ -670,6 +668,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
                     <div className="grid grid-cols-1 gap-2.5 pt-3">
                       {unitCompetencies.map((comp) => {
                         const compStatus = getCompetencyStatus(comp);
+                        const compLedger = getCurriculumEvidenceLedger(comp.id);
                         return (
                           <div
                             key={comp.id}
@@ -701,6 +700,11 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
                                 <h4 className="text-xs sm:text-sm font-black text-stone-900">
                                   {comp.title}
                                 </h4>
+                                {compLedger.totalAttempts > 0 && compStatus !== 'VERIFIED' && (
+                                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                                    Evidence {compLedger.readiness}/6
+                                  </span>
+                                )}
                               </div>
                               <p className="text-xs text-stone-600 font-medium">
                                 {comp.description}

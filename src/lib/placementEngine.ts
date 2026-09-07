@@ -32,8 +32,20 @@ function loadStoredPlacementAttempts(): PlacementAttemptEvidence[] {
   try {
     const raw = localStorage.getItem(PLACEMENT_ATTEMPTS_STORAGE_KEY);
     if (raw) {
-      placementAttemptsCache = JSON.parse(raw);
-      return placementAttemptsCache || [];
+      const parsed = JSON.parse(raw);
+      const attempts: PlacementAttemptEvidence[] = Array.isArray(parsed) ? parsed : [];
+      // C7.5 migration: older VisualRhythmTutor builds emitted synthetic default
+      // placement evidence for canonical C6/C7 lessons that had no musicalPlacement
+      // contract. Those records must not contaminate phrase-placement memory.
+      const cleaned = attempts.filter((attempt) => {
+        const exerciseId = attempt.exerciseId || '';
+        return !exerciseId.startsWith('c6-') && !exerciseId.startsWith('c7-');
+      });
+      placementAttemptsCache = cleaned;
+      if (cleaned.length !== attempts.length) {
+        localStorage.setItem(PLACEMENT_ATTEMPTS_STORAGE_KEY, JSON.stringify(cleaned));
+      }
+      return placementAttemptsCache;
     }
   } catch (e) {
     console.error('Failed to load placement attempts:', e);

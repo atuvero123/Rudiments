@@ -15,7 +15,7 @@ import {
   isCompetencyVerified,
   recordCanonicalVerification,
 } from './canonicalProgressEngine';
-import { getAttemptsForSkill, getSkillEvidenceMemory } from './evidenceEngine';
+import { deriveSkillEvidenceMemory, getAttemptsForSkill, getSkillEvidenceMemory } from './evidenceEngine';
 import { getAllPlacementAttemptsForSkill } from './placementEngine';
 import { findTeachingDefinition } from './teachingDefinitions';
 import {
@@ -106,6 +106,26 @@ export interface CurriculumAdvancementEvent {
 
 const VERIFICATION_ATTEMPTS_KEY = 'RUDIMENT_COMPETENCY_VERIFICATION_ATTEMPTS_V1';
 const ADVANCEMENT_EVENTS_KEY = 'RUDIMENT_CURRICULUM_ADVANCEMENT_EVENTS_V1';
+
+// C7.5 migration guard: notation sessions before the C7.4 staff/transport correction
+// used mismatched drill content and must not qualify for formal readiness. The first
+// corrected C7.4 build was produced at this point; later evidence remains valid.
+const C7_NOTATION_VALID_EVIDENCE_SINCE = Date.parse('2026-09-07T19:29:00Z');
+
+function isValidCanonicalPracticeAttempt(comp: CurriculumCompetency, attempt: ReturnType<typeof getAttemptsForSkill>[number]): boolean {
+  if (comp.id !== 'comp-reading-notation') return true;
+  if (!attempt.exerciseId?.startsWith('c7-comp-reading-notation')) return true;
+  return new Date(attempt.timestamp).getTime() >= C7_NOTATION_VALID_EVIDENCE_SINCE;
+}
+
+function isGenuinePlacementAttemptForCanonicalReadiness(attempt: ReturnType<typeof getAllPlacementAttemptsForSkill>[number]): boolean {
+  // Older VisualRhythmTutor builds accidentally emitted default phrase-placement
+  // evidence for every C6/C7 canonical lesson, even when the exercise had no
+  // musicalPlacement contract. Genuine placement sessions use the placement
+  // generator and do not use c6-/c7- canonical mission ids.
+  const exerciseId = attempt.exerciseId || '';
+  return !exerciseId.startsWith('c6-') && !exerciseId.startsWith('c7-');
+}
 
 function readArray<T>(key: string): T[] {
   try {
@@ -211,9 +231,15 @@ export function deriveCompetencyAdvancementReadiness(
   );
 
   const skill = skills.find((s) => s.id === comp.skillId);
-  const attempts = getAttemptsForSkill(comp.skillId);
-  const placementAttempts = getAllPlacementAttemptsForSkill(comp.skillId);
-  const memory = getSkillEvidenceMemory(comp.skillId);
+  const attempts = getAttemptsForSkill(comp.skillId).filter((attempt) =>
+    isValidCanonicalPracticeAttempt(comp, attempt)
+  );
+  const placementAttempts = getAllPlacementAttemptsForSkill(comp.skillId).filter(
+    isGenuinePlacementAttemptForCanonicalReadiness
+  );
+  const memory = comp.id === 'comp-reading-notation'
+    ? deriveSkillEvidenceMemory(comp.skillId, attempts)
+    : getSkillEvidenceMemory(comp.skillId);
   const activeGapPlan = getActiveGapClosurePlan(comp.skillId);
   const priorVerificationAttempts = getCompetencyVerificationAttempts(comp.id)
     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());

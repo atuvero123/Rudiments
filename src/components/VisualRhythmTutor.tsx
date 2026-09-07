@@ -646,7 +646,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       phrasePosition: exercise.musicalPlacement?.startPoint,
     };
 
-    if (!isStructureMission) {
+    if (exercise.musicalPlacement) {
       recordSinglePlacementAttemptEvidence(attemptEvidence);
     }
   };
@@ -730,7 +730,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       phrasePosition: exercise.musicalPlacement?.startPoint,
     };
 
-    if (!isStructureMission) {
+    if (exercise.musicalPlacement) {
       recordSinglePlacementAttemptEvidence(attemptEvidence);
     }
 

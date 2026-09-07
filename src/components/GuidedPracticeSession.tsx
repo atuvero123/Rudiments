@@ -29,8 +29,10 @@ import {
 import { useLearner } from '../context/LearnerContext';
 import { evaluateCurriculumDecision } from '../lib/curriculumDecisionEngine';
 import { CurriculumDecisionCard } from './CurriculumDecisionCard';
+import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 import { findTeachingDefinition } from '../lib/teachingDefinitions';
-import { CURRICULUM_COMPETENCIES_BY_SKILL_ID } from '../data/canonicalCurriculum';
+import { deriveCurrentCurriculumPosition } from '../lib/canonicalProgressEngine';
+import { CURRICULUM_COMPETENCIES_BY_ID, CURRICULUM_COMPETENCIES_BY_SKILL_ID } from '../data/canonicalCurriculum';
 import {
   deriveCompetencyAdvancementReadiness,
   deriveCompetencyPracticeAuthorityForSkill,
@@ -451,9 +453,25 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
     const completionReadiness = completionCompetency
       ? deriveCompetencyAdvancementReadiness(completionCompetency, skills)
       : null;
+    const canonicalPositionAtCompletion = deriveCurrentCurriculumPosition(skills);
+    const canonicalActiveCompetencyAtCompletion = CURRICULUM_COMPETENCIES_BY_ID.get(
+      canonicalPositionAtCompletion.activeCompetencyId
+    );
+    const isCompletionCompetencyCanonicalActive = Boolean(
+      completionCompetency && completionCompetency.id === canonicalPositionAtCompletion.activeCompetencyId
+    );
+    const effectiveVerificationPriority = Boolean(
+      completionAuthority?.verificationPriority && isCompletionCompetencyCanonicalActive
+    );
+    const isNonActiveCanonicalPractice = Boolean(
+      completionCompetency && !isCompletionCompetencyCanonicalActive
+    );
+    const verificationReadyButSequenced = Boolean(
+      completionAuthority?.verificationPriority && isNonActiveCanonicalPractice
+    );
     const workingRangeInfo = computeSessionWorkingRange(session, {
       tempoCeiling: completionAuthority?.tempoCeiling,
-      verificationPriority: completionAuthority?.verificationPriority,
+      verificationPriority: effectiveVerificationPriority,
       verificationStandardText: completionReadiness?.targetStandardText,
     });
 
@@ -632,18 +650,26 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
               💡 Coach Continuation Recommendation for Next Time:
             </span>
             <p className="font-bold text-stone-900 text-sm leading-snug">
-              {completionAuthority?.verificationPriority
-                ? `NEXT TIME: Formal verification has priority. Do not push beyond ${completionReadiness?.targetBpm || completionAuthority.targetBpm} BPM; use ordinary practice only as a short warm-up or consolidation.`
+              {effectiveVerificationPriority
+                ? `NEXT TIME: Formal verification has priority. Do not push beyond ${completionReadiness?.targetBpm || completionAuthority?.targetBpm} BPM; use ordinary practice only as a short warm-up or consolidation.`
+                : isNonActiveCanonicalPractice
+                ? `${completionCompetency?.title || 'This competency'} evidence has been banked, but the canonical path still points to ${canonicalActiveCompetencyAtCompletion?.title || 'the earlier active competency'}. Complete that active target first${verificationReadyButSequenced ? '; this competency already has enough local readiness evidence for later verification' : ''}.`
                 : generateNextTimeRecommendation(session)}
             </p>
           </div>
 
           {/* BU2F-R2F Adaptive Curriculum Next Target Recommendation */}
-          {completionAuthority?.verificationPriority ? (
+          {effectiveVerificationPriority ? (
             <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 text-xs text-emerald-950 space-y-1.5">
               <div className="font-black uppercase tracking-wider text-[10px]">C4.2 Advancement Authority Active</div>
               <div className="font-black text-sm">Formal verification is the next progression action.</div>
               <div>Legacy Vary / Extend / checkpoint progression is paused for this competency until the canonical verification result is recorded.</div>
+            </div>
+          ) : isNonActiveCanonicalPractice ? (
+            <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-xs text-amber-950 space-y-1.5">
+              <div className="font-black uppercase tracking-wider text-[10px]">Evidence Banked · Canonical Order Preserved</div>
+              <div className="font-black text-sm">{verificationReadyButSequenced ? 'Local readiness reached; certification still waits for the active path.' : 'Practice evidence saved; canonical progression remains on the earlier active target.'}</div>
+              <div>Complete <strong>{canonicalActiveCompetencyAtCompletion?.title || 'the earlier active competency'}</strong> first. Your evidence for {completionCompetency?.title || 'this competency'} remains saved and will be available when the canonical path reaches it.</div>
             </div>
           ) : (() => {
             const primarySkillId = session.skillId || session.selectedSkillIds?.[0] || '';
@@ -660,9 +686,14 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
             );
           })()}
 
+          {/* C7 canonical sessions report the competency-specific ledger that was actually trained. */}
+          {session.curriculumPractice?.competencyId && completionCompetency && (
+            <CurriculumEvidenceLedgerCard competency={completionCompetency} />
+          )}
+
           {/* Dedicated Placement Practice Completion Summary Card */}
           {(() => {
-            const hasPlacementExercises = session.exercises?.some((e) => e.musicalPlacement || e.phase === 'APPLICATION');
+            const hasPlacementExercises = session.exercises?.some((e) => Boolean(e.musicalPlacement));
             if (!hasPlacementExercises) return null;
 
             const primarySkillId = session.skillId || session.selectedSkillIds?.[0] || '';
