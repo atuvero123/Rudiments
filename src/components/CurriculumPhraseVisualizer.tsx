@@ -25,6 +25,11 @@ export const CurriculumPhraseVisualizer: React.FC<CurriculumPhraseVisualizerProp
     (section) => liveBar >= section.startBar && liveBar < section.startBar + section.bars
   );
   const landmarks = new Set(structure.highlightLandmarkBars || [1]);
+  const visualizerLabel = mission.patternDisplay === 'NOTATION'
+    ? 'Reading Phrase Visualizer'
+    : mission.patternDisplay === 'BAR_STRUCTURE'
+    ? 'Phrase Structure Visualizer'
+    : 'Curriculum Phrase Visualizer';
 
   return (
     <div className="rounded-2xl border border-sky-500/30 bg-sky-950/25 p-4 space-y-3">
@@ -32,7 +37,7 @@ export const CurriculumPhraseVisualizer: React.FC<CurriculumPhraseVisualizerProp
         <div className="flex items-center gap-2">
           <Layers className="w-4 h-4 text-sky-300" />
           <div>
-            <span className="text-[10px] uppercase tracking-wider font-black text-sky-300">C6 Phrase Visualizer</span>
+            <span className="text-[10px] uppercase tracking-wider font-black text-sky-300">{visualizerLabel}</span>
             <p className="text-xs text-stone-300 font-semibold">{mission.missionTitle}</p>
           </div>
         </div>

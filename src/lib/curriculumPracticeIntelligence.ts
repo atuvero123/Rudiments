@@ -520,7 +520,15 @@ export function buildC7CompetencySession(
   const missionCount = placementBand === 'ADVANCED' ? 6 : 6;
   const stages: CurriculumMissionMetadata['stage'][] = ['UNDERSTAND', 'INTERNALIZE', 'HEAR', 'FOLLOW', 'INDEPENDENT', 'MUSICAL_APPLICATION'];
   const assistance: AssistanceLevel[] = ['FULL', 'FULL', 'FULL', 'REDUCED', 'NONE', 'NONE'];
-  const bars = [2, 4, 4, 8, 8, 16];
+  // C7.4: the structural visualizer must describe the material the learner is
+  // actually reading/playing. Reading missions deliberately progress through
+  // 1, 1, 2, 2, 4 and 4 authored notation bars (see notationProgression.ts),
+  // while the other pedagogy families keep the broader phrase-length ladder.
+  // Keeping these values aligned prevents the UI from claiming an 8/16-bar
+  // phrase while the staff and master transport are only presenting 2/4 bars.
+  const bars = pedagogy.domain === 'READING'
+    ? [1, 1, 2, 2, 4, 4]
+    : [2, 4, 4, 8, 8, 16];
   const tempoOffsets = [0, 0, 2, 4, 6, target - base];
 
   const exercises: PracticeExercise[] = Array.from({ length: missionCount }, (_, index) => {

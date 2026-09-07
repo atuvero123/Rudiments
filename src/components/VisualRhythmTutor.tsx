@@ -1305,6 +1305,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                       }`
                   : isStructureMission
                   ? `${timeline.totalBars}-Bar Structure`
+                  : isNotationMission
+                  ? `${timeline.totalBars}-Bar Reading Phrase`
                   : `2-Bar Phrase Cycle`}
               </span>
             </div>
@@ -1318,7 +1320,10 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   phraseStage !== 'COUNT_IN' &&
                   phraseStage !== 'PREPARE' &&
                   phraseStage !== 'IDLE';
-                const isLandingBeat = !isStructureMission && currentBar === 2 && beatNum === 1;
+                // C7.4: generic groove/fill landing language must never leak
+                // into notation lessons. Reading missions use bar/reading cues
+                // from the written staff instead of the old Bar-2 crash target.
+                const isLandingBeat = !isStructureMission && !isNotationMission && currentBar === 2 && beatNum === 1;
                 const isStructureBarStart = isStructureMission && beatNum === 1;
 
                 return (
@@ -1328,7 +1333,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                       isCurrentBeat
                         ? isLandingBeat
                           ? 'bg-emerald-500 text-stone-950 scale-105 shadow-xl ring-2 ring-emerald-300 font-black'
-                          : phraseStage === 'FILL' || phraseStage === 'LEARNER_SPACE'
+                        : !isNotationMission && (phraseStage === 'FILL' || phraseStage === 'LEARNER_SPACE')
                           ? 'bg-amber-400 text-stone-950 scale-105 shadow-xl ring-2 ring-amber-300 font-black'
                           : 'bg-white text-stone-950 scale-105 shadow-lg font-black'
                         : 'bg-stone-950 text-stone-400 border border-stone-800'
@@ -1352,7 +1357,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                           ? 'bg-stone-900 text-amber-300'
                           : isLandingBeat
                           ? 'text-emerald-400 font-black'
-                          : currentBar === 1 && beatNum === 4
+                          : !isNotationMission && currentBar === 1 && beatNum === 4
                           ? 'text-amber-400'
                           : 'text-stone-500'
                       }`}
@@ -1361,6 +1366,10 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                         ? isStructureBarStart
                           ? `BAR ${currentBar} START`
                           : 'PULSE'
+                        : isNotationMission
+                        ? beatNum === 1
+                          ? `BAR ${currentBar} START`
+                          : 'READ'
                         : isLandingBeat
                         ? '🎯 LAND CRASH'
                         : isCalibration
