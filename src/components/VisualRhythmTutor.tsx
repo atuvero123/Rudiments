@@ -50,6 +50,7 @@ import { InteractiveDrumPad } from './InteractiveDrumPad';
 import { EvaluateStageView } from './EvaluateStageView';
 import { CurriculumPhraseVisualizer } from './CurriculumPhraseVisualizer';
 import { DrumNotationStaff } from './DrumNotationStaff';
+import { buildNotationProgressionDefinition } from '../lib/notationProgression';
 
 interface VisualRhythmTutorProps {
   exercise: PracticeExercise;
@@ -134,6 +135,13 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   const teachingDef = useMemo(() => {
     const base = matchedTeachingDef || getTeachingDefinition(exercise.title || exercise.id);
     const structure = exercise.curriculumMission?.structure;
+
+    // C7.3: reading missions use an authored notation progression. Each mission
+    // gets written material appropriate to its stage (identify -> count -> hear ->
+    // follow -> sight-read -> musical chart) rather than replaying one memorized bar.
+    if (matchedTeachingDef && exercise.curriculumMission?.competencyId === 'comp-reading-notation') {
+      return buildNotationProgressionDefinition(base, exercise.curriculumMission?.missionNumber || 1);
+    }
 
     // C6: phrase/bar-structure missions need the master clock to travel across
     // the actual mission bar count (4/8/16/24), not loop a two-bar teaching
