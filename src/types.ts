@@ -706,6 +706,7 @@ export interface CurriculumMissionMetadata {
   executionTarget?: boolean;
   musicalApplication?: boolean;
   patternDisplay?: CurriculumPatternDisplay;
+  pedagogyDomain?: 'PULSE_SUBDIVISION' | 'METER_FORM' | 'READING' | 'GROOVE' | 'RUDIMENT' | 'FILL_TRANSITION' | 'COORDINATION' | 'DYNAMICS' | 'PERFORMANCE' | 'STYLE';
   requiredPatternLabel?: string;
   structure?: {
     totalBars: number;
@@ -863,7 +864,7 @@ export interface PracticeSession {
   curriculumPractice?: {
     competencyId: string;
     placementBand: CurriculumBand;
-    journeyVersion: 'C6';
+    journeyVersion: 'C6' | 'C7';
     missionCount: number;
     personalizedDepth: 'FOUNDATION' | 'CONDENSED' | 'DIAGNOSTIC';
   };

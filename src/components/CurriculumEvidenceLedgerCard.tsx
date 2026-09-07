@@ -26,7 +26,7 @@ export const CurriculumEvidenceLedgerCard: React.FC<{ competency: CurriculumComp
         <div>
           <div className="flex items-center gap-2 text-sky-800">
             <Activity className="w-4 h-4" />
-            <span className="text-[10px] font-black uppercase tracking-wider">C6 Curriculum Evidence Ledger</span>
+            <span className="text-[10px] font-black uppercase tracking-wider">C7 Curriculum Evidence Ledger</span>
           </div>
           <h3 className="text-base sm:text-lg font-black text-stone-900 mt-1">{competency.title}</h3>
           <p className="text-xs text-stone-600 mt-1">Practice builds readiness. Formal competency verification still remains a separate C4 test.</p>

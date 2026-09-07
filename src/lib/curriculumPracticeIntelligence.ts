@@ -8,6 +8,7 @@ import {
   PracticeSession,
   SelfCheckFeeling,
 } from '../types';
+import { getCurriculumPedagogyProfile } from './curriculumPedagogyEngine';
 
 const C6_EVIDENCE_KEY = 'RUDIMENT_C6_CURRICULUM_EVIDENCE_V1';
 
@@ -27,6 +28,7 @@ export interface CurriculumMissionEvidenceRecord {
   executionTarget: boolean;
   musicalApplication: boolean;
   issueTags: string[];
+  pedagogyDomain?: string;
 }
 
 export interface CurriculumEvidenceLedger {
@@ -98,6 +100,7 @@ export function recordCurriculumMissionEvidence(input: {
     executionTarget: Boolean(mission.executionTarget),
     musicalApplication: Boolean(mission.musicalApplication),
     issueTags: input.issueTags || [],
+    pedagogyDomain: mission.pedagogyDomain,
   };
 
   writeAllEvidence([...all, record]);
@@ -123,29 +126,32 @@ export function getCurriculumEvidenceLedger(competencyId: string): CurriculumEvi
   const cleanTempos = records.filter(clean).map((record) => record.bpm);
   const highestCleanTempo = cleanTempos.length ? Math.max(...cleanTempos) : null;
 
+  const competencyStub = { id: competencyId } as CurriculumCompetency;
+  const profile = getCurriculumPedagogyProfile(competencyStub);
+  const labels = profile.evidenceLabels;
   const readinessCriteria = [
     {
-      label: 'Concept understood',
+      label: labels[0],
       met: conceptualDemonstrations >= 1,
       detail: `${conceptualDemonstrations} demonstrated conceptual run${conceptualDemonstrations === 1 ? '' : 's'}`,
     },
     {
-      label: 'Guided execution',
+      label: labels[1],
       met: guidedSuccesses >= 1,
-      detail: `${guidedSuccesses} controlled Full Tutor run${guidedSuccesses === 1 ? '' : 's'}`,
+      detail: `${guidedSuccesses} controlled guided run${guidedSuccesses === 1 ? '' : 's'}`,
     },
     {
-      label: 'Reduced execution',
+      label: labels[2],
       met: reducedSuccesses >= 1,
-      detail: `${reducedSuccesses} controlled Reduced Tutor run${reducedSuccesses === 1 ? '' : 's'}`,
+      detail: `${reducedSuccesses} controlled reduced-cue run${reducedSuccesses === 1 ? '' : 's'}`,
     },
     {
-      label: 'Independent clean execution',
+      label: labels[4],
       met: independentCleanRuns >= 2,
       detail: `${independentCleanRuns}/2 clean independent runs`,
     },
     {
-      label: 'Musical application',
+      label: labels[5],
       met: musicalApplications >= 1,
       detail: `${musicalApplications} successful musical application${musicalApplications === 1 ? '' : 's'}`,
     },
@@ -244,7 +250,7 @@ function mission(
     curriculumMission: metadata,
     progressionStage: n >= 5 ? 'TRANSFER' : n >= 3 ? 'APPLICATION' : 'FOUNDATION',
     challengeType: n >= 5 ? 'groove-phrase' : 'precision-mechanics',
-    sessionSource: 'C6_CANONICAL_COMPETENCY',
+    sessionSource: 'C7_CANONICAL_COMPETENCY',
     skillId: competency.skillId,
   };
 }
@@ -435,16 +441,178 @@ export function buildC6CompetencySession(
     focusMode: 'COACH_CHOOSES',
     selectedSkillIds: [competency.skillId],
     skillId: competency.skillId,
-    focusTopic: `${competency.title} — C6 Canonical Learning Journey`,
+    focusTopic: `${competency.title} — C7 Canonical Learning Journey`,
     notes: `${placementBand} placement personalizes teaching depth only. Competency remains unverified until formal C4 verification passes.`,
     rating: 5,
     exercises,
     sessionStatus: 'NOT_STARTED',
-    sessionSource: 'C6_CANONICAL_COMPETENCY',
+    sessionSource: 'C7_CANONICAL_COMPETENCY',
     curriculumPractice: {
       competencyId: competency.id,
       placementBand,
-      journeyVersion: 'C6',
+      journeyVersion: 'C7',
+      missionCount: exercises.length,
+      personalizedDepth: depth,
+    },
+  };
+}
+
+
+function c7EquipmentFor(competency: CurriculumCompetency, profile: LearnerProfile): PracticeExercise['equipmentRequired'] {
+  if (competency.supportedEquipment === 'Practice Pad') return 'Practice Pad';
+  if (competency.supportedEquipment === 'Full Drum Kit') return 'Full Drum Kit';
+  if (profile.equipment === 'Practice Pad') return 'Practice Pad';
+  if (profile.equipment === 'Full Drum Kit') return 'Full Drum Kit';
+  return 'Either';
+}
+
+function c7ExerciseType(domain: ReturnType<typeof getCurriculumPedagogyProfile>['domain'], musical: boolean): PracticeExercise['exerciseType'] {
+  if (musical) return 'application';
+  if (domain === 'RUDIMENT' || domain === 'PULSE_SUBDIVISION' || domain === 'READING') return 'technique';
+  if (domain === 'FILL_TRANSITION') return 'fill';
+  if (domain === 'GROOVE' || domain === 'STYLE' || domain === 'PERFORMANCE' || domain === 'DYNAMICS') return 'groove';
+  return 'coordination';
+}
+
+function c7TimeSignature(competency: CurriculumCompetency): string {
+  if (competency.id.includes('meter-68') || competency.id.includes('worship-68')) return '6/8';
+  if (competency.id.includes('meter-34')) return '3/4';
+  if (competency.id.includes('meter-54')) return '5/4';
+  if (competency.id.includes('meter-78')) return '7/8';
+  if (competency.id.includes('meter-128')) return '12/8';
+  return '4/4';
+}
+
+function c7StructureFor(competency: CurriculumCompetency, bars: number) {
+  const meter = c7TimeSignature(competency);
+  const beatsPerBar = meter === '6/8' ? 6 : meter === '3/4' ? 3 : meter === '5/4' ? 5 : meter === '7/8' ? 7 : meter === '12/8' ? 12 : 4;
+  return {
+    totalBars: bars,
+    phraseGroupSize: bars >= 8 ? 4 : Math.max(1, Math.min(4, bars)),
+    beatsPerBar,
+    highlightLandmarkBars: bars >= 16 ? [1, 5, 9, 13] : bars >= 8 ? [1, 5] : [1],
+    showBarNumbers: true,
+    showBeatNumbers: true,
+  };
+}
+
+/**
+ * C7 generalized curriculum journey.
+ * C6.1's authored 4/4 structure journey is preserved exactly, while every
+ * other canonical competency now receives a pedagogy-family-specific journey
+ * instead of being routed through the old generic phrase-insertion session.
+ */
+export function buildC7CompetencySession(
+  competency: CurriculumCompetency,
+  profile: LearnerProfile,
+  placementBand: CurriculumBand
+): PracticeSession {
+  if (competency.id === 'comp-meter-44') {
+    return buildC6CompetencySession(competency, profile, placementBand);
+  }
+
+  const sessionId = `c7-${competency.id}-${Date.now()}`;
+  const target = competency.tempoStandard.bpm;
+  const base = startTempoForBand(target, placementBand);
+  const depth = personalizedDepth(placementBand);
+  const pedagogy = getCurriculumPedagogyProfile(competency);
+  const equipment = c7EquipmentFor(competency, profile);
+  const missionCount = placementBand === 'ADVANCED' ? 6 : 6;
+  const stages: CurriculumMissionMetadata['stage'][] = ['UNDERSTAND', 'INTERNALIZE', 'HEAR', 'FOLLOW', 'INDEPENDENT', 'MUSICAL_APPLICATION'];
+  const assistance: AssistanceLevel[] = ['FULL', 'FULL', 'FULL', 'REDUCED', 'NONE', 'NONE'];
+  const bars = [2, 4, 4, 8, 8, 16];
+  const tempoOffsets = [0, 0, 2, 4, 6, target - base];
+
+  const exercises: PracticeExercise[] = Array.from({ length: missionCount }, (_, index) => {
+    const n = index + 1;
+    const musical = n === 6;
+    const independent = n === 5;
+    const bpm = musical ? target : Math.min(target, base + Math.max(0, tempoOffsets[index]));
+    const purpose = n === 1
+      ? pedagogy.conceptualFocus
+      : n === 2
+        ? `Internalize the count: ${competency.countingPattern}.`
+        : n === 3
+          ? pedagogy.listeningFocus
+          : n === 4
+            ? `Execute ${competency.title} with reduced tutor dependence.`
+            : n === 5
+              ? `Demonstrate ${competency.title} without tutor performance.`
+              : pedagogy.musicalTransfer;
+    const instructions = n === 1
+      ? `${competency.description} Work below verification tempo and prioritize understanding over speed.`
+      : n === 2
+        ? `Count ${competency.countingPattern} aloud while executing ${competency.stickingPattern}. Keep the pulse relaxed.`
+        : n === 3
+          ? `Listen to the coach model and identify: ${pedagogy.listeningFocus}`
+          : n === 4
+            ? `Follow the required pattern with reduced cues. Pattern: ${competency.stickingPattern}. Do not increase tempo if control changes.`
+            : n === 5
+              ? `Metronome only. Sustain the target pattern for ${competency.durationCriterion}. Stop and grade honestly if timing or mechanics break down.`
+              : `${competency.musicalApplicationRequirement}. ${pedagogy.musicalTransfer}`;
+
+    const metadata: CurriculumMissionMetadata = {
+      competencyId: competency.id,
+      missionId: `c7-${competency.id}-m${n}`,
+      missionNumber: n,
+      missionTitle: `Mission ${n} — ${pedagogy.missionLabels[index]}`,
+      stage: stages[index],
+      assistanceTarget: assistance[index],
+      conceptualTarget: n <= 3,
+      executionTarget: n >= 2,
+      musicalApplication: musical,
+      patternDisplay: pedagogy.patternDisplay,
+      requiredPatternLabel: pedagogy.patternDisplay === 'NONE' || pedagogy.patternDisplay === 'BAR_STRUCTURE' ? undefined : competency.stickingPattern,
+      pedagogyDomain: pedagogy.domain,
+      structure: c7StructureFor(competency, bars[index]),
+    };
+
+    return {
+      id: `${sessionId}-m${n}`,
+      title: metadata.missionTitle,
+      phase: n === 1 ? 'FOUNDATION' : musical ? 'APPLICATION' : 'MAIN WORK',
+      skillIds: [competency.skillId],
+      purpose,
+      whyThisExercise: purpose,
+      pedagogicalRole: independent ? 'INDEPENDENCE TEST' : n === 1 ? 'PREPARATION' : 'PRIMARY TARGET',
+      instructions,
+      sticking: pedagogy.patternDisplay === 'NONE' || pedagogy.patternDisplay === 'BAR_STRUCTURE' ? undefined : competency.stickingPattern,
+      counting: competency.countingPattern,
+      timeSignature: c7TimeSignature(competency),
+      subdivision: competency.subdivision,
+      tempo: bpm,
+      targetTempo: target,
+      durationSeconds: n <= 2 ? 45 : n <= 4 ? 60 : 90,
+      exerciseType: c7ExerciseType(pedagogy.domain, musical),
+      equipmentRequired: equipment,
+      difficulty: independent || musical ? 'Challenging' : n >= 3 ? 'Moderate' : 'Easy',
+      curriculumMission: metadata,
+      progressionStage: musical ? 'TRANSFER' : n >= 3 ? 'APPLICATION' : 'FOUNDATION',
+      challengeType: musical ? 'groove-phrase' : 'precision-mechanics',
+      sessionSource: 'C7_CANONICAL_COMPETENCY',
+      skillId: competency.skillId,
+    };
+  });
+
+  return {
+    id: sessionId,
+    date: new Date().toISOString().slice(0, 10),
+    durationMinutes: placementBand === 'BEGINNER' ? 18 : 14,
+    practiceContext: profile.practicePriority === 'Song / Performance Preparation' ? 'SONG_SERVICE_PREP' : profile.practicePriority === 'Balanced' ? 'BALANCED' : 'SKILL_DEVELOPMENT',
+    equipment: profile.equipment === 'Practice Pad' ? 'Practice Pad' : 'Full Drum Kit',
+    focusMode: 'COACH_CHOOSES',
+    selectedSkillIds: [competency.skillId],
+    skillId: competency.skillId,
+    focusTopic: `${competency.title} — C7 ${pedagogy.domain.replace(/_/g, ' ')} Journey`,
+    notes: `${placementBand} placement adjusts teaching depth and starting tempo only. ${pedagogy.domain} pedagogy and evidence remain competency-specific.`,
+    rating: 5,
+    exercises,
+    sessionStatus: 'NOT_STARTED',
+    sessionSource: 'C7_CANONICAL_COMPETENCY',
+    curriculumPractice: {
+      competencyId: competency.id,
+      placementBand,
+      journeyVersion: 'C7',
       missionCount: exercises.length,
       personalizedDepth: depth,
     },

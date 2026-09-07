@@ -1,4 +1,5 @@
 import { CompetencyTeachingDefinition, TeachingEventDef } from '../types';
+import { deriveTeachingDefinition, findCanonicalCompetency } from './curriculumPedagogyEngine';
 
 /**
  * CANONICAL TEACHING DEFINITIONS
@@ -1105,6 +1106,11 @@ export function findTeachingDefinition(identifier: string): CompetencyTeachingDe
   if (lower.includes('fill') && (lower.includes('8th') || lower.includes('eighth'))) return TEACHING_DEFINITIONS['comp-fill-8th'];
   if (lower.includes('fill') && lower.includes('quarter')) return TEACHING_DEFINITIONS['comp-fill-quarter'];
   if (lower.includes('notation')) return TEACHING_DEFINITIONS['comp-reading-notation'];
+
+  // C7: every canonical curriculum competency now resolves to its own
+  // pedagogy-derived definition instead of silently falling back to Quarter Pulse.
+  const canonical = findCanonicalCompetency(identifier);
+  if (canonical) return deriveTeachingDefinition(canonical);
   return null;
 }
 

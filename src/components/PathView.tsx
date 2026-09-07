@@ -61,7 +61,7 @@ import {
   getSkillStatusAfterCompetencyVerification,
   recordCompetencyVerificationOutcome,
 } from '../lib/competencyAdvancementEngine';
-import { buildC6CompetencySession } from '../lib/curriculumPracticeIntelligence';
+import { buildC7CompetencySession } from '../lib/curriculumPracticeIntelligence';
 import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 
 interface PathViewProps {
@@ -204,26 +204,15 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       return;
     }
 
-    // C6: 4/4 bar structure now uses the governed curriculum learning journey
-    // rather than reusing the phrase-insertion engine. Placement personalizes
-    // teaching depth only; it never certifies or skips this competency.
-    if (comp.id === 'comp-meter-44') {
-      const session = buildC6CompetencySession(
-        comp,
-        profile,
-        placementSummary.highestVerifiedBand
-      );
-      startGuidedSession(session);
-      return;
-    }
-
-    const skill = skills.find((s) => s.id === comp.skillId) || {
-      id: comp.skillId,
-      name: comp.title,
-      parentTrack: 'rudiments',
-      currentComfortTempo: comp.tempoStandard.bpm,
-    };
-    const session = buildPlacementSession(skill as any, profile, '1 beat');
+    // C7: every canonical competency now enters a competency-specific governed
+    // journey. 4/4 preserves the validated C6.1 structure curriculum; the
+    // remaining competencies use their own pedagogy family instead of the
+    // generic phrase-insertion fallback.
+    const session = buildC7CompetencySession(
+      comp,
+      profile,
+      placementSummary.highestVerifiedBand
+    );
     startGuidedSession(session);
   };
 
