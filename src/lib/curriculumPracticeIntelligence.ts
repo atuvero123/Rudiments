@@ -528,28 +528,50 @@ export function buildC7CompetencySession(
     const musical = n === 6;
     const independent = n === 5;
     const bpm = musical ? target : Math.min(target, base + Math.max(0, tempoOffsets[index]));
-    const purpose = n === 1
-      ? pedagogy.conceptualFocus
-      : n === 2
-        ? `Internalize the count: ${competency.countingPattern}.`
-        : n === 3
-          ? pedagogy.listeningFocus
-          : n === 4
-            ? `Execute ${competency.title} with reduced tutor dependence.`
-            : n === 5
-              ? `Demonstrate ${competency.title} without tutor performance.`
-              : pedagogy.musicalTransfer;
-    const instructions = n === 1
-      ? `${competency.description} Work below verification tempo and prioritize understanding over speed.`
-      : n === 2
-        ? `Count ${competency.countingPattern} aloud while executing ${competency.stickingPattern}. Keep the pulse relaxed.`
-        : n === 3
-          ? `Listen to the coach model and identify: ${pedagogy.listeningFocus}`
-          : n === 4
-            ? `Follow the required pattern with reduced cues. Pattern: ${competency.stickingPattern}. Do not increase tempo if control changes.`
-            : n === 5
-              ? `Metronome only. Sustain the target pattern for ${competency.durationCriterion}. Stop and grade honestly if timing or mechanics break down.`
-              : `${competency.musicalApplicationRequirement}. ${pedagogy.musicalTransfer}`;
+    const isReading = pedagogy.domain === 'READING';
+    const readingPurposes = [
+      'Identify the written drum voices and staff positions before playing.',
+      'Count the written rhythm from left to right while keeping your eyes on the staff.',
+      'Connect the moving written note positions to the exact sounds they represent.',
+      'Read and play the written bar with tutor support while staying visually anchored to the staff.',
+      'Sight-read the written bar independently with metronome only.',
+      'Read a short drum chart in musical time without replacing notation with a memorized sticking.',
+    ];
+    const readingInstructions = [
+      'Study the staff legend first: closed hi-hat uses an x-shaped notehead above the staff, snare sits in the middle area, and kick sits low. Name each written voice before you play.',
+      `Count ${competency.tempoStandard.subdivision.toLowerCase().includes('8') ? '1 & 2 & 3 & 4 &' : competency.countingPattern} aloud while tracking the written noteheads from left to right. The staff, not an R/L mnemonic, is the source of truth.`,
+      'Watch the playhead cross the notation and listen for the exact written voices. Notice simultaneous notes and any silent spaces.',
+      'Follow the staff with reduced cues. Keep reading ahead by one note position so your eyes lead your limbs rather than chase them.',
+      `Metronome only. Sight-read the displayed bar for ${competency.durationCriterion}. If you lose your place, stop and restart from the written beginning rather than from memory.`,
+      `${competency.musicalApplicationRequirement}. Read continuously through the displayed phrase and preserve pulse, written voices and rests.`,
+    ];
+
+    const purpose = isReading
+      ? readingPurposes[index]
+      : n === 1
+        ? pedagogy.conceptualFocus
+        : n === 2
+          ? `Internalize the count: ${competency.countingPattern}.`
+          : n === 3
+            ? pedagogy.listeningFocus
+            : n === 4
+              ? `Execute ${competency.title} with reduced tutor dependence.`
+              : n === 5
+                ? `Demonstrate ${competency.title} without tutor performance.`
+                : pedagogy.musicalTransfer;
+    const instructions = isReading
+      ? readingInstructions[index]
+      : n === 1
+        ? `${competency.description} Work below verification tempo and prioritize understanding over speed.`
+        : n === 2
+          ? `Count ${competency.countingPattern} aloud while executing ${competency.stickingPattern}. Keep the pulse relaxed.`
+          : n === 3
+            ? `Listen to the coach model and identify: ${pedagogy.listeningFocus}`
+            : n === 4
+              ? `Follow the required pattern with reduced cues. Pattern: ${competency.stickingPattern}. Do not increase tempo if control changes.`
+              : n === 5
+                ? `Metronome only. Sustain the target pattern for ${competency.durationCriterion}. Stop and grade honestly if timing or mechanics break down.`
+                : `${competency.musicalApplicationRequirement}. ${pedagogy.musicalTransfer}`;
 
     const metadata: CurriculumMissionMetadata = {
       competencyId: competency.id,
@@ -562,7 +584,7 @@ export function buildC7CompetencySession(
       executionTarget: n >= 2,
       musicalApplication: musical,
       patternDisplay: pedagogy.patternDisplay,
-      requiredPatternLabel: pedagogy.patternDisplay === 'NONE' || pedagogy.patternDisplay === 'BAR_STRUCTURE' ? undefined : competency.stickingPattern,
+      requiredPatternLabel: pedagogy.patternDisplay === 'NONE' || pedagogy.patternDisplay === 'BAR_STRUCTURE' || pedagogy.patternDisplay === 'NOTATION' ? undefined : competency.stickingPattern,
       pedagogyDomain: pedagogy.domain,
       structure: c7StructureFor(competency, bars[index]),
     };
@@ -576,7 +598,7 @@ export function buildC7CompetencySession(
       whyThisExercise: purpose,
       pedagogicalRole: independent ? 'INDEPENDENCE TEST' : n === 1 ? 'PREPARATION' : 'PRIMARY TARGET',
       instructions,
-      sticking: pedagogy.patternDisplay === 'NONE' || pedagogy.patternDisplay === 'BAR_STRUCTURE' ? undefined : competency.stickingPattern,
+      sticking: pedagogy.patternDisplay === 'NONE' || pedagogy.patternDisplay === 'BAR_STRUCTURE' || pedagogy.patternDisplay === 'NOTATION' ? undefined : competency.stickingPattern,
       counting: competency.countingPattern,
       timeSignature: c7TimeSignature(competency),
       subdivision: competency.subdivision,

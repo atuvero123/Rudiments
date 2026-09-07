@@ -49,6 +49,7 @@ import { CountingTutorView } from './CountingTutorView';
 import { InteractiveDrumPad } from './InteractiveDrumPad';
 import { EvaluateStageView } from './EvaluateStageView';
 import { CurriculumPhraseVisualizer } from './CurriculumPhraseVisualizer';
+import { DrumNotationStaff } from './DrumNotationStaff';
 
 interface VisualRhythmTutorProps {
   exercise: PracticeExercise;
@@ -97,6 +98,19 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     exercise.curriculumMission?.competencyId === 'comp-meter-44' ||
     exercise.skillIds?.includes('time-44') ||
     exercise.skillId === 'time-44';
+  const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
+  const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
+  const motorReferenceNoun = pedagogyDomain === 'RUDIMENT'
+    ? 'Sticking'
+    : pedagogyDomain === 'GROOVE' || pedagogyDomain === 'STYLE'
+    ? 'Limb / Voice Map'
+    : pedagogyDomain === 'COORDINATION'
+    ? 'Limb Sequence'
+    : pedagogyDomain === 'FILL_TRANSITION'
+    ? 'Fill Pattern'
+    : pedagogyDomain === 'DYNAMICS'
+    ? 'Accent Pattern'
+    : 'Pulse Pattern';
 
   // Exercise type detection for pedagogical tailoring
   const isWarmup = exercise.phase === 'WARM UP' || exercise.exerciseType === 'warmup';
@@ -186,6 +200,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   const [countInBeat, setCountInBeat] = useState<number>(0);
   const [currentBar, setCurrentBar] = useState<number>(1);
   const [currentBeat, setCurrentBeat] = useState<number>(0);
+  const [currentSubdivision, setCurrentSubdivision] = useState<number>(0);
   const [completedLoops, setCompletedLoops] = useState<number>(0);
   const [transitionCue, setTransitionCue] = useState<string>('');
   const [activeOwner, setActiveOwner] = useState<'TUTOR' | 'LEARNER' | 'ENSEMBLE'>('TUTOR');
@@ -280,6 +295,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     setPhraseStage('IDLE');
     setCountInBeat(0);
     setCurrentBeat(0);
+    setCurrentSubdivision(0);
     setCurrentBar(1);
     setActiveOwner('TUTOR');
     setOwnershipTitle('');
@@ -342,6 +358,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     // 1. Update pulse and bars
     setCurrentBar(state.currentBar);
     setCurrentBeat(state.currentBeat);
+    setCurrentSubdivision(state.activeSubdivisionHighlight || 0);
     setCompletedLoops(state.completedLoops);
     setPhraseStage(state.phraseStage);
     setCountInBeat(state.countInBeat);
@@ -355,6 +372,14 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     // 2. Deterministic Phrase Guidance Cue
     if (state.isCountIn) {
       setTransitionCue(`Count-In: Beat ${state.countInBeat} of 4 — Prepare Entry`);
+    } else if (isNotationMission) {
+      setTransitionCue(
+        instructionMode === 'WATCH'
+          ? `READ & LISTEN: Beat ${state.currentBeat} ${state.activeCountToken || ''}`
+          : instructionMode === 'FOLLOW'
+          ? `READ & PLAY: Follow the highlighted written position on Beat ${state.currentBeat}`
+          : `SIGHT-READ: Keep your eyes on the staff and stay in time`
+      );
     } else if (isStructureMission) {
       setTransitionCue(
         state.currentBeat === 1
@@ -405,7 +430,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     }
 
     animationFrameRef.current = requestAnimationFrame(runTransportAnimation);
-  }, [timeline.title, isSixStrokeRoll, isPad, isStructureMission, instructionMode, assistanceLevel, showDiagnostics]);
+  }, [timeline.title, isSixStrokeRoll, isPad, isStructureMission, isNotationMission, instructionMode, assistanceLevel, showDiagnostics]);
 
   // Handle Play/Pause Toggle with Async Audio Initialization.
   // Evidence is gated: independent evaluation is unlocked only after a complete
@@ -759,30 +784,42 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             onProceedToCount={() => handleSwitchStage('COUNT')}
           />
 
-          {/* Optional Note-by-Note Breakdown Accordion */}
-          <div className="bg-stone-900/90 rounded-2xl p-3.5 border border-stone-800 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-              <span className="text-xs text-stone-300 font-bold">
-                Want to dissect individual stroke mechanics note-by-note?
-              </span>
+          {isNotationMission ? (
+            <div className="bg-sky-950/20 rounded-2xl p-3.5 border border-sky-800/40 flex items-start gap-3">
+              <BookOpen className="w-4 h-4 text-sky-300 shrink-0 mt-0.5" />
+              <div className="text-xs text-stone-300">
+                <span className="font-black text-sky-200 block mb-1">Notation lesson rule</span>
+                The written staff remains the source of truth through Count, Watch, Follow and Independent Play. Reading lessons do not use the generic sticking step-through because that would turn notation practice back into a memorized drill.
+              </div>
             </div>
-            <button
-              onClick={() => setShowNoteBreakdown((p) => !p)}
-              className="px-3.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
-            >
-              {showNoteBreakdown ? 'Hide Step-Through' : 'Open Note Step-Through'}
-            </button>
-          </div>
+          ) : (
+            <>
+              {/* Optional Note-by-Note Breakdown Accordion */}
+              <div className="bg-stone-900/90 rounded-2xl p-3.5 border border-stone-800 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span className="text-xs text-stone-300 font-bold">
+                    Want to dissect individual stroke mechanics note-by-note?
+                  </span>
+                </div>
+                <button
+                  onClick={() => setShowNoteBreakdown((p) => !p)}
+                  className="px-3.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+                >
+                  {showNoteBreakdown ? 'Hide Step-Through' : 'Open Note Step-Through'}
+                </button>
+              </div>
 
-          {showNoteBreakdown && (
-            <PhraseBreakdown
-              exercise={exercise}
-              timeline={timeline}
-              isPad={isPad}
-              currentTempo={currentTempo}
-              onProceedToMusicalPractice={() => handleSwitchStage('COUNT')}
-            />
+              {showNoteBreakdown && (
+                <PhraseBreakdown
+                  exercise={exercise}
+                  timeline={timeline}
+                  isPad={isPad}
+                  currentTempo={currentTempo}
+                  onProceedToMusicalPractice={() => handleSwitchStage('COUNT')}
+                />
+              )}
+            </>
           )}
         </div>
       ) : teachingStage === 'COUNT' ? (
@@ -1133,6 +1170,19 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             )}
           </div>
 
+          {isNotationMission && (
+            <DrumNotationStaff
+              teachingDef={teachingDef}
+              currentBar={currentBar}
+              currentBeat={currentBeat}
+              currentSubdivision={currentSubdivision}
+              isPlaying={isPlaying && phraseStage !== 'COUNT_IN'}
+              showLegend={instructionMode === 'WATCH'}
+              compact
+              title={instructionMode === 'WATCH' ? 'Watch the Playhead Cross the Written Notes' : instructionMode === 'FOLLOW' ? 'Follow the Staff — Play the Highlighted Written Voices' : 'Sight-Read the Staff — No Sticking Prompt'}
+            />
+          )}
+
           {/* ================= 3. 4-BEAT DOMINANT PULSE METRONOME GRID ================= */}
           <div className="bg-stone-900/90 p-4 rounded-2xl border border-stone-800 space-y-2.5">
             <div className="flex items-center justify-between text-[10px] uppercase font-bold text-stone-400">
@@ -1219,6 +1269,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           </div>
 
           {/* ================= 4. STATIC STICKING REFERENCE (ADAPTED TO ASSISTANCE LEVEL) ================= */}
+          {!isNotationMission && (
           <div className={`p-3.5 rounded-2xl border transition-all ${
             instructionMode === 'PLAY'
               ? 'bg-stone-900/60 border-stone-800/80'
@@ -1243,21 +1294,21 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                     ? 'Reduced Bar-Tracking Aid:'
                     : 'Minimal Bar-Tracking Reference:'
                   : instructionMode === 'WATCH'
-                  ? 'Demonstration Sticking Reference:'
+                  ? `Demonstration ${motorReferenceNoun}:`
                   : instructionMode === 'PLAY'
-                  ? 'Independent Memory Sticking:'
+                  ? `Independent Memory ${motorReferenceNoun}:`
                   : assistanceLevel === 'FULL'
-                  ? 'Full Sticking Reference:'
+                  ? `Full ${motorReferenceNoun}:`
                   : assistanceLevel === 'REDUCED'
-                  ? 'Memory Aid (Recall Inner Notes):'
-                  : 'Minimal Reference (Play from Pulse):'}
+                  ? `Memory Aid — ${motorReferenceNoun}:`
+                  : `Minimal ${motorReferenceNoun}:`}
               </span>
               <span className="font-mono text-stone-300">
                 {isStructureMission
                   ? 'Beat 1 → 2 → 3 → 4'
                   : isSixStrokeRoll
                   ? 'Six Stroke Roll (>R L L R R >L)'
-                  : 'Phrase Sticking'}
+                  : motorReferenceNoun}
               </span>
             </div>
 
@@ -1304,6 +1355,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               )}
             </div>
           </div>
+          )}
 
           {/* ================= 5. TRANSPORT ACTION BUTTONS ================= */}
           <div className="grid grid-cols-12 gap-2 pt-2">
@@ -1354,7 +1406,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           {instructionMode === 'WATCH' && (
             <div className="pt-3 border-t border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-xs text-stone-400 text-center sm:text-left">
-                Observed the coach sticking and dynamic accents? Move to interactive guided practice.
+                {isNotationMission ? 'Followed the written notes and heard how the staff becomes sound? Move to guided reading practice.' : 'Observed the coach sticking and dynamic accents? Move to interactive guided practice.'}
               </div>
               <button
                 type="button"
@@ -1370,7 +1422,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           {instructionMode === 'FOLLOW' && (
             <div className="pt-3 border-t border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-xs text-stone-400 text-center sm:text-left">
-                Locked in with the cues? Remove coach assistance and hold down the tempo solo.
+                {isNotationMission ? 'Reading the staff comfortably with cues? Remove coach assistance and sight-read it independently.' : 'Locked in with the cues? Remove coach assistance and hold down the tempo solo.'}
               </div>
               <button
                 type="button"

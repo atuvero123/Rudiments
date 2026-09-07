@@ -49,6 +49,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
   const [selectedIssues, setSelectedIssues] = useState<string[]>([]);
   const [downbeatLandedCleanly, setDownbeatLandedCleanly] = useState<boolean | null>(true);
 
+  const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
   const diagnosticOptions = teachingDef.diagnosticIssues?.length
     ? teachingDef.diagnosticIssues
     : COMMON_DRUMMING_ISSUES;
@@ -94,17 +95,19 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
           </span>
         </div>
         <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
-          Performance & Feel Evaluation
+          {isNotationMission ? 'Reading Accuracy & Timing Evaluation' : 'Performance & Feel Evaluation'}
         </h2>
         <p className="text-xs text-stone-300 font-medium mt-0.5">
-          Evaluate honestly. Authentic evidence is the foundation of genuine drumming mastery.
+          {isNotationMission
+            ? 'Grade what you actually read from the staff: correct voice, correct timing, and continuous visual tracking.'
+            : 'Evaluate honestly. Authentic evidence is the foundation of genuine drumming mastery.'}
         </p>
       </div>
 
       {/* 1. Overall Timing & Execution Rating */}
       <div className="space-y-3">
         <label className="text-xs font-black uppercase tracking-wider text-stone-300 block">
-          1. How did the phrase feel at {currentTempo} BPM?
+          1. {isNotationMission ? 'How accurately did you read the staff' : 'How did the phrase feel'} at {currentTempo} BPM?
         </label>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -125,7 +128,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Locked in</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              Relaxed, controlled, and securely aligned with the intended pulse and pattern.
+              {isNotationMission ? 'Read the correct written voices in time without losing your place on the staff.' : 'Relaxed, controlled, and securely aligned with the intended pulse and pattern.'}
             </p>
           </button>
 
@@ -146,7 +149,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Minor Drift</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              The phrase stayed together with only small timing, sound, or coordination imperfections.
+              {isNotationMission ? 'The written line was mostly correct with only a small timing or voice-reading mistake.' : 'The phrase stayed together with only small timing, sound, or coordination imperfections.'}
             </p>
           </button>
 
@@ -167,7 +170,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Needs Work</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              Timing, sticking, coordination, or sound became unreliable during the run.
+              {isNotationMission ? 'Lost the written position, misread a voice, or timing became unreliable during the line.' : 'Timing, sticking, coordination, or sound became unreliable during the run.'}
             </p>
           </button>
 
@@ -188,7 +191,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Step Down</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              Could not maintain the required phrase or count comfortably at this working tempo.
+              {isNotationMission ? 'Could not keep reading the written line accurately at this working tempo.' : 'Could not maintain the required phrase or count comfortably at this working tempo.'}
             </p>
           </button>
         </div>

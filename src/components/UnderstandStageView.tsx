@@ -17,6 +17,7 @@ import {
 import { PracticeExercise, RhythmTimeline, CompetencyTeachingDefinition } from '../types';
 import { audioEngine } from '../lib/audioEngine';
 import { masterTransport } from '../lib/masterTransportEngine';
+import { DrumNotationStaff } from './DrumNotationStaff';
 
 interface UnderstandStageViewProps {
   exercise: PracticeExercise;
@@ -92,6 +93,19 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
   };
 
   const explanation = teachingDef.musicalExplanation;
+  const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
+  const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
+  const executionReferenceLabel = pedagogyDomain === 'RUDIMENT'
+    ? 'Required Sticking — Play This'
+    : pedagogyDomain === 'GROOVE' || pedagogyDomain === 'STYLE'
+    ? 'Required Limb / Voice Pattern — Play This'
+    : pedagogyDomain === 'COORDINATION'
+    ? 'Required Limb Sequence — Play This'
+    : pedagogyDomain === 'FILL_TRANSITION'
+    ? 'Required Fill Pattern — Play This'
+    : pedagogyDomain === 'DYNAMICS'
+    ? 'Suggested Accent / Motion Pattern'
+    : 'Required Pulse Pattern — Play This';
 
   return (
     <div className="bg-stone-950 text-white rounded-3xl p-5 sm:p-7 border-2 border-stone-800 shadow-2xl space-y-6 animate-in fade-in duration-200">
@@ -110,7 +124,9 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
             {teachingDef.title}
           </h2>
           <p className="text-xs text-stone-300 font-medium mt-0.5">
-            Internalize the musical meaning, rhythm mechanics, and limb choreography before you hit.
+            {isNotationMission
+              ? 'Learn what the written drum symbols mean, where they sit on the staff, and when they sound before you play them.'
+              : 'Internalize the musical meaning, rhythm mechanics, and limb choreography before you hit.'}
           </p>
         </div>
 
@@ -119,7 +135,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
           onClick={onProceedToCount}
           className="self-start sm:self-auto flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-stone-950 px-4 py-2.5 rounded-2xl font-black text-xs transition-all shadow-md active:scale-95 cursor-pointer whitespace-nowrap"
         >
-          <span>2. Count It</span>
+          <span>{isNotationMission ? '2. Count the Written Bar' : '2. Count It'}</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>
@@ -195,8 +211,14 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
         </div>
       </div>
 
-      {/* Contextual execution reference. C6 avoids meaningless sticking panels on conceptual skills. */}
-      {exercise.curriculumMission?.patternDisplay === 'BAR_STRUCTURE' ? (
+      {/* Contextual execution reference. Reading uses actual staff notation; conceptual meter uses structure; motor skills use sticking. */}
+      {exercise.curriculumMission?.patternDisplay === 'NOTATION' ? (
+        <DrumNotationStaff
+          teachingDef={teachingDef}
+          title="See the Note — Name the Voice — Count the Time"
+          showLegend
+        />
+      ) : exercise.curriculumMission?.patternDisplay === 'BAR_STRUCTURE' ? (
         <div className="bg-stone-900 rounded-2xl p-4 border border-stone-800 space-y-3">
           <div className="text-[10px] uppercase tracking-wider text-sky-300 font-black">Musical Structure — Track This, Not a Sticking Pattern</div>
           <div className="grid grid-cols-4 gap-2">
@@ -214,7 +236,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
       ) : exercise.curriculumMission?.patternDisplay === 'NONE' ? null : (
         <div className="bg-stone-900 rounded-2xl p-4 border border-stone-800 space-y-2 text-center">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-stone-400 font-bold border-b border-stone-800 pb-1.5">
-            <span>{exercise.curriculumMission?.patternDisplay === 'SUGGESTED' ? 'Suggested Sticking — Optional' : 'Required Pattern — Play This'}</span>
+            <span>{exercise.curriculumMission?.patternDisplay === 'SUGGESTED' ? 'Suggested Pattern — Optional' : executionReferenceLabel}</span>
             <span>Click any note to hear sound</span>
           </div>
 
@@ -244,7 +266,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
 
           <div className="pt-2 border-t border-stone-800/80 space-y-1">
             <div className="text-[9px] font-black uppercase tracking-wider text-emerald-300">
-              {exercise.curriculumMission?.patternDisplay === 'SUGGESTED' ? 'Suggested Sticking — Optional' : 'Required Pattern — Play This Now'}
+              {exercise.curriculumMission?.patternDisplay === 'SUGGESTED' ? 'Suggested Pattern — Optional' : executionReferenceLabel.replace(' — Play This', ' — Play This Now')}
             </div>
             <div className="text-xs font-mono font-bold text-amber-300/90">
               {teachingDef.sticking}

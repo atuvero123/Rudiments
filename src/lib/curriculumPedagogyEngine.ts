@@ -57,7 +57,7 @@ const DOMAIN_PROFILES: Record<CurriculumPedagogyDomain, Omit<CurriculumPedagogyP
     evidenceLabels: ['Meter understood', 'Counting controlled', 'Barline heard', 'Phrase tracking stable', 'Independent form clean', 'Form used musically'],
   },
   READING: {
-    patternDisplay: 'REQUIRED', preferredEquipment: 'Both',
+    patternDisplay: 'NOTATION', preferredEquipment: 'Both',
     conceptualFocus: 'Translate written rhythmic symbols into counted sound before playing.',
     listeningFocus: 'Written durations and rests must sound exactly as they are notated.',
     musicalTransfer: 'Read a short chart while preserving pulse, dynamics and musical continuity.',
@@ -245,19 +245,32 @@ function buildGenericEvents(competency: CurriculumCompetency, meter: string, sub
         surfaces.push('snare');
       } else if (domain === 'DYNAMICS') {
         surfaces.push('snare');
+      } else if (domain === 'READING') {
+        // Reading exercises must describe the written drum voices, not invent a hand-sticking mnemonic.
+        // A simple staff-reading bar uses steady hi-hat eighths, kick on 1/3 and snare on 2/4.
+        surfaces.push('hihat_closed');
+        if (isPrimary && (beat === 1 || beat === 3)) surfaces.unshift('kick');
+        if (isPrimary && (beat === 2 || beat === 4)) surfaces.unshift('snare');
       } else {
         surfaces.push('metronome');
       }
+      const readingPrimary = domain === 'READING' && surfaces.length > 1 ? surfaces[0] : null;
       events.push({
         beat,
         subdivision,
         countToken,
-        hand: domain === 'COORDINATION' && subdivision % 3 === 2 ? 'K' : subdivision % 2 === 0 ? 'R' : 'L',
+        hand: domain === 'READING'
+          ? readingPrimary === 'kick' ? 'K' : readingPrimary === 'snare' ? 'L' : 'R'
+          : domain === 'COORDINATION' && subdivision % 3 === 2 ? 'K' : subdivision % 2 === 0 ? 'R' : 'L',
         surface: surfaces[0] || voice,
         surfaces,
         accent: isPrimary && beat === 1,
-        label: isPrimary ? `Beat ${beat}` : countToken,
-        description: competency.description,
+        label: domain === 'READING'
+          ? surfaces.includes('kick') ? 'K + HH' : surfaces.includes('snare') ? 'S + HH' : 'HH'
+          : isPrimary ? `Beat ${beat}` : countToken,
+        description: domain === 'READING'
+          ? `Read the ${countToken} position from the staff and play only the written voice(s).`
+          : competency.description,
       });
     }
   }
@@ -285,8 +298,8 @@ export function deriveTeachingDefinition(competency: CurriculumCompetency): Comp
     subdivisionCount: subCount,
     countTokens: tokens,
     spokenTokens: spoken(tokens),
-    sticking: competency.stickingPattern,
-    limbPattern: competency.stickingPattern,
+    sticking: profile.domain === 'READING' ? 'Read staff voices — no sticking mnemonic' : competency.stickingPattern,
+    limbPattern: profile.domain === 'READING' ? 'Staff-to-kit voice mapping' : competency.stickingPattern,
     drumSurfaces: profile.preferredEquipment === 'Practice Pad' ? ['Practice Pad'] : profile.preferredEquipment === 'Full Drum Kit' ? ['Hi-Hat', 'Snare', 'Kick', 'Toms'] : ['Practice Pad', 'Hi-Hat', 'Snare', 'Kick'],
     accentPositions: [0],
     bars: profile.domain === 'METER_FORM' || profile.domain === 'PERFORMANCE' ? 4 : 2,
@@ -294,7 +307,9 @@ export function deriveTeachingDefinition(competency: CurriculumCompetency): Comp
     musicalExplanation: {
       whatAmILearning: `${competency.description} ${profile.conceptualFocus}`,
       howIsItCounted: competency.countingPattern,
-      handsAndFeet: competency.stickingPattern,
+      handsAndFeet: profile.domain === 'READING'
+        ? 'Read the staff vertically: hi-hat uses the x-shaped notehead above the staff, snare sits in the middle area, and kick sits low on the staff. Play the limb shown by the written voice, not an R/L sticking sequence.'
+        : competency.stickingPattern,
       drumSurfaces: profile.preferredEquipment === 'Practice Pad' ? 'Practice pad first; transfer to the kit when the motion is stable.' : competency.supportedEquipment === 'Both' ? 'Use the surface that best exposes the target skill; transfer to the kit for musical application.' : 'Use the full kit so the intended limb relationships are present.',
       musicalApplication: `${competency.musicalApplicationRequirement}. ${profile.musicalTransfer}`,
       whatToListenFor: profile.listeningFocus,

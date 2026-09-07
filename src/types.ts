@@ -687,7 +687,7 @@ export type CurriculumMissionStage =
   | 'MUSICAL_APPLICATION'
   | 'EVIDENCE';
 
-export type CurriculumPatternDisplay = 'REQUIRED' | 'SUGGESTED' | 'NONE' | 'BAR_STRUCTURE';
+export type CurriculumPatternDisplay = 'REQUIRED' | 'SUGGESTED' | 'NONE' | 'BAR_STRUCTURE' | 'NOTATION';
 
 export interface CurriculumStructureSection {
   label: string;
