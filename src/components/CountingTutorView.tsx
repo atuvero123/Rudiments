@@ -314,7 +314,7 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
               <Mic className="w-4 h-4 text-amber-400" />
               <div className="text-left">
                 <span className="text-xs font-bold block">Spoken Voice</span>
-                <span className="text-[10px] text-stone-400">Speaks "{tokens[0]}, {tokens[1]}…"</span>
+                <span className="text-[10px] text-stone-400">Clock-locked to the groove • "{tokens[0]}, {tokens[1]}…"</span>
               </div>
             </div>
             <span

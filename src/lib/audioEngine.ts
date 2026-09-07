@@ -19,6 +19,12 @@ class AudioEngine {
   private padTapNoiseBuffer: AudioBuffer | null = null;
   private clapNoiseBuffer: AudioBuffer | null = null;
 
+  // C7.2: clock-locked spoken count samples. Unlike SpeechSynthesis, decoded
+  // AudioBuffers can be scheduled on the exact same AudioContext timeline as
+  // the metronome and drum voices, preventing mobile TTS lag/catch-up.
+  private countVoiceBuffers: Map<string, AudioBuffer> = new Map();
+  private countVoiceLoadPromise: Promise<void> | null = null;
+
   // Tempo ladder mode state
   private isLadderMode = false;
   private ladderStartBpm = 60;
@@ -57,11 +63,94 @@ class AudioEngine {
         console.warn('[AudioEngine] Context resume error:', err);
       }
     }
+
+    // Preload the tiny local count-word samples while the user gesture is still
+    // active. Playback later uses AudioBufferSourceNode.start(absoluteTime).
+    await this.preloadCountVoiceBuffers();
     return this.ctx;
   }
 
   public ensureReady(): void {
     this.initCtx();
+  }
+
+  private normalizeCountVoiceToken(word: string): string | null {
+    const raw = String(word || '').trim();
+    if (!raw) return null;
+    const stripped = raw.startsWith('>') ? raw.slice(1) : raw;
+    const lower = stripped.toLowerCase();
+    const aliases: Record<string, string> = {
+      '1': 'one', one: 'one',
+      '2': 'two', two: 'two',
+      '3': 'three', three: 'three',
+      '4': 'four', four: 'four',
+      '5': 'five', five: 'five',
+      '6': 'six', six: 'six',
+      '&': 'and', and: 'and',
+      e: 'ee', ee: 'ee',
+      a: 'uh', uh: 'uh',
+      trip: 'trip', let: 'let', ta: 'ta', la: 'la',
+      k: 'kick', kick: 'kick',
+      r: 'right', right: 'right',
+      l: 'left', left: 'left',
+      'par-a-did-dle': 'paradiddle', paradiddle: 'paradiddle',
+    };
+    return aliases[lower] || null;
+  }
+
+  private async preloadCountVoiceBuffers(): Promise<void> {
+    if (!this.ctx || this.countVoiceBuffers.size > 0) return;
+    if (this.countVoiceLoadPromise) return this.countVoiceLoadPromise;
+
+    const keys = [
+      'one', 'two', 'three', 'four', 'five', 'six',
+      'and', 'ee', 'uh', 'trip', 'let', 'ta', 'la',
+      'kick', 'right', 'left', 'paradiddle',
+    ];
+
+    this.countVoiceLoadPromise = Promise.all(
+      keys.map(async (key) => {
+        try {
+          const response = await fetch(`/audio/counts/${key}.wav`, { cache: 'force-cache' });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const bytes = await response.arrayBuffer();
+          const decoded = await this.ctx!.decodeAudioData(bytes.slice(0));
+          this.countVoiceBuffers.set(key, decoded);
+        } catch (error) {
+          console.warn(`[AudioEngine] Count voice sample failed to load: ${key}`, error);
+        }
+      })
+    ).then(() => undefined).finally(() => {
+      this.countVoiceLoadPromise = null;
+    });
+
+    return this.countVoiceLoadPromise;
+  }
+
+  /**
+   * Schedule a spoken count token on the Web Audio clock. Returns false only
+   * when the matching local sample is unavailable, allowing a TTS fallback.
+   */
+  public playCountVoice(word: string, time?: number, volume: number = 0.9): boolean {
+    this.initCtx();
+    if (!this.ctx) return false;
+    const key = this.normalizeCountVoiceToken(word);
+    if (!key) return false;
+    const buffer = this.countVoiceBuffers.get(key);
+    if (!buffer) {
+      void this.preloadCountVoiceBuffers();
+      return false;
+    }
+
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    const gain = this.ctx.createGain();
+    const t = Math.max(this.ctx.currentTime, time ?? this.ctx.currentTime);
+    gain.gain.setValueAtTime(Math.min(1, Math.max(0, volume)), t);
+    source.connect(gain);
+    gain.connect(this.ctx.destination);
+    source.start(t);
+    return true;
   }
 
   private prewarmBuffers() {
@@ -435,15 +524,19 @@ class AudioEngine {
   }
 
   /**
-   * Speak count word using Web Speech Synthesis or vocal fallback
+   * Preview a count word. C7.2 prefers the same local clock-locked sample bank
+   * used by the transport; browser TTS remains only a compatibility fallback.
    */
   public speakCountWord(word: string, volume: number = 1.0) {
+    const ctx = this.initCtx();
+    if (ctx && this.playCountVoice(word, ctx.currentTime + 0.015, volume)) return;
+
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(word);
-        utterance.rate = 1.4;
-        utterance.pitch = 1.1;
+        utterance.rate = 1.55;
+        utterance.pitch = 1.05;
         utterance.volume = Math.min(1.0, Math.max(0, volume));
         window.speechSynthesis.speak(utterance);
         return;

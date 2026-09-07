@@ -191,9 +191,32 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   // Speed and Loop controls
   const [demoSpeedMultiplier, setDemoSpeedMultiplier] = useState<number>(0.75);
   const [loopMode, setLoopMode] = useState<LoopMode>('2x');
+  const [followTutorBars, setFollowTutorBars] = useState<number>(() => {
+    if (typeof window === 'undefined') return 1;
+    const saved = Number(window.localStorage.getItem('rudiment-follow-tutor-bars'));
+    return [1, 2, 4].includes(saved) ? saved : 1;
+  });
+  const [followLearnerBars, setFollowLearnerBars] = useState<number>(() => {
+    if (typeof window === 'undefined') return 1;
+    const saved = Number(window.localStorage.getItem('rudiment-follow-learner-bars'));
+    return [1, 2, 4].includes(saved) ? saved : 1;
+  });
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [focusView, setFocusView] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('rudiment-follow-tutor-bars', String(followTutorBars));
+    }
+    masterTransport.setFollowBarPattern(followTutorBars, followLearnerBars);
+  }, [followTutorBars, followLearnerBars]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('rudiment-follow-learner-bars', String(followLearnerBars));
+    }
+  }, [followLearnerBars]);
 
   // High-Level Transport States (Deriving from Master Transport Clock)
   const [phraseStage, setPhraseStage] = useState<PhraseStage>('IDLE');
@@ -235,13 +258,21 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     return currentTempo;
   }, [currentTempo, instructionMode, demoSpeedMultiplier]);
 
-  // Max loops count
+  // Max loops count. In REDUCED Follow the selector means whole
+  // call-and-response exchanges, not raw phrase loops. This allows 2 tutor
+  // bars -> 2 learner bars (or 4/4) even when the teaching phrase is one bar.
   const maxLoopsCount = useMemo(() => {
-    if (loopMode === '1x') return 1;
-    if (loopMode === '2x') return 2;
-    if (loopMode === '4x') return 4;
-    return Infinity;
-  }, [loopMode]);
+    const repetitions = loopMode === '1x' ? 1 : loopMode === '2x' ? 2 : loopMode === '4x' ? 4 : Infinity;
+    if (repetitions === Infinity) return Infinity;
+
+    if (instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED') {
+      const barsPerExchange = Math.max(2, followTutorBars + followLearnerBars);
+      const barsPerTimelineLoop = Math.max(1, timeline.totalBars || 1);
+      return Math.max(1, Math.ceil((barsPerExchange * repetitions) / barsPerTimelineLoop));
+    }
+
+    return repetitions;
+  }, [loopMode, instructionMode, assistanceLevel, followTutorBars, followLearnerBars, timeline.totalBars]);
 
   // Static Sticking Reference array (for static display during playback)
   const stickingNotes = useMemo(() => {
@@ -391,8 +422,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED') {
       setTransitionCue(
         state.activeOwner === 'LEARNER'
-          ? 'YOUR BAR: Tutor silent — play the complete bar from memory'
-          : 'TUTOR BAR: Listen closely — your matching bar is next'
+          ? `YOUR TURN: Tutor silent — play the response block (${followLearnerBars} bar${followLearnerBars === 1 ? '' : 's'})`
+          : `TUTOR MODEL: Listen across ${followTutorBars} bar${followTutorBars === 1 ? '' : 's'} before your turn`
       );
     } else if (state.isIntentionalLearnerSpace) {
       setTransitionCue(`YOUR TURN: Student Execution (${timeline.title.split('—')[0]})`);
@@ -430,7 +461,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     }
 
     animationFrameRef.current = requestAnimationFrame(runTransportAnimation);
-  }, [timeline.title, isSixStrokeRoll, isPad, isStructureMission, isNotationMission, instructionMode, assistanceLevel, showDiagnostics]);
+  }, [timeline.title, isSixStrokeRoll, isPad, isStructureMission, isNotationMission, instructionMode, assistanceLevel, showDiagnostics, followTutorBars, followLearnerBars]);
 
   // Handle Play/Pause Toggle with Async Audio Initialization.
   // Evidence is gated: independent evaluation is unlocked only after a complete
@@ -458,6 +489,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       assistanceLevel,
       hasCountIn: true,
       countInBars: 1,
+      followTutorBars,
+      followLearnerBars,
       voiceCountEnabled: false,
       clapEnabled: false,
       isCoachThenYou,
@@ -925,9 +958,12 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 )}
               </div>
 
-              {/* Loop Count Selector */}
-              <div className="flex items-center gap-1 bg-stone-900 p-1 rounded-xl border border-stone-800 text-xs font-mono">
+              {/* Loop / Exchange Count Selector */}
+              <div className="flex items-center gap-1 bg-stone-900 p-1 rounded-xl border border-stone-800 text-xs font-mono" title={instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED' ? 'Repeat the complete tutor/learner exchange' : 'Repeat the phrase'}>
                 <Repeat className="w-3 h-3 text-stone-400 ml-1" />
+                <span className="text-[9px] uppercase text-stone-500 font-black px-1">
+                  {instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED' ? 'Cycles' : 'Repeat'}
+                </span>
                 {(['1x', '2x', '4x', 'inf'] as LoopMode[]).map((mode) => (
                   <button
                     key={mode}
@@ -964,11 +1000,6 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                       onClick={() => {
                         if (isPlaying) stopTransport();
                         setAssistanceLevel(lvl);
-                        // A one-bar exercise needs at least two repetitions for
-                        // REDUCED's tutor-bar -> learner-bar call-and-response.
-                        if (lvl === 'REDUCED' && timeline.totalBars === 1 && loopMode === '1x') {
-                          setLoopMode('2x');
-                        }
                       }}
                       className={`py-1.5 px-3 rounded-xl font-black text-[10px] uppercase transition-all cursor-pointer ${
                         assistanceLevel === lvl
@@ -1014,7 +1045,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                       {assistanceLevel === 'FULL'
                         ? 'Level 1/3'
                         : assistanceLevel === 'REDUCED'
-                        ? 'Level 2/3 (Alternating bars)'
+                        ? `Level 2/3 (${followTutorBars} tutor → ${followLearnerBars} you)`
                         : 'Level 3/3 (Click only)'}
                     </span>
                   </div>
@@ -1022,11 +1053,79 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                     {assistanceLevel === 'FULL'
                       ? 'The tutor plays the entire target pattern continuously while you play at the same time. Match its timing, sound and dynamics note-for-note.'
                       : assistanceLevel === 'REDUCED'
-                      ? 'Call and response: the tutor plays one complete bar, then becomes silent for the next bar while you copy it. The metronome keeps time during your bar.'
+                      ? `Call and response: the tutor models ${followTutorBars} bar${followTutorBars === 1 ? '' : 's'}, then becomes silent for ${followLearnerBars} response bar${followLearnerBars === 1 ? '' : 's'} while the metronome keeps time.`
                       : 'The tutor pattern is completely removed. Use only the metronome pulse and play the phrase from memory.'}
                   </p>
                 </div>
               </div>
+
+              {assistanceLevel === 'REDUCED' && (
+                <div className="bg-stone-950/90 rounded-2xl border border-amber-500/30 p-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 block">
+                        Call & Response Length
+                      </span>
+                      <p className="text-[10px] text-stone-400 mt-0.5">
+                        Increase the model or response block when one bar is not enough to absorb the phrase.
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-black font-mono text-white bg-stone-900 border border-stone-700 rounded-xl px-2.5 py-1 whitespace-nowrap">
+                      {followTutorBars} tutor → {followLearnerBars} you
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-black uppercase text-amber-200">Tutor model bars</span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[1, 2, 4].map((bars) => (
+                          <button
+                            key={`tutor-${bars}`}
+                            onClick={() => {
+                              if (isPlaying) stopTransport();
+                              setFollowTutorBars(bars);
+                            }}
+                            className={`py-2 rounded-xl text-xs font-black border transition-all ${
+                              followTutorBars === bars
+                                ? 'bg-amber-400 text-stone-950 border-amber-300'
+                                : 'bg-stone-900 text-stone-300 border-stone-800 hover:border-stone-600'
+                            }`}
+                          >
+                            {bars}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="text-[10px] font-black uppercase text-emerald-200">Your-turn bars</span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {[1, 2, 4].map((bars) => (
+                          <button
+                            key={`learner-${bars}`}
+                            onClick={() => {
+                              if (isPlaying) stopTransport();
+                              setFollowLearnerBars(bars);
+                            }}
+                            className={`py-2 rounded-xl text-xs font-black border transition-all ${
+                              followLearnerBars === bars
+                                ? 'bg-emerald-400 text-stone-950 border-emerald-300'
+                                : 'bg-stone-900 text-stone-300 border-stone-800 hover:border-stone-600'
+                            }`}
+                          >
+                            {bars}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-stone-400 leading-relaxed">
+                    One exchange = {followTutorBars} tutor bar{followTutorBars === 1 ? '' : 's'} followed by {followLearnerBars} silent response bar{followLearnerBars === 1 ? '' : 's'}. The repeat selector above repeats that whole exchange.
+                  </p>
+                </div>
+              )}
 
               {/* Assistance contract summary */}
               <div className="flex items-start gap-2.5 p-2.5 bg-stone-950/80 rounded-xl border border-stone-800">
@@ -1036,14 +1135,14 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                     {assistanceLevel === 'FULL'
                       ? 'Play together: tutor + you'
                       : assistanceLevel === 'REDUCED'
-                      ? 'Call & response: tutor bar → your bar'
+                      ? `Call & response: ${followTutorBars} tutor → ${followLearnerBars} you`
                       : 'Independent memory: metronome only'}
                   </span>
                   <span className="text-[10px] text-stone-400">
                     {assistanceLevel === 'FULL'
                       ? 'No silent response bar. Stay with the tutor through the whole phrase.'
                       : assistanceLevel === 'REDUCED'
-                      ? 'The tutor models a full bar, then gives you a full bar of space to answer.'
+                      ? `The tutor models ${followTutorBars} bar${followTutorBars === 1 ? '' : 's'}, then gives you ${followLearnerBars} bar${followLearnerBars === 1 ? '' : 's'} of uninterrupted response space.`
                       : 'No target drum audio is played; maintain the phrase from your internal count.'}
                   </span>
                 </div>
@@ -1070,12 +1169,12 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   )}
                   <div>
                     <span className="text-xs font-black uppercase tracking-wider block">
-                      {activeOwner === 'TUTOR' ? "TUTOR BAR — LISTEN" : 'YOUR BAR — PLAY IT NOW!'}
+                      {ownershipTitle || (activeOwner === 'TUTOR' ? 'TUTOR — LISTEN' : 'YOUR TURN — PLAY NOW')}
                     </span>
                     <span className="text-[11px] opacity-80">
-                      {activeOwner === 'TUTOR'
-                        ? 'Tutor plays one complete bar. Listen to the full pattern.'
-                        : 'Tutor is silent. Copy the complete bar while the metronome continues.'}
+                      {ownershipSubtitle || (activeOwner === 'TUTOR'
+                        ? 'Listen to the complete model block.'
+                        : 'Tutor is silent. Play the response block while the metronome continues.')}
                     </span>
                   </div>
                 </div>
@@ -1085,7 +1184,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                     activeOwner === 'TUTOR' ? 'bg-amber-400 text-stone-950' : 'bg-emerald-400 text-stone-950'
                   }`}
                 >
-                  {activeOwner === 'TUTOR' ? 'TUTOR BAR' : 'YOUR BAR'}
+                  {activeOwner === 'TUTOR' ? `TUTOR ${followTutorBars}B` : `YOU ${followLearnerBars}B`}
                 </span>
               </div>
             )}
@@ -1191,9 +1290,11 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               </span>
               <span className="font-mono text-stone-300 font-bold">
                 {isPlaying
-                  ? `BAR ${currentBar} OF ${timeline.totalBars} ${
-                      loopMode !== '1x' ? `(Rep ${completedLoops + 1})` : ''
-                    }`
+                  ? instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED'
+                    ? `EXCHANGE ${Math.floor((completedLoops * Math.max(1, timeline.totalBars) + Math.max(0, currentBar - 1)) / Math.max(2, followTutorBars + followLearnerBars)) + 1} • ${activeOwner === 'TUTOR' ? 'TUTOR' : 'YOUR TURN'}`
+                    : `BAR ${currentBar} OF ${timeline.totalBars} ${
+                        loopMode !== '1x' ? `(Rep ${completedLoops + 1})` : ''
+                      }`
                   : isStructureMission
                   ? `${timeline.totalBars}-Bar Structure`
                   : `2-Bar Phrase Cycle`}

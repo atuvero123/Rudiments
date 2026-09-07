@@ -67,3 +67,7 @@ C5 separates the learner's **profile estimate** from **verified placement**. The
 Overall placement never skips the canonical curriculum. Drummers can remain uneven across Pulse/Reading, Grooves, Rudiments, Fills and Coordination; each strand shows its own practical evidence. The placement modal also removes early grading, uses the real stated metronome tempo, identifies required equipment, and treats 6/8 as a two-pulse compound meter.
 
 See `C5_BUILD_REPORT.md` and `VERCEL_DEPLOY.md`.
+
+## C7.2 — Clock-Locked Counting & Adjustable Follow Exchanges
+
+C7.2 hardens timing and guided repetition after C7.1 field testing. Spoken count words now use local AudioBuffer samples scheduled on the same Web Audio clock as the metronome and drum voices, avoiding browser TTS lag/catch-up during rhythmic counting. Reduced Follow Cues now supports configurable 1/2/4-bar tutor model blocks and 1/2/4-bar learner response blocks, with the repeat control representing complete tutor→learner cycles. See `C7_2_BUILD_REPORT.md`.

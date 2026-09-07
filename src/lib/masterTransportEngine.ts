@@ -59,6 +59,8 @@ export interface MasterTransportConfig {
   assistanceLevel: AssistanceLevel;
   hasCountIn?: boolean;
   countInBars?: number; // 1 or 2 bars
+  followTutorBars?: number; // REDUCED Follow model bars before learner turn
+  followLearnerBars?: number; // REDUCED Follow response bars before tutor returns
   voiceCountEnabled?: boolean;
   clapEnabled?: boolean;
   isCoachThenYou?: boolean;
@@ -90,6 +92,8 @@ export class MasterMusicalTransport {
   private assistanceLevel: AssistanceLevel = 'FULL';
   private hasCountIn: boolean = true;
   private countInBars: number = 1;
+  private followTutorBars: number = 1;
+  private followLearnerBars: number = 1;
   private voiceCountEnabled: boolean = false;
   private clapEnabled: boolean = false;
   private isCoachThenYou: boolean = false;
@@ -184,6 +188,8 @@ export class MasterMusicalTransport {
     this.assistanceLevel = config.assistanceLevel;
     this.hasCountIn = config.hasCountIn ?? true;
     this.countInBars = config.countInBars ?? 1;
+    this.followTutorBars = Math.max(1, Math.min(8, config.followTutorBars ?? 1));
+    this.followLearnerBars = Math.max(1, Math.min(8, config.followLearnerBars ?? 1));
     this.voiceCountEnabled = config.voiceCountEnabled ?? false;
     this.clapEnabled = config.clapEnabled ?? false;
     this.isCoachThenYou = config.isCoachThenYou ?? false;
@@ -385,12 +391,48 @@ export class MasterMusicalTransport {
 
   private scheduleSpeechToken(token: string, eventAudioTime: number): void {
     if (!this.voiceCountEnabled || !this.audioCtx) return;
-    const delayMs = Math.max(0, (eventAudioTime - this.audioCtx.currentTime) * 1000);
+
+    // C7.2 primary path: count words are decoded local audio samples and are
+    // scheduled at the exact same AudioContext time as click/clap/drum events.
+    // This removes the browser SpeechSynthesis latency that previously caused
+    // the voice to trail the groove and then audibly catch up.
+    if (audioEngine.playCountVoice(token, eventAudioTime, 0.9)) return;
+
+    // Compatibility fallback for an asset-load failure. Fire TTS slightly early
+    // and discard stale requests instead of building a delayed speech queue.
+    const estimatedSpeechLeadSeconds = 0.14;
+    const fireAt = eventAudioTime - estimatedSpeechLeadSeconds;
+    const delayMs = Math.max(0, (fireAt - this.audioCtx.currentTime) * 1000);
     const timerId = window.setTimeout(() => {
       this.speechTimers.delete(timerId);
+      if (!this.audioCtx) return;
+      if (this.audioCtx.currentTime - eventAudioTime > 0.12) return;
       this.speakToken(token);
     }, delayMs);
     this.speechTimers.add(timerId);
+  }
+
+  private isReducedLearnerBarAt(absoluteBarIndex: number): boolean {
+    const tutorBars = Math.max(1, this.followTutorBars);
+    const learnerBars = Math.max(1, this.followLearnerBars);
+    const cycleBars = tutorBars + learnerBars;
+    const position = ((absoluteBarIndex % cycleBars) + cycleBars) % cycleBars;
+    return position >= tutorBars;
+  }
+
+  private getReducedBarProgress(absoluteBarIndex: number): {
+    owner: 'TUTOR' | 'LEARNER';
+    indexWithinOwner: number;
+    ownerBars: number;
+  } {
+    const tutorBars = Math.max(1, this.followTutorBars);
+    const learnerBars = Math.max(1, this.followLearnerBars);
+    const cycleBars = tutorBars + learnerBars;
+    const position = ((absoluteBarIndex % cycleBars) + cycleBars) % cycleBars;
+    if (position < tutorBars) {
+      return { owner: 'TUTOR', indexWithinOwner: position + 1, ownerBars: tutorBars };
+    }
+    return { owner: 'LEARNER', indexWithinOwner: position - tutorBars + 1, ownerBars: learnerBars };
   }
 
   /**
@@ -521,7 +563,7 @@ export class MasterMusicalTransport {
     const isReducedLearnerBar =
       this.instructionMode === 'FOLLOW' &&
       this.assistanceLevel === 'REDUCED' &&
-      absoluteBarIndex % 2 === 1;
+      this.isReducedLearnerBarAt(absoluteBarIndex);
     const isFullFollow =
       this.instructionMode === 'FOLLOW' && this.assistanceLevel === 'FULL';
 
@@ -578,8 +620,8 @@ export class MasterMusicalTransport {
       }
       if (this.onLearnerSpaceStartCb && ev.subdivisionIndex === 0) {
         this.onLearnerSpaceStartCb({
-          purpose: 'Reduced Follow response bar',
-          expectedLearnerAction: 'Play the complete bar back from memory while the tutor stays silent.',
+          purpose: 'Reduced Follow response block',
+          expectedLearnerAction: `Play ${this.followLearnerBars} learner bar${this.followLearnerBars === 1 ? '' : 's'} from memory while the tutor stays silent.`,
           durationBeats: this.timeline?.beatsPerBar || 4,
           isIntentionalSilence: true,
         });
@@ -827,11 +869,12 @@ export class MasterMusicalTransport {
     const isReducedLearnerBar =
       this.instructionMode === 'FOLLOW' &&
       this.assistanceLevel === 'REDUCED' &&
-      absoluteBarIndex % 2 === 1;
+      this.isReducedLearnerBarAt(absoluteBarIndex);
     const isReducedTutorBar =
       this.instructionMode === 'FOLLOW' &&
       this.assistanceLevel === 'REDUCED' &&
       !isReducedLearnerBar;
+    const reducedBarProgress = this.getReducedBarProgress(absoluteBarIndex);
     const activeSubdivisionCount = this.timeline.events?.[0]?.totalSubdivisionsInBeat || this.teachingDefinition?.subdivisionCount || 1;
     const currentSubdivision = Math.floor((currentGlobalBeat % 1) * activeSubdivisionCount);
 
@@ -914,11 +957,11 @@ export class MasterMusicalTransport {
     } else if (this.instructionMode === 'FOLLOW' && this.assistanceLevel === 'REDUCED') {
       activeOwner = isReducedLearnerBar ? 'LEARNER' : 'TUTOR';
       ownershipTitle = isReducedLearnerBar
-        ? 'YOUR BAR — TUTOR SILENT'
-        : 'TUTOR BAR — LISTEN & COPY';
+        ? `YOUR TURN — BAR ${reducedBarProgress.indexWithinOwner}/${reducedBarProgress.ownerBars}`
+        : `TUTOR — MODEL BAR ${reducedBarProgress.indexWithinOwner}/${reducedBarProgress.ownerBars}`;
       ownershipSubtitle = isReducedLearnerBar
-        ? 'Play the complete bar from memory while only the metronome keeps time.'
-        : 'Hear the complete target bar. Your matching response comes next.';
+        ? `Play the response block from memory; tutor stays silent for ${this.followLearnerBars} bar${this.followLearnerBars === 1 ? '' : 's'}.`
+        : `Listen across ${this.followTutorBars} model bar${this.followTutorBars === 1 ? '' : 's'} before your response block begins.`;
     } else if (isLearnerSpace) {
       activeOwner = 'LEARNER';
       ownershipTitle = 'YOUR TURN — PLAY THE PHRASE';
@@ -999,6 +1042,11 @@ export class MasterMusicalTransport {
 
   public setCountInBars(bars: number): void {
     this.countInBars = Math.max(1, Math.min(4, bars));
+  }
+
+  public setFollowBarPattern(tutorBars: number, learnerBars: number): void {
+    this.followTutorBars = Math.max(1, Math.min(8, tutorBars));
+    this.followLearnerBars = Math.max(1, Math.min(8, learnerBars));
   }
 
   public getTeachingStage(): TeachingStage {
