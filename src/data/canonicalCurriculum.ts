@@ -521,8 +521,8 @@ export const CANONICAL_CURRICULUM_COMPETENCIES: CurriculumCompetency[] = [
     prerequisiteCompetencyIds: ['comp-grv-stability'],
     unlocksCompetencyIds: ['comp-perf-song-app'],
     description: 'Preventing loud cymbals from washing out vocalists and the rest of the band.',
-    countingPattern: 'Quiet HH / Punchy S & K',
-    stickingPattern: 'Dynamic differentiation across limbs',
+    countingPattern: '1 & 2 & 3 & 4 &',
+    stickingPattern: 'Soft HH on all 8ths • firm Snare on 2 & 4 • punchy Kick on 1 & 3',
     musicalRole: 'Essential for live sound mixing and band clarity.',
   },
 

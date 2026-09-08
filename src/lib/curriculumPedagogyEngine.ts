@@ -147,6 +147,27 @@ export function getCurriculumPedagogyDomain(competency: CurriculumCompetency): C
 
 export function getCurriculumPedagogyProfile(competency: CurriculumCompetency): CurriculumPedagogyProfile {
   const domain = getCurriculumPedagogyDomain(competency);
+
+  // C7.16 — Musical Balance & Cymbal Sensitivity has a required acoustic
+  // hierarchy, not merely an optional accent idea. Keep the generic DYNAMICS
+  // family flexible for later competencies, but make this canonical skill
+  // explicit so its journey, visual reference and evidence all teach the same
+  // soft-cymbal / firm-kick-and-snare relationship.
+  if (competency.id === 'comp-dyn-song-balance') {
+    return {
+      domain,
+      ...DOMAIN_PROFILES.DYNAMICS,
+      patternDisplay: 'REQUIRED',
+      preferredEquipment: 'Full Drum Kit',
+      conceptualFocus: 'Build a three-voice volume hierarchy: quiet cymbal timekeeping underneath a firm snare backbeat and clear kick.',
+      listeningFocus: 'The kick and snare remain easy to hear while the hi-hat supports the pulse without becoming the loudest continuous voice.',
+      musicalTransfer: 'Shape verse-to-chorus energy without letting cymbal volume or tempo rise uncontrollably.',
+      diagnosticIssues: ['cymbal wash', 'flat dynamics', 'backbeat buried', 'tempo changes with volume', 'accent inconsistency'],
+      missionLabels: ['Map the Volume Hierarchy', 'Count Without Swelling', 'Hear the Balance', 'Follow the Dynamic Shape', 'Balance the Kit Alone', 'Shape Verse & Chorus'],
+      evidenceLabels: ['Volume hierarchy understood', 'Pulse survives dynamics', 'Balance recognized', 'Guided balance stable', 'Independent balance clean', 'Dynamics serve the song'],
+    };
+  }
+
   return { domain, ...DOMAIN_PROFILES[domain] };
 }
 

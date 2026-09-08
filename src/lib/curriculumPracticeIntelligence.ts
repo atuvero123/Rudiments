@@ -648,6 +648,19 @@ function c7StructureFor(
     };
   }
 
+  // C7.16: Musical Balance & Cymbal Sensitivity owns an 8-bar certification
+  // standard. Its transfer mission therefore uses a real 8-bar verse/chorus
+  // dynamic form instead of borrowing the generic 16-bar journey.
+  if (domain === 'DYNAMICS' && competency.id === 'comp-dyn-song-balance' && missionNumber === 6 && bars >= 8) {
+    return {
+      ...base,
+      sections: [
+        { label: 'VERSE', startBar: 1, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Keep closed hi-hat medium-soft. Let kick and snare remain clearly above it without changing tempo.' },
+        { label: 'CHORUS', startBar: 5, bars: 4, intensity: 'STRONG' as const, performanceCue: 'Lift the kick/snare intent one level while keeping cymbals controlled. Energy rises; cymbal wash does not.' },
+      ],
+    };
+  }
+
   return base;
 }
 
@@ -685,6 +698,8 @@ export function buildC7CompetencySession(
     ? [1, 1, 2, 2, 4, 4]
     : pedagogy.domain === 'GROOVE'
     ? [2, 4, 4, 8, 16, 16]
+    : competency.id === 'comp-dyn-song-balance'
+    ? [2, 4, 4, 8, 8, 8]
     : [2, 4, 4, 8, 8, 16];
   const tempoOffsets = [0, 0, 2, 4, 6, target - base];
 
@@ -695,6 +710,7 @@ export function buildC7CompetencySession(
     const bpm = musical ? target : Math.min(target, base + Math.max(0, tempoOffsets[index]));
     const isReading = pedagogy.domain === 'READING';
     const isGrooveSongTransfer = pedagogy.domain === 'GROOVE' && musical;
+    const isMusicalBalance = competency.id === 'comp-dyn-song-balance';
     const readingPurposes = [
       'Identify the written drum voices and staff positions before playing.',
       'Count the written rhythm from left to right while keeping your eyes on the staff.',
@@ -711,9 +727,27 @@ export function buildC7CompetencySession(
       `Metronome only. Sight-read the displayed bar for ${competency.durationCriterion}. If you lose your place, stop and restart from the written beginning rather than from memory.`,
       `${competency.musicalApplicationRequirement}. Read continuously through the displayed phrase and preserve pulse, written voices and rests.`,
     ];
+    const musicalBalancePurposes = [
+      'Build the volume hierarchy before worrying about louder playing: cymbal underneath, kick and snare clearly on top.',
+      'Keep the 1-&-2-&-3-&-4-& grid unchanged while each limb keeps its assigned dynamic role.',
+      'Hear the difference between a balanced kit and cymbal wash: kick/snare stay clear while hi-hat supports rather than dominates.',
+      'Follow the balanced groove with reduced tutor bars and preserve the same sound hierarchy in your response bars.',
+      'Play the complete 8-bar balance standard independently with metronome only.',
+      'Shape a real 8-bar Verse → Chorus form: raise musical energy without allowing cymbal volume or tempo to run away.',
+    ];
+    const musicalBalanceInstructions = [
+      'Use closed hi-hat 8ths at medium-soft volume, firm snare on 2 and 4, and punchy kick on 1 and 3. First hear and feel which voice should sit in front and which should sit behind.',
+      'Count “1 & 2 & 3 & 4 &” aloud. Keep the hi-hat low and even on every syllable while kick/snare accents land without pulling the count forward.',
+      'Listen to the coach model for the mix, not just the notes. Ask: Can I hear every backbeat and kick clearly? Does the hi-hat stay supportive instead of becoming the loudest continuous sound?',
+      'Use Reduced Follow. Match the tutor bar, then reproduce the same volume hierarchy in your own bar. If your right hand swells when the snare hits, lower the hi-hat immediately rather than slowing down.',
+      'Metronome only. Play all 8 bars at the governed working tempo: soft closed hi-hat 8ths, firm snare 2/4, punchy kick 1/3. Stop and grade honestly if cymbal wash, buried backbeat, or tempo change appears.',
+      'Bars 1–4 VERSE: controlled hats with clear but restrained kick/snare. Bars 5–8 CHORUS: lift kick/snare intent while hats remain underneath. Keep exactly the same 1-&-2-&-3-&-4-& pulse from Bar 1 through Bar 8.',
+    ];
 
     const purpose = isReading
       ? readingPurposes[index]
+      : isMusicalBalance
+        ? musicalBalancePurposes[index]
       : isGrooveSongTransfer
         ? 'Serve a complete 16-bar Verse → Chorus → Verse → Chorus form by changing dynamics without changing tempo or pocket.'
       : n === 1
@@ -729,6 +763,8 @@ export function buildC7CompetencySession(
                 : pedagogy.musicalTransfer;
     const instructions = isReading
       ? readingInstructions[index]
+      : isMusicalBalance
+        ? musicalBalanceInstructions[index]
       : isGrooveSongTransfer
         ? `Metronome only. Play the full 16-bar form: Bars 1–4 VERSE (controlled), 5–8 CHORUS (lift), 9–12 VERSE RETURN (settle), 13–16 FINAL CHORUS (lift again). Keep the exact same groove and tempo throughout; only the musical energy changes. ${competency.musicalApplicationRequirement}.`
       : n === 1

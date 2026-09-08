@@ -110,7 +110,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     : pedagogyDomain === 'FILL_TRANSITION'
     ? 'Fill Pattern'
     : pedagogyDomain === 'DYNAMICS'
-    ? 'Accent Pattern'
+    ? 'Dynamic Voice Map'
     : 'Pulse Pattern';
 
   // Exercise type detection for pedagogical tailoring
@@ -357,6 +357,18 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         { label: '>L', hand: 'L', accent: true, count: 'la' },
       ];
     }
+    // C7.16: dynamics are a voice hierarchy, not a word-split sticking
+    // sentence. Render the authored one-bar event map directly so the learner
+    // sees SOFT hi-hat positions against the stronger kick/snare anchors.
+    if (pedagogyDomain === 'DYNAMICS' && teachingDef?.events?.length) {
+      const firstBarEvents = teachingDef.events.filter((event) => (event.bar || 1) === 1);
+      return firstBarEvents.map((event) => ({
+        label: event.label,
+        hand: event.hand === 'L' ? 'L' : event.hand === 'R' ? 'R' : 'K',
+        accent: Boolean(event.accent),
+        count: event.countToken,
+      }));
+    }
     const canonicalSticking = teachingDef?.sticking || exercise.sticking;
     if (canonicalSticking) {
       const parts = canonicalSticking.split(/\s+/).filter(Boolean);
@@ -375,7 +387,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       { label: 'R', hand: 'R', accent: false, count: '&' },
       { label: 'R', hand: 'R', accent: false, count: 'a' },
     ];
-  }, [isStructureMission, isSixStrokeRoll, exercise.sticking, teachingDef]);
+  }, [isStructureMission, isSixStrokeRoll, pedagogyDomain, exercise.sticking, teachingDef]);
 
   const hasLandingTarget = useMemo(
     () => timeline.events.some((event) => event.role === 'landing'),
@@ -1611,7 +1623,11 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                     {st.label}
                   </span>
                   <span className="text-[8px] font-mono opacity-70 block mt-0.5">
-                    {isStructureMission ? (st.accent ? 'Bar Start' : 'Pulse') : st.accent ? 'Accent' : 'Tap'}
+                    {isStructureMission
+                      ? (st.accent ? 'Bar Start' : 'Pulse')
+                      : pedagogyDomain === 'DYNAMICS'
+                      ? (st.accent ? 'STRONG' : 'SOFT')
+                      : st.accent ? 'Accent' : 'Tap'}
                   </span>
                 </div>
               ))}

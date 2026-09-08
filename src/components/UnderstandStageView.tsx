@@ -18,6 +18,8 @@ import { PracticeExercise, RhythmTimeline, CompetencyTeachingDefinition } from '
 import { audioEngine } from '../lib/audioEngine';
 import { masterTransport } from '../lib/masterTransportEngine';
 import { DrumNotationStaff } from './DrumNotationStaff';
+import { CURRICULUM_COMPETENCIES_BY_ID } from '../data/canonicalCurriculum';
+import { deriveCanonicalVerificationTransport, formatVerificationLength } from '../lib/verificationTransportEngine';
 
 interface UnderstandStageViewProps {
   exercise: PracticeExercise;
@@ -70,30 +72,47 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
     });
   };
 
-  const handlePlaySingleSurface = (surface: string, accent: boolean) => {
-    if (isPad) {
-      const zone = surface === 'pad_edge' || surface === 'crash' || surface === 'kick'
-        ? 'rim_edge'
-        : surface === 'pad_left' || surface.startsWith('tom_')
-        ? 'left_zone'
-        : surface === 'pad_right' || surface.includes('hihat') || surface === 'ride'
-        ? 'right_zone'
-        : 'center';
-      audioEngine.playPadTap(accent, zone);
-    } else {
-      const voice = surface === 'pad_center'
-        ? 'snare'
-        : surface === 'pad_edge'
-        ? 'crash'
-        : surface === 'pad_left'
-        ? 'tom_high'
-        : surface === 'pad_right'
-        ? 'tom_mid'
-        : surface;
-      audioEngine.playInstrumentSound(voice, accent);
-    }
+  const handlePlayTeachingEvent = (event: CompetencyTeachingDefinition['events'][number]) => {
+    // C7.16: a teaching event can own simultaneous kit voices (for example
+    // firm snare + quiet hi-hat). Preview the whole authored event instead of
+    // auditioning only its primary surface, otherwise dynamic balance lessons
+    // teach an incomplete sound. Pad mode maps the voices to distinct zones.
+    const surfaces = event.surfaces?.length ? event.surfaces : [event.surface];
+    const eventTime = audioEngine.getAudioContextTime() + 0.01;
+
+    surfaces.forEach((surface) => {
+      const surfaceName = String(surface);
+      const surfaceAccent = Boolean(event.accent) && !(
+        teachingDef.competencyId === 'comp-dyn-song-balance' && surfaceName.includes('hihat')
+      );
+      if (isPad) {
+        const zone = surfaceName === 'pad_edge' || surfaceName === 'crash' || surfaceName === 'kick'
+          ? 'rim_edge'
+          : surfaceName === 'pad_left' || surfaceName.startsWith('tom_')
+          ? 'left_zone'
+          : surfaceName === 'pad_right' || surfaceName.includes('hihat') || surfaceName === 'ride'
+          ? 'right_zone'
+          : 'center';
+        audioEngine.playPadTap(surfaceAccent, zone, eventTime);
+      } else {
+        const voice = surfaceName === 'pad_center'
+          ? 'snare'
+          : surfaceName === 'pad_edge'
+          ? 'crash'
+          : surfaceName === 'pad_left'
+          ? 'tom_high'
+          : surfaceName === 'pad_right'
+          ? 'tom_mid'
+          : surfaceName;
+        audioEngine.playInstrumentSound(voice, surfaceAccent, eventTime);
+      }
+    });
   };
 
+  const canonicalCompetency = CURRICULUM_COMPETENCIES_BY_ID.get(teachingDef.competencyId);
+  const verificationTransport = canonicalCompetency
+    ? deriveCanonicalVerificationTransport(canonicalCompetency, teachingDef)
+    : null;
   const explanation = teachingDef.musicalExplanation;
   const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
   const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
@@ -106,7 +125,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
     : pedagogyDomain === 'FILL_TRANSITION'
     ? 'Required Fill Pattern — Play This'
     : pedagogyDomain === 'DYNAMICS'
-    ? 'Suggested Accent / Motion Pattern'
+    ? 'Required Dynamic Voice Map — Play This'
     : 'Required Pulse Pattern — Play This';
 
   return (
@@ -195,9 +214,9 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
         <div className="bg-stone-900 p-3 rounded-2xl border border-stone-800 space-y-1">
           <span className="text-[10px] uppercase font-bold text-stone-400">Verification Goal</span>
           <p className="font-mono font-black text-emerald-400 text-base">
-            {teachingDef.certificationTempo.bpm} BPM
+            {verificationTransport?.bpm || teachingDef.certificationTempo.bpm} BPM
           </p>
-          <span className="text-[10px] text-stone-400">{teachingDef.certificationTempo.durationSeconds}s standard</span>
+          <span className="text-[10px] text-stone-400">{verificationTransport ? `${formatVerificationLength(verificationTransport)} standard` : `${teachingDef.certificationTempo.durationSeconds}s standard`}</span>
         </div>
 
         <div className="bg-stone-900 p-3 rounded-2xl border border-stone-800 space-y-1">
@@ -246,7 +265,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
             {teachingDef.events.map((ev, idx) => (
               <button
                 key={idx}
-                onClick={() => handlePlaySingleSurface(ev.surface, ev.accent)}
+                onClick={() => handlePlayTeachingEvent(ev)}
                 className={`flex flex-col items-center justify-center min-w-[3rem] px-2.5 py-2 rounded-xl border transition-all cursor-pointer active:scale-95 ${
                   ev.accent
                     ? 'bg-amber-400 text-stone-950 border-amber-300 font-black shadow-md'
@@ -254,10 +273,10 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
                 }`}
               >
                 <span className="text-[9px] uppercase font-mono tracking-wider opacity-80">
-                  {ev.accent ? '> ACCENT' : 'TAP'}
+                  {pedagogyDomain === 'DYNAMICS' ? (ev.accent ? 'STRONG' : 'SOFT') : ev.accent ? '> ACCENT' : 'TAP'}
                 </span>
                 <span className="text-base sm:text-lg font-mono font-black">
-                  {ev.accent ? `>${ev.hand}` : ev.hand}
+                  {pedagogyDomain === 'DYNAMICS' ? ev.label : ev.accent ? `>${ev.hand}` : ev.hand}
                 </span>
                 <span className="text-[9px] font-mono opacity-80 mt-0.5">
                   {ev.countToken}

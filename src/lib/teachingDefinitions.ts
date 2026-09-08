@@ -366,6 +366,63 @@ export const TEACHING_DEFINITIONS: Record<string, CompetencyTeachingDefinition> 
     supportsCoachThenYou: true,
   },
 
+  // C7.16 AUTHORED: MUSICAL BALANCE & CYMBAL SENSITIVITY
+  // C7.16: this competency cannot use the generic DYNAMICS fallback (which
+  // renders a snare-only grid). The learning target is a real three-voice
+  // balance: restrained 8th-note hi-hat under a firm backbeat and kick.
+  'comp-dyn-song-balance': {
+    id: 'teach-dyn-song-balance',
+    competencyId: 'comp-dyn-song-balance',
+    skillId: 'dyn-song-balance',
+    title: 'Musical Balance & Cymbal Sensitivity',
+    meter: '4/4',
+    beatsPerBar: 4,
+    subdivision: '8th Notes',
+    subdivisionCount: 2,
+    countTokens: ['1', '&', '2', '&', '3', '&', '4', '&'],
+    spokenTokens: ['one', 'and', 'two', 'and', 'three', 'and', 'four', 'and'],
+    sticking: 'Soft HH on all 8ths • firm Snare on 2 & 4 • punchy Kick on 1 & 3',
+    limbPattern: 'RH keeps the closed hi-hat medium-soft; LH keeps a firm snare backbeat on 2 & 4; RF keeps a punchy kick on 1 & 3',
+    drumSurfaces: ['Closed Hi-Hat', 'Snare', 'Kick'],
+    accentPositions: [0, 2, 4, 6],
+    bars: 1,
+    events: [
+      { beat: 1, subdivision: 0, countToken: '1', hand: 'BOTH', surface: 'kick', surfaces: ['kick', 'hihat_closed'], accent: true, label: 'K + soft HH', description: 'Kick anchors Beat 1 while the hi-hat stays underneath it.' },
+      { beat: 1, subdivision: 1, countToken: '&', hand: 'R', surface: 'hihat_closed', accent: false, label: 'soft HH', description: 'Quiet hi-hat upbeat. Keep the cymbal below the kick and snare.' },
+      { beat: 2, subdivision: 0, countToken: '2', hand: 'BOTH', surface: 'snare', surfaces: ['snare', 'hihat_closed'], accent: true, label: 'S + soft HH', description: 'Firm backbeat on 2; the hi-hat must not jump up with the snare.' },
+      { beat: 2, subdivision: 1, countToken: '&', hand: 'R', surface: 'hihat_closed', accent: false, label: 'soft HH', description: 'Quiet hi-hat upbeat with relaxed wrist motion.' },
+      { beat: 3, subdivision: 0, countToken: '3', hand: 'BOTH', surface: 'kick', surfaces: ['kick', 'hihat_closed'], accent: true, label: 'K + soft HH', description: 'Kick anchors Beat 3 while the cymbal remains controlled.' },
+      { beat: 3, subdivision: 1, countToken: '&', hand: 'R', surface: 'hihat_closed', accent: false, label: 'soft HH', description: 'Quiet hi-hat upbeat. Do not let volume creep upward.' },
+      { beat: 4, subdivision: 0, countToken: '4', hand: 'BOTH', surface: 'snare', surfaces: ['snare', 'hihat_closed'], accent: true, label: 'S + soft HH', description: 'Firm backbeat on 4 with the hi-hat still supporting underneath.' },
+      { beat: 4, subdivision: 1, countToken: '&', hand: 'R', surface: 'hihat_closed', accent: false, label: 'soft HH', description: 'Quiet final upbeat; finish the bar without lifting the cymbal volume.' },
+    ],
+    musicalExplanation: {
+      whatAmILearning: 'A balanced drum sound is not every limb at the same volume. The cymbal timekeeper should sit underneath the kick and snare so the groove is clear without washing over singers, guitars, keys or the room.',
+      howIsItCounted: 'Count “1 & 2 & 3 & 4 &” evenly. The timing grid never changes when the volume hierarchy changes.',
+      handsAndFeet: 'Right hand: relaxed, low-height 8th notes on closed hi-hat. Left hand: confident backbeats on 2 and 4. Right foot: solid kick on 1 and 3. Keep the right hand soft even when another limb accents with it.',
+      drumSurfaces: 'Closed hi-hat with the stick tip for a controlled sound, center snare for a clear backbeat, and bass drum for the low-end anchor.',
+      musicalApplication: 'Use the same groove underneath a verse or chorus while protecting vocal space. Lift musical energy mainly with kick/snare intent before making the cymbals louder.',
+      whatToListenFor: 'You should hear the kick and snare clearly above the hi-hat while the 8th-note pulse stays even. If the cymbal becomes the loudest continuous sound, rebalance immediately.',
+    },
+    commonMistakes: [
+      'Hi-hat becomes as loud as or louder than the snare backbeat',
+      'Right hand gets louder whenever the snare or kick accents underneath it',
+      'Tempo speeds up when the drummer tries to increase energy',
+      'Snare and kick become too soft in an attempt to make the whole kit quiet',
+      'Opening or crashing the cymbal to create intensity instead of controlling the existing groove',
+    ],
+    diagnosticIssues: ['Cymbal wash', 'Flat dynamics', 'Backbeat buried', 'Tempo changes with volume', 'Accent inconsistency'],
+    workingTempo: 65,
+    certificationTempo: {
+      bpm: 75,
+      // Canonical verification derives 8 bars x 4 pulses x 60 / 75 = 25.6s.
+      durationSeconds: 25.6,
+      standardText: '8 bars demonstrating soft cymbals and firm backbeat at 75 BPM',
+    },
+    recommendedAssistance: 'FULL',
+    supportsCoachThenYou: true,
+  },
+
   // 8. QUARTER-NOTE FILL
   'comp-fill-quarter': {
     id: 'teach-fill-quarter',
@@ -1094,6 +1151,7 @@ export function findTeachingDefinition(identifier: string): CompetencyTeachingDe
   if (lower.includes('backbeat')) return TEACHING_DEFINITIONS['comp-grv-backbeat'];
   if (lower.includes('groove') && lower.includes('stability')) return TEACHING_DEFINITIONS['comp-grv-stability'];
   if (lower.includes('kick') && lower.includes('variation')) return TEACHING_DEFINITIONS['comp-grv-kick-variation'];
+  if ((lower.includes('musical balance') || lower.includes('cymbal sensitivity') || (lower.includes('cymbal') && lower.includes('balance')))) return TEACHING_DEFINITIONS['comp-dyn-song-balance'];
   if (lower.includes('paradiddle')) return TEACHING_DEFINITIONS['comp-rud-single-paradiddle'];
   if (lower.includes('single') && lower.includes('stroke')) return TEACHING_DEFINITIONS['comp-rud-singles'];
   if (lower.includes('double') && lower.includes('stroke')) return TEACHING_DEFINITIONS['comp-rud-doubles'];
