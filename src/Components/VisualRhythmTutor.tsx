@@ -48,9 +48,6 @@ import { UnderstandStageView } from './UnderstandStageView';
 import { CountingTutorView } from './CountingTutorView';
 import { InteractiveDrumPad } from './InteractiveDrumPad';
 import { EvaluateStageView } from './EvaluateStageView';
-import { CurriculumPhraseVisualizer } from './CurriculumPhraseVisualizer';
-import { DrumNotationStaff } from './DrumNotationStaff';
-import { buildNotationProgressionDefinition } from '../lib/notationProgression';
 
 interface VisualRhythmTutorProps {
   exercise: PracticeExercise;
@@ -71,22 +68,6 @@ export type PhraseStage =
   | 'IDLE';
 export type LoopMode = '1x' | '2x' | '4x' | 'inf';
 
-function getMissionInitialTeachingStage(exercise: PracticeExercise, hasDefinition = true): TeachingStage {
-  const stage = exercise.curriculumMission?.stage;
-  if (!stage) return hasDefinition ? 'UNDERSTAND' : 'WATCH';
-  if (stage === 'UNDERSTAND') return 'UNDERSTAND';
-  if (stage === 'INTERNALIZE') return 'COUNT';
-  if (stage === 'HEAR') return 'WATCH';
-  if (stage === 'FOLLOW' || stage === 'REDUCED') return 'FOLLOW';
-  return 'PLAY';
-}
-
-function getTeachingStageInstructionMode(stage: TeachingStage): InstructionMode {
-  if (stage === 'FOLLOW') return 'FOLLOW';
-  if (stage === 'PLAY' || stage === 'EVALUATE') return 'PLAY';
-  return 'WATCH';
-}
-
 export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   exercise,
   currentTempo,
@@ -95,23 +76,6 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
 }) => {
   const isPad = exercise.equipmentRequired === 'Practice Pad';
   const title = exercise.title;
-  const isStructureMission =
-    exercise.curriculumMission?.competencyId === 'comp-meter-44' ||
-    exercise.skillIds?.includes('time-44') ||
-    exercise.skillId === 'time-44';
-  const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
-  const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
-  const motorReferenceNoun = pedagogyDomain === 'RUDIMENT'
-    ? 'Sticking'
-    : pedagogyDomain === 'GROOVE' || pedagogyDomain === 'STYLE'
-    ? 'Limb / Voice Map'
-    : pedagogyDomain === 'COORDINATION'
-    ? 'Limb Sequence'
-    : pedagogyDomain === 'FILL_TRANSITION'
-    ? 'Fill Pattern'
-    : pedagogyDomain === 'DYNAMICS'
-    ? 'Accent Pattern'
-    : 'Pulse Pattern';
 
   // Exercise type detection for pedagogical tailoring
   const isWarmup = exercise.phase === 'WARM UP' || exercise.exerciseType === 'warmup';
@@ -133,87 +97,22 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   }, [exercise.id, exercise.skillIds, exercise.title]);
 
   const teachingDef = useMemo(() => {
-    const base = matchedTeachingDef || getTeachingDefinition(exercise.title || exercise.id);
-    const structure = exercise.curriculumMission?.structure;
-
-    // C7.3: reading missions use an authored notation progression. Each mission
-    // gets written material appropriate to its stage (identify -> count -> hear ->
-    // follow -> sight-read -> musical chart) rather than replaying one memorized bar.
-    if (matchedTeachingDef && exercise.curriculumMission?.competencyId === 'comp-reading-notation') {
-      return buildNotationProgressionDefinition(base, exercise.curriculumMission?.missionNumber || 1);
-    }
-
-    // C7.13 mission-length integrity: every governed canonical mission must
-    // drive the master transport across the same bar count shown by the C7
-    // structure visualizer. Previously only the authored 4/4 structure lesson
-    // expanded its event template, leaving generic groove missions with a
-    // misleading 8/16-bar visualizer over a one/two-bar audio loop. Repeat any
-    // authored source bars cyclically across the governed mission structure.
-    // Reading remains handled above because it has its own authored notation
-    // progression and must never be converted into a memorized generic pattern.
-    if (matchedTeachingDef && exercise.curriculumMission && structure) {
-      const authoredBars = Math.max(
-        1,
-        ...base.events.map((event) => Math.max(1, event.bar || 1))
-      );
-      const landmarks = new Set(structure.highlightLandmarkBars || [1]);
-      const sections = structure.sections || [];
-      const expandedEvents = Array.from({ length: structure.totalBars }, (_, index) => index + 1).flatMap((bar) => {
-        const sourceBar = ((bar - 1) % authoredBars) + 1;
-        const sourceEvents = base.events.filter((event) => Math.max(1, event.bar || 1) === sourceBar);
-        const activeSection = sections.find((section) =>
-          bar >= section.startBar && bar < section.startBar + section.bars
-        );
-
-        return sourceEvents.map((event) => {
-          const isMeter44 = exercise.curriculumMission?.competencyId === 'comp-meter-44';
-          const sectionDirection = activeSection?.performanceCue
-            ? `${activeSection.label}: ${activeSection.performanceCue}`
-            : '';
-          return {
-            ...event,
-            bar,
-            accent: isMeter44 && event.beat === 1 ? landmarks.has(bar) : event.accent,
-            label: isMeter44 && event.beat === 1 ? `Bar ${bar} (1)` : event.label,
-            description: isMeter44 && event.beat === 1
-              ? landmarks.has(bar)
-                ? `Phrase landmark — Bar ${bar} Beat 1`
-                : `Bar ${bar} Beat 1`
-              : sectionDirection
-              ? `${event.description || event.label}. ${sectionDirection}`
-              : event.description,
-          };
-        });
-      });
-      return { ...base, bars: structure.totalBars, events: expandedEvents };
-    }
-
-    return base;
-  }, [matchedTeachingDef, exercise.id, exercise.title, exercise.curriculumMission]);
+    return matchedTeachingDef || getTeachingDefinition(exercise.title || exercise.id);
+  }, [matchedTeachingDef, exercise.id, exercise.title]);
 
   const timeline: RhythmTimeline = useMemo(() => {
     return matchedTeachingDef
-      ? buildTimelineFromTeachingDefinition(teachingDef, isPad)
+      ? buildTimelineFromTeachingDefinition(matchedTeachingDef, isPad)
       : buildRhythmTimeline(exercise);
-  }, [exercise, isPad, matchedTeachingDef, teachingDef]);
-
-  // C7.7: canonical curriculum missions own their teaching stage. The six-stage
-  // strip remains a progress map, but it is not a bypass control inside governed
-  // C6/C7 sessions. This keeps Mission 1 in Understand, Mission 2 in Count,
-  // reduced-guidance missions in Follow, and only true independence missions in Play.
-  const isGovernedCanonicalMission = Boolean(
-    exercise.curriculumMission && exercise.sessionSource === 'C7_CANONICAL_COMPETENCY'
-  );
-  const canonicalTeachingStage = getMissionInitialTeachingStage(exercise, Boolean(matchedTeachingDef));
+  }, [exercise, isPad, matchedTeachingDef]);
 
   // 2. Primary Teaching Continuum: UNDERSTAND -> COUNT -> WATCH -> FOLLOW -> PLAY -> EVALUATE
-  const [teachingStage, setTeachingStage] = useState<TeachingStage>(() => getMissionInitialTeachingStage(exercise, true));
+  const [teachingStage, setTeachingStage] = useState<TeachingStage>('UNDERSTAND');
   const [isCoachThenYou, setIsCoachThenYou] = useState<boolean>(false);
   const [isCoachTurn, setIsCoachTurn] = useState<boolean>(true);
   const [isLearnerTurn, setIsLearnerTurn] = useState<boolean>(false);
   const [activeCountToken, setActiveCountToken] = useState<string | null>(null);
   const [showNoteBreakdown, setShowNoteBreakdown] = useState<boolean>(false);
-  const [canonicalTargetCompleted, setCanonicalTargetCompleted] = useState<boolean>(false);
 
   // Sync Coach-Then-You into master transport
   useEffect(() => {
@@ -221,61 +120,26 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   }, [isCoachThenYou]);
 
   // 3. Musical Practice Sub-Modes: WATCH | FOLLOW | PLAY (Independent)
-  const [instructionMode, setInstructionMode] = useState<InstructionMode>(() => getTeachingStageInstructionMode(getMissionInitialTeachingStage(exercise, true)));
+  const [instructionMode, setInstructionMode] = useState<InstructionMode>('WATCH');
 
   // Assistance Fading for FOLLOW mode: FULL -> REDUCED -> MINIMAL
-  const [assistanceLevel, setAssistanceLevel] = useState<AssistanceLevel>(() => exercise.curriculumMission?.assistanceTarget || 'FULL');
+  const [assistanceLevel, setAssistanceLevel] = useState<AssistanceLevel>('FULL');
 
   // Independent Play pulse toggle
   const [independentPulseEnabled, setIndependentPulseEnabled] = useState<boolean>(true);
 
   // Speed and Loop controls
   const [demoSpeedMultiplier, setDemoSpeedMultiplier] = useState<number>(0.75);
-  const [loopMode, setLoopMode] = useState<LoopMode>(() =>
-    (exercise.curriculumMission?.structure?.totalBars || 0) >= 8 ? '1x' : '2x'
-  );
-  const [followTutorBars, setFollowTutorBars] = useState<number>(() => {
-    if (typeof window === 'undefined') return 1;
-    const saved = Number(window.localStorage.getItem('rudiment-follow-tutor-bars'));
-    return [1, 2, 4].includes(saved) ? saved : 1;
-  });
-  const [followLearnerBars, setFollowLearnerBars] = useState<number>(() => {
-    if (typeof window === 'undefined') return 1;
-    const saved = Number(window.localStorage.getItem('rudiment-follow-learner-bars'));
-    return [1, 2, 4].includes(saved) ? saved : 1;
-  });
-
-  // C7.13: a long canonical phrase (8/16+ bars) is already the required
-  // endurance/form test, so one complete pass should unlock evaluation. Reset
-  // the loop selector when moving between missions so a two-bar default from a
-  // prior exercise cannot silently double a 16-bar song-form assignment.
-  useEffect(() => {
-    const totalBars = exercise.curriculumMission?.structure?.totalBars || 0;
-    setLoopMode(totalBars >= 8 ? '1x' : '2x');
-  }, [exercise.id, exercise.curriculumMission?.structure?.totalBars]);
+  const [loopMode, setLoopMode] = useState<LoopMode>('2x');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [focusView, setFocusView] = useState<boolean>(true);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('rudiment-follow-tutor-bars', String(followTutorBars));
-    }
-    masterTransport.setFollowBarPattern(followTutorBars, followLearnerBars);
-  }, [followTutorBars, followLearnerBars]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem('rudiment-follow-learner-bars', String(followLearnerBars));
-    }
-  }, [followLearnerBars]);
 
   // High-Level Transport States (Deriving from Master Transport Clock)
   const [phraseStage, setPhraseStage] = useState<PhraseStage>('IDLE');
   const [countInBeat, setCountInBeat] = useState<number>(0);
   const [currentBar, setCurrentBar] = useState<number>(1);
   const [currentBeat, setCurrentBeat] = useState<number>(0);
-  const [currentSubdivision, setCurrentSubdivision] = useState<number>(0);
   const [completedLoops, setCompletedLoops] = useState<number>(0);
   const [transitionCue, setTransitionCue] = useState<string>('');
   const [activeOwner, setActiveOwner] = useState<'TUTOR' | 'LEARNER' | 'ENSEMBLE'>('TUTOR');
@@ -300,17 +164,6 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
   const [diagnosticsData, setDiagnosticsData] = useState<TransportDiagnosticState | null>(null);
 
-  const activeCurriculumSection = useMemo(() => {
-    const structure = exercise.curriculumMission?.structure;
-    const sections = structure?.sections || [];
-    if (!structure || sections.length === 0) return null;
-    const totalBars = Math.max(1, structure.totalBars);
-    const liveBar = ((Math.max(1, currentBar) - 1) % totalBars) + 1;
-    return sections.find((section) =>
-      liveBar >= section.startBar && liveBar < section.startBar + section.bars
-    ) || null;
-  }, [currentBar, exercise.curriculumMission?.structure]);
-
   const animationFrameRef = useRef<number | null>(null);
 
   // Effective playback BPM
@@ -321,32 +174,16 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     return currentTempo;
   }, [currentTempo, instructionMode, demoSpeedMultiplier]);
 
-  // Max loops count. In REDUCED Follow the selector means whole
-  // call-and-response exchanges, not raw phrase loops. This allows 2 tutor
-  // bars -> 2 learner bars (or 4/4) even when the teaching phrase is one bar.
+  // Max loops count
   const maxLoopsCount = useMemo(() => {
-    const repetitions = loopMode === '1x' ? 1 : loopMode === '2x' ? 2 : loopMode === '4x' ? 4 : Infinity;
-    if (repetitions === Infinity) return Infinity;
-
-    if (instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED') {
-      const barsPerExchange = Math.max(2, followTutorBars + followLearnerBars);
-      const barsPerTimelineLoop = Math.max(1, timeline.totalBars || 1);
-      return Math.max(1, Math.ceil((barsPerExchange * repetitions) / barsPerTimelineLoop));
-    }
-
-    return repetitions;
-  }, [loopMode, instructionMode, assistanceLevel, followTutorBars, followLearnerBars, timeline.totalBars]);
+    if (loopMode === '1x') return 1;
+    if (loopMode === '2x') return 2;
+    if (loopMode === '4x') return 4;
+    return Infinity;
+  }, [loopMode]);
 
   // Static Sticking Reference array (for static display during playback)
   const stickingNotes = useMemo(() => {
-    if (isStructureMission) {
-      return [1, 2, 3, 4].map((beat) => ({
-        label: `${beat}`,
-        hand: 'R',
-        accent: beat === 1,
-        count: `Beat ${beat}`,
-      }));
-    }
     if (isSixStrokeRoll) {
       return [
         { label: '>R', hand: 'R', accent: true, count: '1 / 4' },
@@ -357,9 +194,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         { label: '>L', hand: 'L', accent: true, count: 'la' },
       ];
     }
-    const canonicalSticking = teachingDef?.sticking || exercise.sticking;
-    if (canonicalSticking) {
-      const parts = canonicalSticking.split(/\s+/).filter(Boolean);
+    if (exercise.sticking) {
+      const parts = exercise.sticking.split(/\s+/).filter(Boolean);
       if (parts.length > 0) {
         return parts.map((p, idx) => ({
           label: p,
@@ -375,12 +211,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       { label: 'R', hand: 'R', accent: false, count: '&' },
       { label: 'R', hand: 'R', accent: false, count: 'a' },
     ];
-  }, [isStructureMission, isSixStrokeRoll, exercise.sticking, teachingDef]);
-
-  const hasLandingTarget = useMemo(
-    () => timeline.events.some((event) => event.role === 'landing'),
-    [timeline]
-  );
+  }, [isSixStrokeRoll, exercise.sticking]);
 
   // Stop master transport cleanly
   const stopTransport = useCallback(() => {
@@ -389,7 +220,6 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     setPhraseStage('IDLE');
     setCountInBeat(0);
     setCurrentBeat(0);
-    setCurrentSubdivision(0);
     setCurrentBar(1);
     setActiveOwner('TUTOR');
     setOwnershipTitle('');
@@ -405,11 +235,6 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   // Stage Switcher helper for the 6-stage continuum
   const handleSwitchStage = useCallback(
     (stage: TeachingStage) => {
-      // Governed curriculum missions may use only their authored practice stage
-      // plus Stage 6 evaluation after that target stage has been completed.
-      const allowedEvaluation = stage === 'EVALUATE' && canonicalTargetCompleted;
-      if (isGovernedCanonicalMission && stage !== canonicalTeachingStage && !allowedEvaluation) return;
-
       stopTransport();
       setTeachingStage(stage);
       masterTransport.setTeachingStage(stage);
@@ -422,44 +247,21 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         setInstructionMode('PLAY');
       }
     },
-    [stopTransport, isGovernedCanonicalMission, canonicalTeachingStage, canonicalTargetCompleted]
+    [stopTransport]
   );
-
-  const finishCanonicalTargetAndEvaluate = useCallback(() => {
-    if (!isGovernedCanonicalMission) return;
-    setCanonicalTargetCompleted(true);
-    setShowFollowCheckIn(false);
-    setShowIndependentCheckIn(false);
-    stopTransport();
-    setTeachingStage('EVALUATE');
-    masterTransport.setTeachingStage('EVALUATE');
-  }, [isGovernedCanonicalMission, stopTransport]);
-
-  const returnToCanonicalTarget = useCallback(() => {
-    if (!isGovernedCanonicalMission) return;
-    stopTransport();
-    setCanonicalTargetCompleted(false);
-    setTeachingStage(canonicalTeachingStage);
-    masterTransport.setTeachingStage(canonicalTeachingStage);
-    setInstructionMode(getTeachingStageInstructionMode(canonicalTeachingStage));
-    setAssistanceLevel(exercise.curriculumMission?.assistanceTarget || 'FULL');
-  }, [isGovernedCanonicalMission, canonicalTeachingStage, exercise.curriculumMission?.assistanceTarget, stopTransport]);
 
   // Cleanup on unmount or exercise change
   useEffect(() => {
     // Canonical curriculum exercises begin with teaching. Legacy/unmapped
     // exercises begin at Watch so they can never inherit Quarter-Note Pulse
     // explanations from the backwards-compatible teaching fallback.
-    const initialStage = getMissionInitialTeachingStage(exercise, Boolean(matchedTeachingDef));
-    setTeachingStage(initialStage);
-    setInstructionMode(getTeachingStageInstructionMode(initialStage));
-    setAssistanceLevel(exercise.curriculumMission?.assistanceTarget || 'FULL');
+    setTeachingStage(matchedTeachingDef ? 'UNDERSTAND' : 'WATCH');
+    setInstructionMode('WATCH');
+    setAssistanceLevel('FULL');
     setIndependentRunCompleted(false);
     setIndependentLoopsCompleted(0);
-    setCompletedLoops(0);
     setShowIndependentCheckIn(false);
     setShowFollowCheckIn(false);
-    setCanonicalTargetCompleted(false);
     return () => {
       stopTransport();
     };
@@ -479,7 +281,6 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     // 1. Update pulse and bars
     setCurrentBar(state.currentBar);
     setCurrentBeat(state.currentBeat);
-    setCurrentSubdivision(state.activeSubdivisionHighlight || 0);
     setCompletedLoops(state.completedLoops);
     setPhraseStage(state.phraseStage);
     setCountInBeat(state.countInBeat);
@@ -493,30 +294,20 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     // 2. Deterministic Phrase Guidance Cue
     if (state.isCountIn) {
       setTransitionCue(`Count-In: Beat ${state.countInBeat} of 4 — Prepare Entry`);
-    } else if (isNotationMission) {
-      setTransitionCue(
-        instructionMode === 'WATCH'
-          ? `READ & LISTEN: Beat ${state.currentBeat} ${state.activeCountToken || ''}`
-          : instructionMode === 'FOLLOW'
-          ? `READ & PLAY: Follow the highlighted written position on Beat ${state.currentBeat}`
-          : `SIGHT-READ: Keep your eyes on the staff and stay in time`
-      );
-    } else if (isStructureMission) {
-      setTransitionCue(
-        state.currentBeat === 1
-          ? `BAR ${state.currentBar} — BEAT 1: Reset the beat count; keep the same tempo`
-          : `BAR ${state.currentBar} — BEAT ${state.currentBeat}: Keep the quarter-note pulse even`
-      );
-    } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'FULL') {
-      setTransitionCue('PLAY ALONG: Match the tutor note-for-note in real time');
-    } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED') {
-      setTransitionCue(
-        state.activeOwner === 'LEARNER'
-          ? `YOUR TURN: Tutor silent — play the response block (${followLearnerBars} bar${followLearnerBars === 1 ? '' : 's'})`
-          : `TUTOR MODEL: Listen across ${followTutorBars} bar${followTutorBars === 1 ? '' : 's'} before your turn`
-      );
     } else if (state.isIntentionalLearnerSpace) {
       setTransitionCue(`YOUR TURN: Student Execution (${timeline.title.split('—')[0]})`);
+    } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED') {
+      if (state.phraseStage === 'FILL') {
+        setTransitionCue(`ENTRY ANCHOR (BEAT 4) → PLAY YOUR PHRASE (>R L L R R >L)`);
+      } else if (state.phraseStage === 'LAND') {
+        setTransitionCue(`LAND ON 1: ${isPad ? 'Pad Rim Edge' : '💥 Crash + Kick'} Anchor`);
+      } else if (state.phraseStage === 'PREPARE') {
+        setTransitionCue('READY: Prepare fill entry anchor at Beat 4');
+      } else if (state.phraseStage === 'RECOVER') {
+        setTransitionCue('RECOVER: Return to Steady Groove Pulse');
+      } else {
+        setTransitionCue('GROOVE: Lock into tempo with relaxed pulse');
+      }
     } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'MINIMAL') {
       if (state.phraseStage === 'FILL') {
         setTransitionCue(`FILL OPPORTUNITY: Execute phrase from memory into Beat 1`);
@@ -551,7 +342,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     }
 
     animationFrameRef.current = requestAnimationFrame(runTransportAnimation);
-  }, [timeline.title, isSixStrokeRoll, isPad, isStructureMission, isNotationMission, instructionMode, assistanceLevel, showDiagnostics, followTutorBars, followLearnerBars]);
+  }, [timeline.title, isSixStrokeRoll, isPad, showDiagnostics]);
 
   // Handle Play/Pause Toggle with Async Audio Initialization.
   // Evidence is gated: independent evaluation is unlocked only after a complete
@@ -564,7 +355,6 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
 
     setShowFollowCheckIn(false);
     setShowIndependentCheckIn(false);
-    setCompletedLoops(0);
     if (instructionMode === 'PLAY') {
       setIndependentRunCompleted(false);
       setIndependentLoopsCompleted(0);
@@ -580,16 +370,22 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       assistanceLevel,
       hasCountIn: true,
       countInBars: 1,
-      followTutorBars,
-      followLearnerBars,
       voiceCountEnabled: false,
       clapEnabled: false,
       isCoachThenYou,
       teachingStage,
-      teachingDefinition: teachingDef,
+      teachingDefinition: matchedTeachingDef,
       isPad,
       loopLimit: maxLoopsCount,
       onLoopComplete: (completed) => {
+        // C7.15.1: latch canonical WATCH/FOLLOW completion directly from the
+        // transport callback. The transport can auto-stop immediately after a
+        // 1x long-form cycle, before the next animation frame has a chance to
+        // copy masterTransport.completedLoops into React state. Without this
+        // latch the UI can remain stuck on “Complete at least one full guided
+        // cycle” even though the authored cycle actually finished.
+        setCompletedLoops((previous) => Math.max(previous, completed));
+
         if (instructionMode === 'PLAY') {
           setIndependentLoopsCompleted(completed);
           if (completed >= evaluationUnlockLoops) {
@@ -600,7 +396,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         if (maxLoopsCount !== Infinity && completed >= maxLoopsCount) {
           stopTransport();
           if (instructionMode === 'FOLLOW') {
-            if (!isGovernedCanonicalMission) setShowFollowCheckIn(true);
+            setShowFollowCheckIn(true);
           } else if (instructionMode === 'PLAY') {
             setIndependentRunCompleted(true);
           }
@@ -633,34 +429,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     let actionText = '';
     let actionType = 'repeat';
 
-    if (isStructureMission) {
-      if (reflection === 'ENTRY_TIMING_ISSUE') {
-        message =
-          'The pulse survived, but the barline was unclear. Repeat while completing Beat 4 fully, then let the next Beat 1 reset the count without changing tempo.';
-        actionText = 'Repeat the Barline Reset';
-        actionType = 'repeat_entry';
-      } else if (reflection === 'MISSED_LANDING') {
-        message =
-          'You kept playing but lost the bar number. Use visible bar landmarks again, then reduce the visual help only after you can name the current bar confidently.';
-        actionText = 'Restore Bar Landmarks';
-        actionType = 'repeat_landing';
-      } else if (reflection === 'ROUGH_RECOVERY') {
-        message =
-          'Individual bars are forming, but the larger phrase grouping is still blurry. Group the bars as 4 + 4 and feel Bar 1 / Bar 5 as structural landmarks.';
-        actionText = 'Rebuild Phrase Grouping';
-        actionType = 'repeat_recovery';
-      } else {
-        message =
-          'Beat count and bar count stayed clear. Keep the same tempo and fade one layer of guidance before moving to independent structure tracking.';
-        actionText =
-          assistanceLevel === 'FULL'
-            ? 'Advance to Reduced Cues'
-            : assistanceLevel === 'REDUCED'
-            ? 'Advance to Minimal Cues'
-            : 'Try Independent Play';
-        actionType = 'advance_level';
-      }
-    } else if (reflection === 'LOST_PULSE') {
+    if (reflection === 'LOST_PULSE') {
       message =
         'Placement broke the groove time. Slower tempo (-5 BPM) with Full Cues recommended to internalize entry.';
       actionText = 'Reduce Tempo & Use Full Cues';
@@ -729,9 +498,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       phrasePosition: exercise.musicalPlacement?.startPoint,
     };
 
-    if (exercise.musicalPlacement) {
-      recordSinglePlacementAttemptEvidence(attemptEvidence);
-    }
+    recordSinglePlacementAttemptEvidence(attemptEvidence);
   };
 
   const handleApplyFollowAdvice = () => {
@@ -769,17 +536,10 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     const isSuccess = independentRating === 'CLEAN' || independentRating === 'ALMOST';
 
     const frictions: string[] = [];
-    if (isStructureMission) {
-      if (!independentChecklist.includes('groove_stable')) frictions.push('Lost pulse');
-      if (!independentChecklist.includes('entry_clean')) frictions.push('Dropped beat 4');
-      if (!independentChecklist.includes('landing_on_1')) frictions.push('Rushed barline');
-      if (!independentChecklist.includes('smooth_recovery')) frictions.push('Lost track of bar number');
-    } else {
-      if (!independentChecklist.includes('groove_stable')) frictions.push('Lost Groove');
-      if (!independentChecklist.includes('entry_clean')) frictions.push('Entry Rushed/Late');
-      if (!independentChecklist.includes('landing_on_1')) frictions.push('Missed Beat 1');
-      if (!independentChecklist.includes('smooth_recovery')) frictions.push('Hesitated on Beat 2');
-    }
+    if (!independentChecklist.includes('groove_stable')) frictions.push('Lost Groove');
+    if (!independentChecklist.includes('entry_clean')) frictions.push('Entry Rushed/Late');
+    if (!independentChecklist.includes('landing_on_1')) frictions.push('Missed Beat 1');
+    if (!independentChecklist.includes('smooth_recovery')) frictions.push('Hesitated on Beat 2');
 
     const feeling: SelfCheckFeeling =
       independentRating === 'CLEAN'
@@ -813,9 +573,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       phrasePosition: exercise.musicalPlacement?.startPoint,
     };
 
-    if (exercise.musicalPlacement) {
-      recordSinglePlacementAttemptEvidence(attemptEvidence);
-    }
+    recordSinglePlacementAttemptEvidence(attemptEvidence);
 
     onCheckIn('PLAY', {
       selfCheck: feeling,
@@ -848,18 +606,12 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           const Icon = step.icon;
           const isUnsupportedLegacyStage = !matchedTeachingDef &&
             (step.id === 'UNDERSTAND' || step.id === 'COUNT' || step.id === 'EVALUATE');
-          const isLockedEvaluation = step.id === 'EVALUATE' && (
-            isGovernedCanonicalMission ? !canonicalTargetCompleted : !independentRunCompleted
-          );
-          const isAllowedGovernedEvaluation = isGovernedCanonicalMission && step.id === 'EVALUATE' && canonicalTargetCompleted;
-          const isOutsideGovernedMission = isGovernedCanonicalMission && step.id !== canonicalTeachingStage && !isAllowedGovernedEvaluation;
-          const isLocked = isUnsupportedLegacyStage || isLockedEvaluation || isOutsideGovernedMission;
-          const lockTitle = isOutsideGovernedMission
-            ? `This curriculum mission is governed by its ${canonicalTeachingStage.toLowerCase()} stage. Complete the authored target, then evaluate it.`
-            : isUnsupportedLegacyStage
+          const isLockedEvaluation = step.id === 'EVALUATE' && !independentRunCompleted;
+          const isLocked = isUnsupportedLegacyStage || isLockedEvaluation;
+          const lockTitle = isUnsupportedLegacyStage
             ? 'This legacy/explore exercise does not yet have a canonical C2 teaching definition.'
             : isLockedEvaluation
-            ? 'Complete the current mission target before evaluation.'
+            ? 'Complete an independent Play run before evaluation.'
             : undefined;
 
           return (
@@ -893,22 +645,6 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         })}
       </div>
 
-      {isGovernedCanonicalMission && (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 text-[10px] font-bold text-stone-600">
-          <span>Mission-governed stage: <strong className="text-stone-900">{canonicalTeachingStage}</strong></span>
-          <span>Assistance contract: <strong className="text-stone-900">{exercise.curriculumMission?.assistanceTarget || 'FULL'}</strong></span>
-        </div>
-      )}
-
-      {exercise.curriculumMission?.structure && (
-        <CurriculumPhraseVisualizer
-          mission={exercise.curriculumMission}
-          currentBar={currentBar}
-          currentBeat={currentBeat}
-          isPlaying={isPlaying}
-        />
-      )}
-
       {/* ================= STAGE 1: UNDERSTAND ================= */}
       {teachingStage === 'UNDERSTAND' ? (
         <div className="space-y-4 animate-in fade-in duration-200">
@@ -918,52 +654,33 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             teachingDef={teachingDef}
             isPad={isPad}
             currentTempo={currentTempo}
-            onProceedToCount={() => {
-              if (isGovernedCanonicalMission && canonicalTeachingStage === 'UNDERSTAND') {
-                finishCanonicalTargetAndEvaluate();
-              } else {
-                handleSwitchStage('COUNT');
-              }
-            }}
-            proceedLabel={isGovernedCanonicalMission && canonicalTeachingStage === 'UNDERSTAND' ? 'Evaluate This Mission' : undefined}
+            onProceedToCount={() => handleSwitchStage('COUNT')}
           />
 
-          {isNotationMission ? (
-            <div className="bg-sky-950/20 rounded-2xl p-3.5 border border-sky-800/40 flex items-start gap-3">
-              <BookOpen className="w-4 h-4 text-sky-300 shrink-0 mt-0.5" />
-              <div className="text-xs text-stone-300">
-                <span className="font-black text-sky-200 block mb-1">Notation lesson rule</span>
-                The written staff remains the source of truth through Count, Watch, Follow and Independent Play. Reading lessons do not use the generic sticking step-through because that would turn notation practice back into a memorized drill.
-              </div>
+          {/* Optional Note-by-Note Breakdown Accordion */}
+          <div className="bg-stone-900/90 rounded-2xl p-3.5 border border-stone-800 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Layers className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-xs text-stone-300 font-bold">
+                Want to dissect individual stroke mechanics note-by-note?
+              </span>
             </div>
-          ) : (
-            <>
-              {/* Optional Note-by-Note Breakdown Accordion */}
-              <div className="bg-stone-900/90 rounded-2xl p-3.5 border border-stone-800 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span className="text-xs text-stone-300 font-bold">
-                    Want to dissect individual stroke mechanics note-by-note?
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowNoteBreakdown((p) => !p)}
-                  className="px-3.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
-                >
-                  {showNoteBreakdown ? 'Hide Step-Through' : 'Open Note Step-Through'}
-                </button>
-              </div>
+            <button
+              onClick={() => setShowNoteBreakdown((p) => !p)}
+              className="px-3.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+            >
+              {showNoteBreakdown ? 'Hide Step-Through' : 'Open Note Step-Through'}
+            </button>
+          </div>
 
-              {showNoteBreakdown && (
-                <PhraseBreakdown
-                  exercise={exercise}
-                  timeline={timeline}
-                  isPad={isPad}
-                  currentTempo={currentTempo}
-                  onProceedToMusicalPractice={() => handleSwitchStage('COUNT')}
-                />
-              )}
-            </>
+          {showNoteBreakdown && (
+            <PhraseBreakdown
+              exercise={exercise}
+              timeline={timeline}
+              isPad={isPad}
+              currentTempo={currentTempo}
+              onProceedToMusicalPractice={() => handleSwitchStage('COUNT')}
+            />
           )}
         </div>
       ) : teachingStage === 'COUNT' ? (
@@ -974,14 +691,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             timeline={timeline}
             teachingDef={teachingDef}
             currentTempo={currentTempo}
-            onProceedToWatch={() => {
-              if (isGovernedCanonicalMission && canonicalTeachingStage === 'COUNT') {
-                finishCanonicalTargetAndEvaluate();
-              } else {
-                handleSwitchStage('WATCH');
-              }
-            }}
-            proceedLabel={isGovernedCanonicalMission && canonicalTeachingStage === 'COUNT' ? 'Evaluate This Mission' : undefined}
+            onProceedToWatch={() => handleSwitchStage('WATCH')}
             onTempoAdjust={onTempoAdjust}
           />
         </div>
@@ -995,13 +705,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             onSaveEvaluation={(partialResult) => {
               onCheckIn('PLAY', partialResult);
             }}
-            onRepeatStage={(stage) => {
-              if (isGovernedCanonicalMission) {
-                returnToCanonicalTarget();
-              } else {
-                handleSwitchStage(stage);
-              }
-            }}
+            onRepeatStage={(stage) => handleSwitchStage(stage)}
           />
         </div>
       ) : (
@@ -1012,19 +716,15 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             {/* 3 Practice Modes: WATCH | FOLLOW | PLAY */}
             <div className="flex items-center gap-1.5 p-1 bg-stone-900 rounded-2xl border border-stone-800 w-full sm:w-auto">
               <button
-                disabled={isGovernedCanonicalMission && canonicalTeachingStage !== 'WATCH'}
                 onClick={() => {
-                  if (isGovernedCanonicalMission && canonicalTeachingStage !== 'WATCH') return;
                   stopTransport();
                   setInstructionMode('WATCH');
                   setTeachingStage('WATCH');
                 }}
-                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 ${
+                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   instructionMode === 'WATCH'
-                    ? 'bg-amber-400 text-stone-950 shadow-md font-black cursor-pointer'
-                    : isGovernedCanonicalMission && canonicalTeachingStage !== 'WATCH'
-                    ? 'text-stone-600 opacity-50 cursor-not-allowed'
-                    : 'text-stone-400 hover:text-stone-200 cursor-pointer'
+                    ? 'bg-amber-400 text-stone-950 shadow-md font-black'
+                    : 'text-stone-400 hover:text-stone-200'
                 }`}
               >
                 <Eye className="w-3.5 h-3.5" />
@@ -1032,19 +732,15 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               </button>
 
               <button
-                disabled={isGovernedCanonicalMission && canonicalTeachingStage !== 'FOLLOW'}
                 onClick={() => {
-                  if (isGovernedCanonicalMission && canonicalTeachingStage !== 'FOLLOW') return;
                   stopTransport();
                   setInstructionMode('FOLLOW');
                   setTeachingStage('FOLLOW');
                 }}
-                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 ${
+                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   instructionMode === 'FOLLOW'
-                    ? 'bg-sky-400 text-stone-950 shadow-md font-black cursor-pointer'
-                    : isGovernedCanonicalMission && canonicalTeachingStage !== 'FOLLOW'
-                    ? 'text-stone-600 opacity-50 cursor-not-allowed'
-                    : 'text-stone-400 hover:text-stone-200 cursor-pointer'
+                    ? 'bg-sky-400 text-stone-950 shadow-md font-black'
+                    : 'text-stone-400 hover:text-stone-200'
                 }`}
               >
                 <Zap className="w-3.5 h-3.5" />
@@ -1052,19 +748,15 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               </button>
 
               <button
-                disabled={isGovernedCanonicalMission && canonicalTeachingStage !== 'PLAY'}
                 onClick={() => {
-                  if (isGovernedCanonicalMission && canonicalTeachingStage !== 'PLAY') return;
                   stopTransport();
                   setInstructionMode('PLAY');
                   setTeachingStage('PLAY');
                 }}
-                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 ${
+                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                   instructionMode === 'PLAY'
-                    ? 'bg-emerald-400 text-stone-950 shadow-md font-black cursor-pointer'
-                    : isGovernedCanonicalMission && canonicalTeachingStage !== 'PLAY'
-                    ? 'text-stone-600 opacity-50 cursor-not-allowed'
-                    : 'text-stone-400 hover:text-stone-200 cursor-pointer'
+                    ? 'bg-emerald-400 text-stone-950 shadow-md font-black'
+                    : 'text-stone-400 hover:text-stone-200'
                 }`}
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
@@ -1094,12 +786,9 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 )}
               </div>
 
-              {/* Loop / Exchange Count Selector */}
-              <div className="flex items-center gap-1 bg-stone-900 p-1 rounded-xl border border-stone-800 text-xs font-mono" title={instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED' ? 'Repeat the complete tutor/learner exchange' : 'Repeat the phrase'}>
+              {/* Loop Count Selector */}
+              <div className="flex items-center gap-1 bg-stone-900 p-1 rounded-xl border border-stone-800 text-xs font-mono">
                 <Repeat className="w-3 h-3 text-stone-400 ml-1" />
-                <span className="text-[9px] uppercase text-stone-500 font-black px-1">
-                  {instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED' ? 'Cycles' : 'Repeat'}
-                </span>
                 {(['1x', '2x', '4x', 'inf'] as LoopMode[]).map((mode) => (
                   <button
                     key={mode}
@@ -1133,18 +822,14 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   {(['FULL', 'REDUCED', 'MINIMAL'] as AssistanceLevel[]).map((lvl) => (
                     <button
                       key={lvl}
-                      disabled={isGovernedCanonicalMission && exercise.curriculumMission?.assistanceTarget !== lvl}
                       onClick={() => {
-                        if (isGovernedCanonicalMission && exercise.curriculumMission?.assistanceTarget !== lvl) return;
                         if (isPlaying) stopTransport();
                         setAssistanceLevel(lvl);
                       }}
-                      className={`py-1.5 px-3 rounded-xl font-black text-[10px] uppercase transition-all ${
+                      className={`py-1.5 px-3 rounded-xl font-black text-[10px] uppercase transition-all cursor-pointer ${
                         assistanceLevel === lvl
-                          ? 'bg-sky-400 text-stone-950 font-black shadow-md ring-2 ring-sky-300 cursor-pointer'
-                          : isGovernedCanonicalMission && exercise.curriculumMission?.assistanceTarget !== lvl
-                          ? 'bg-stone-950 text-stone-700 border border-stone-900 opacity-50 cursor-not-allowed'
-                          : 'bg-stone-950 text-stone-400 border border-stone-800 hover:text-stone-200 cursor-pointer'
+                          ? 'bg-sky-400 text-stone-950 font-black shadow-md ring-2 ring-sky-300'
+                          : 'bg-stone-950 text-stone-400 border border-stone-800 hover:text-stone-200'
                       }`}
                     >
                       {lvl === 'FULL' ? '1. FULL' : lvl === 'REDUCED' ? '2. REDUCED' : '3. MINIMAL'}
@@ -1176,116 +861,57 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   <div className="flex items-center justify-between">
                     <span className="font-black text-[11px] uppercase tracking-wide">
                       {assistanceLevel === 'FULL'
-                        ? 'FULL — PLAY ALONG WITH TUTOR'
+                        ? 'FULL SUPPORT — TEACH ME'
                         : assistanceLevel === 'REDUCED'
-                        ? 'REDUCED — TUTOR BAR / YOUR BAR'
-                        : 'MINIMAL — METRONOME ONLY'}
+                        ? 'REDUCED SUPPORT — GUIDE ENTRY & LANDING'
+                        : 'MINIMAL SUPPORT — KEEP ME ORIENTED'}
                     </span>
                     <span className="text-[10px] opacity-75 font-mono">
                       {assistanceLevel === 'FULL'
                         ? 'Level 1/3'
                         : assistanceLevel === 'REDUCED'
-                        ? `Level 2/3 (${followTutorBars} tutor → ${followLearnerBars} you)`
-                        : 'Level 3/3 (Click only)'}
+                        ? 'Level 2/3 (Inner notes removed)'
+                        : 'Level 3/3 (Tutor demo removed)'}
                     </span>
                   </div>
                   <p className="text-[11px] leading-relaxed opacity-90 font-sans">
                     {assistanceLevel === 'FULL'
-                      ? 'The tutor plays the entire target pattern continuously while you play at the same time. Match its timing, sound and dynamics note-for-note.'
+                      ? 'Tutor demonstrates the complete phrase before / with your turn. Listen closely to dynamic accents and spacing.'
                       : assistanceLevel === 'REDUCED'
-                      ? `Call and response: the tutor models ${followTutorBars} bar${followTutorBars === 1 ? '' : 's'}, then becomes silent for ${followLearnerBars} response bar${followLearnerBars === 1 ? '' : 's'} while the metronome keeps time.`
-                      : 'The tutor pattern is completely removed. Use only the metronome pulse and play the phrase from memory.'}
+                      ? 'You know the phrase. Tutor fill audio is removed after the initial entry anchor; you supply the inner doubles and land on Beat 1.'
+                      : 'Keep the pulse. Complete tutor demonstration is removed. Play the phrase from memory with the metronome and land on Beat 1.'}
                   </p>
                 </div>
               </div>
 
-              {assistanceLevel === 'REDUCED' && (
-                <div className="bg-stone-950/90 rounded-2xl border border-amber-500/30 p-3 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-300 block">
-                        Call & Response Length
-                      </span>
-                      <p className="text-[10px] text-stone-400 mt-0.5">
-                        Increase the model or response block when one bar is not enough to absorb the phrase.
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-black font-mono text-white bg-stone-900 border border-stone-700 rounded-xl px-2.5 py-1 whitespace-nowrap">
-                      {followTutorBars} tutor → {followLearnerBars} you
+              {/* Coach-Then-You (Call & Response) Toggle */}
+              <div className="flex items-center justify-between p-2.5 bg-stone-950/80 rounded-xl border border-stone-800">
+                <div className="flex items-center gap-2">
+                  <Repeat className="w-4 h-4 text-amber-400 shrink-0" />
+                  <div>
+                    <span className="text-xs font-bold text-stone-200 block">
+                      Coach-Then-You (Call & Response Loop)
+                    </span>
+                    <span className="text-[10px] text-stone-400">
+                      Bar 1: Coach demonstrates → Bar 2: You echo & play
                     </span>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-black uppercase text-amber-200">Tutor model bars</span>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[1, 2, 4].map((bars) => (
-                          <button
-                            key={`tutor-${bars}`}
-                            onClick={() => {
-                              if (isPlaying) stopTransport();
-                              setFollowTutorBars(bars);
-                            }}
-                            className={`py-2 rounded-xl text-xs font-black border transition-all ${
-                              followTutorBars === bars
-                                ? 'bg-amber-400 text-stone-950 border-amber-300'
-                                : 'bg-stone-900 text-stone-300 border-stone-800 hover:border-stone-600'
-                            }`}
-                          >
-                            {bars}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="text-[10px] font-black uppercase text-emerald-200">Your-turn bars</span>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[1, 2, 4].map((bars) => (
-                          <button
-                            key={`learner-${bars}`}
-                            onClick={() => {
-                              if (isPlaying) stopTransport();
-                              setFollowLearnerBars(bars);
-                            }}
-                            className={`py-2 rounded-xl text-xs font-black border transition-all ${
-                              followLearnerBars === bars
-                                ? 'bg-emerald-400 text-stone-950 border-emerald-300'
-                                : 'bg-stone-900 text-stone-300 border-stone-800 hover:border-stone-600'
-                            }`}
-                          >
-                            {bars}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  <p className="text-[10px] text-stone-400 leading-relaxed">
-                    One exchange = {followTutorBars} tutor bar{followTutorBars === 1 ? '' : 's'} followed by {followLearnerBars} silent response bar{followLearnerBars === 1 ? '' : 's'}. The repeat selector above repeats that whole exchange.
-                  </p>
                 </div>
-              )}
 
-              {/* Assistance contract summary */}
-              <div className="flex items-start gap-2.5 p-2.5 bg-stone-950/80 rounded-xl border border-stone-800">
-                <Repeat className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="text-xs font-bold text-stone-200 block">
-                    {assistanceLevel === 'FULL'
-                      ? 'Play together: tutor + you'
-                      : assistanceLevel === 'REDUCED'
-                      ? `Call & response: ${followTutorBars} tutor → ${followLearnerBars} you`
-                      : 'Independent memory: metronome only'}
-                  </span>
-                  <span className="text-[10px] text-stone-400">
-                    {assistanceLevel === 'FULL'
-                      ? 'No silent response bar. Stay with the tutor through the whole phrase.'
-                      : assistanceLevel === 'REDUCED'
-                      ? `The tutor models ${followTutorBars} bar${followTutorBars === 1 ? '' : 's'}, then gives you ${followLearnerBars} bar${followLearnerBars === 1 ? '' : 's'} of uninterrupted response space.`
-                      : 'No target drum audio is played; maintain the phrase from your internal count.'}
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isPlaying) stopTransport();
+                    setIsCoachThenYou((prev) => !prev);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl font-black text-xs transition-all cursor-pointer ${
+                    isCoachThenYou
+                      ? 'bg-amber-400 text-stone-950 shadow-md ring-2 ring-amber-300'
+                      : 'bg-stone-900 text-stone-400 border border-stone-800 hover:text-white'
+                  }`}
+                >
+                  {isCoachThenYou ? 'CALL & RESPONSE ON' : 'SIMULTANEOUS (OFF)'}
+                </button>
               </div>
             </div>
           )}
@@ -1293,38 +919,38 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           {/* ================= 2. DOMINANT PHRASE OWNERSHIP / MUSICAL STATE BANNER ================= */}
           <div className="space-y-2">
             {/* Live Call & Response Stage Indicator Banner (when active) */}
-            {instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED' && isPlaying && phraseStage !== 'COUNT_IN' && (
+            {isCoachThenYou && isPlaying && phraseStage !== 'COUNT_IN' && (
               <div
                 className={`p-3.5 rounded-2xl border-2 flex items-center justify-between transition-all ${
-                  activeOwner === 'TUTOR'
+                  isCoachTurn
                     ? 'bg-amber-500/20 border-amber-400/80 text-amber-200'
                     : 'bg-emerald-500/25 border-emerald-400 text-emerald-200 ring-2 ring-emerald-400 animate-pulse'
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  {activeOwner === 'TUTOR' ? (
+                  {isCoachTurn ? (
                     <Eye className="w-5 h-5 text-amber-400 shrink-0" />
                   ) : (
                     <Zap className="w-5 h-5 text-emerald-400 shrink-0" />
                   )}
                   <div>
                     <span className="text-xs font-black uppercase tracking-wider block">
-                      {ownershipTitle || (activeOwner === 'TUTOR' ? 'TUTOR — LISTEN' : 'YOUR TURN — PLAY NOW')}
+                      {isCoachTurn ? "COACH'S TURN — LISTEN & OBSERVE" : 'YOUR TURN — PLAY IT NOW!'}
                     </span>
                     <span className="text-[11px] opacity-80">
-                      {ownershipSubtitle || (activeOwner === 'TUTOR'
-                        ? 'Listen to the complete model block.'
-                        : 'Tutor is silent. Play the response block while the metronome continues.')}
+                      {isCoachTurn
+                        ? 'Coach plays the phrase on drums. Internalize the stickings.'
+                        : 'Echo the phrase with precision, dynamic accents and clean landing.'}
                     </span>
                   </div>
                 </div>
 
                 <span
                   className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-xl shrink-0 ${
-                    activeOwner === 'TUTOR' ? 'bg-amber-400 text-stone-950' : 'bg-emerald-400 text-stone-950'
+                    isCoachTurn ? 'bg-amber-400 text-stone-950' : 'bg-emerald-400 text-stone-950'
                   }`}
                 >
-                  {activeOwner === 'TUTOR' ? `TUTOR ${followTutorBars}B` : `YOU ${followLearnerBars}B`}
+                  {isCoachTurn ? 'COACH CALL' : 'YOUR RESPONSE'}
                 </span>
               </div>
             )}
@@ -1401,41 +1027,13 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                     ? activeOwner === 'LEARNER'
                       ? 'Tutor is silent. Metronome pulse continues. Play the phrase now!'
                       : activeOwner === 'TUTOR'
-                      ? 'Listen to the complete tutor bar; your response comes next.'
-                      : 'Tutor and learner play together. Match every note and dynamic in real time.'
+                      ? 'Listen to dynamic accent contrast & clean note spacing.'
+                      : 'Keep steady groove and lock downbeat resolution.'
                     : 'Press Start to begin audio playback with metronome pulse.'}
                 </p>
-
-                {exercise.curriculumMission?.musicalApplication && activeCurriculumSection?.performanceCue && (
-                  <div className={`mt-3 rounded-xl border px-3 py-2 text-left ${
-                    activeCurriculumSection.intensity === 'STRONG'
-                      ? 'bg-amber-400/15 border-amber-400/50 text-amber-100'
-                      : 'bg-emerald-400/10 border-emerald-400/40 text-emerald-100'
-                  }`}>
-                    <span className="text-[9px] uppercase tracking-widest font-black block">
-                      {activeCurriculumSection.label} • Bars {activeCurriculumSection.startBar}–{activeCurriculumSection.startBar + activeCurriculumSection.bars - 1}
-                    </span>
-                    <span className="text-[11px] font-semibold block mt-0.5">
-                      {activeCurriculumSection.performanceCue}
-                    </span>
-                  </div>
-                )}
               </div>
             )}
           </div>
-
-          {isNotationMission && (
-            <DrumNotationStaff
-              teachingDef={teachingDef}
-              currentBar={currentBar}
-              currentBeat={currentBeat}
-              currentSubdivision={currentSubdivision}
-              isPlaying={isPlaying && phraseStage !== 'COUNT_IN'}
-              showLegend={instructionMode === 'WATCH'}
-              compact
-              title={instructionMode === 'WATCH' ? 'Watch the Playhead Cross the Written Notes' : instructionMode === 'FOLLOW' ? 'Follow the Staff — Play the Highlighted Written Voices' : 'Sight-Read the Staff — No Sticking Prompt'}
-            />
-          )}
 
           {/* ================= 3. 4-BEAT DOMINANT PULSE METRONOME GRID ================= */}
           <div className="bg-stone-900/90 p-4 rounded-2xl border border-stone-800 space-y-2.5">
@@ -1445,17 +1043,9 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               </span>
               <span className="font-mono text-stone-300 font-bold">
                 {isPlaying
-                  ? instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED'
-                    ? `EXCHANGE ${Math.floor((completedLoops * Math.max(1, timeline.totalBars) + Math.max(0, currentBar - 1)) / Math.max(2, followTutorBars + followLearnerBars)) + 1} • ${activeOwner === 'TUTOR' ? 'TUTOR' : 'YOUR TURN'}`
-                    : `BAR ${currentBar} OF ${timeline.totalBars} ${
-                        loopMode !== '1x' ? `(Rep ${completedLoops + 1})` : ''
-                      }`
-                  : isStructureMission
-                  ? `${timeline.totalBars}-Bar Structure`
-                  : isNotationMission
-                  ? `${timeline.totalBars}-Bar Reading Phrase`
-                  : exercise.curriculumMission?.structure
-                  ? `${timeline.totalBars}-Bar ${exercise.curriculumMission?.musicalApplication ? 'Song Form' : 'Phrase Cycle'}`
+                  ? `BAR ${currentBar} OF ${timeline.totalBars} ${
+                      loopMode !== '1x' ? `(Rep ${completedLoops + 1})` : ''
+                    }`
                   : `2-Bar Phrase Cycle`}
               </span>
             </div>
@@ -1469,11 +1059,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   phraseStage !== 'COUNT_IN' &&
                   phraseStage !== 'PREPARE' &&
                   phraseStage !== 'IDLE';
-                // C7.4: generic groove/fill landing language must never leak
-                // into notation lessons. Reading missions use bar/reading cues
-                // from the written staff instead of the old Bar-2 crash target.
-                const isLandingBeat = !isStructureMission && !isNotationMission && currentBar === 2 && beatNum === 1;
-                const isStructureBarStart = isStructureMission && beatNum === 1;
+                const isLandingBeat = currentBar === 2 && beatNum === 1;
 
                 return (
                   <div
@@ -1482,7 +1068,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                       isCurrentBeat
                         ? isLandingBeat
                           ? 'bg-emerald-500 text-stone-950 scale-105 shadow-xl ring-2 ring-emerald-300 font-black'
-                        : !isNotationMission && (phraseStage === 'FILL' || phraseStage === 'LEARNER_SPACE')
+                          : phraseStage === 'FILL' || phraseStage === 'LEARNER_SPACE'
                           ? 'bg-amber-400 text-stone-950 scale-105 shadow-xl ring-2 ring-amber-300 font-black'
                           : 'bg-white text-stone-950 scale-105 shadow-lg font-black'
                         : 'bg-stone-950 text-stone-400 border border-stone-800'
@@ -1506,20 +1092,12 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                           ? 'bg-stone-900 text-amber-300'
                           : isLandingBeat
                           ? 'text-emerald-400 font-black'
-                          : !isNotationMission && currentBar === 1 && beatNum === 4
+                          : currentBar === 1 && beatNum === 4
                           ? 'text-amber-400'
                           : 'text-stone-500'
                       }`}
                     >
-                      {isStructureMission
-                        ? isStructureBarStart
-                          ? `BAR ${currentBar} START`
-                          : 'PULSE'
-                        : isNotationMission
-                        ? beatNum === 1
-                          ? `BAR ${currentBar} START`
-                          : 'READ'
-                        : isLandingBeat
+                      {isLandingBeat
                         ? '🎯 LAND CRASH'
                         : isCalibration
                         ? currentBar === 1
@@ -1536,7 +1114,6 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           </div>
 
           {/* ================= 4. STATIC STICKING REFERENCE (ADAPTED TO ASSISTANCE LEVEL) ================= */}
-          {!isNotationMission && (
           <div className={`p-3.5 rounded-2xl border transition-all ${
             instructionMode === 'PLAY'
               ? 'bg-stone-900/60 border-stone-800/80'
@@ -1550,32 +1127,18 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               <span className={`font-black ${
                 assistanceLevel === 'REDUCED' ? 'text-amber-400' : assistanceLevel === 'MINIMAL' ? 'text-emerald-400' : 'text-sky-400'
               }`}>
-                {isStructureMission
-                  ? instructionMode === 'WATCH'
-                    ? 'Bar Pulse Demonstration:'
-                    : instructionMode === 'PLAY'
-                    ? 'Independent Bar Pulse Memory:'
-                    : assistanceLevel === 'FULL'
-                    ? 'Beat & Bar Pulse Reference:'
-                    : assistanceLevel === 'REDUCED'
-                    ? 'Reduced Bar-Tracking Aid:'
-                    : 'Minimal Bar-Tracking Reference:'
-                  : instructionMode === 'WATCH'
-                  ? `Demonstration ${motorReferenceNoun}:`
+                {instructionMode === 'WATCH'
+                  ? 'Demonstration Sticking Reference:'
                   : instructionMode === 'PLAY'
-                  ? `Independent Memory ${motorReferenceNoun}:`
+                  ? 'Independent Memory Sticking:'
                   : assistanceLevel === 'FULL'
-                  ? `Full ${motorReferenceNoun}:`
+                  ? 'Full Sticking Reference:'
                   : assistanceLevel === 'REDUCED'
-                  ? `Memory Aid — ${motorReferenceNoun}:`
-                  : `Minimal ${motorReferenceNoun}:`}
+                  ? 'Memory Aid (Recall Inner Notes):'
+                  : 'Minimal Reference (Play from Pulse):'}
               </span>
               <span className="font-mono text-stone-300">
-                {isStructureMission
-                  ? 'Beat 1 → 2 → 3 → 4'
-                  : isSixStrokeRoll
-                  ? 'Six Stroke Roll (>R L L R R >L)'
-                  : motorReferenceNoun}
+                {isSixStrokeRoll ? 'Six Stroke Roll (>R L L R R >L)' : 'Phrase Sticking'}
               </span>
             </div>
 
@@ -1603,26 +1166,23 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                     {st.label}
                   </span>
                   <span className="text-[8px] font-mono opacity-70 block mt-0.5">
-                    {isStructureMission ? (st.accent ? 'Bar Start' : 'Pulse') : st.accent ? 'Accent' : 'Tap'}
+                    {st.accent ? 'Accent' : 'Tap'}
                   </span>
                 </div>
               ))}
 
-              {/* Landing Stroke Target — only when this competency actually contains one */}
-              {hasLandingTarget && (
-                <div className="flex-1 min-w-[3.5rem] py-2 px-2 rounded-xl border bg-emerald-950/80 text-emerald-300 border-emerald-700/80 text-center font-black">
-                  <span className="text-[8px] font-mono text-emerald-400 block">LAND</span>
-                  <span className="text-sm font-black font-mono block mt-0.5">
-                    {isPad ? 'RIM' : '💥 CRASH'}
-                  </span>
-                  <span className="text-[8px] font-mono text-emerald-400 block mt-0.5">
-                    Beat 1
-                  </span>
-                </div>
-              )}
+              {/* Landing Stroke Target */}
+              <div className="flex-1 min-w-[3.5rem] py-2 px-2 rounded-xl border bg-emerald-950/80 text-emerald-300 border-emerald-700/80 text-center font-black">
+                <span className="text-[8px] font-mono text-emerald-400 block">LAND</span>
+                <span className="text-sm font-black font-mono block mt-0.5">
+                  {isPad ? 'RIM' : '💥 CRASH'}
+                </span>
+                <span className="text-[8px] font-mono text-emerald-400 block mt-0.5">
+                  Bar 2.1
+                </span>
+              </div>
             </div>
           </div>
-          )}
 
           {/* ================= 5. TRANSPORT ACTION BUTTONS ================= */}
           <div className="grid grid-cols-12 gap-2 pt-2">
@@ -1673,31 +1233,14 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           {instructionMode === 'WATCH' && (
             <div className="pt-3 border-t border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-xs text-stone-400 text-center sm:text-left">
-                {isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH'
-                  ? completedLoops >= 1
-                    ? 'Coach model heard. Evaluate this mission before moving to the next authored curriculum target.'
-                    : 'Play at least one complete coach demonstration before evaluating this mission.'
-                  : isNotationMission
-                  ? 'Followed the written notes and heard how the staff becomes sound? Move to guided reading practice.'
-                  : 'Observed the coach sticking and dynamic accents? Move to interactive guided practice.'}
+                Observed the coach sticking and dynamic accents? Move to interactive guided practice.
               </div>
               <button
                 type="button"
-                disabled={isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH' && completedLoops < 1}
-                onClick={() => {
-                  if (isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH') {
-                    if (completedLoops >= 1) finishCanonicalTargetAndEvaluate();
-                  } else {
-                    handleSwitchStage('FOLLOW');
-                  }
-                }}
-                className={`flex items-center gap-2 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all shrink-0 ${
-                  isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH' && completedLoops < 1
-                    ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
-                    : 'bg-sky-400 hover:bg-sky-300 text-stone-950 cursor-pointer'
-                }`}
+                onClick={() => handleSwitchStage('FOLLOW')}
+                className="flex items-center gap-2 bg-sky-400 hover:bg-sky-300 text-stone-950 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all cursor-pointer shrink-0"
               >
-                <span>{isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH' ? 'Evaluate This Mission →' : 'Step 4: Follow Along With Cues →'}</span>
+                <span>Step 4: Follow Along With Cues →</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1706,31 +1249,14 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           {instructionMode === 'FOLLOW' && (
             <div className="pt-3 border-t border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-xs text-stone-400 text-center sm:text-left">
-                {isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW'
-                  ? completedLoops >= 1
-                    ? 'Guided target completed. Evaluate this mission at its authored assistance level before continuing.'
-                    : 'Complete at least one full guided cycle before evaluating this mission.'
-                  : isNotationMission
-                  ? 'Reading the staff comfortably with cues? Remove coach assistance and sight-read it independently.'
-                  : 'Locked in with the cues? Remove coach assistance and hold down the tempo solo.'}
+                Locked in with the cues? Remove coach assistance and hold down the tempo solo.
               </div>
               <button
                 type="button"
-                disabled={isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW' && completedLoops < 1}
-                onClick={() => {
-                  if (isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW') {
-                    if (completedLoops >= 1) finishCanonicalTargetAndEvaluate();
-                  } else {
-                    handleSwitchStage('PLAY');
-                  }
-                }}
-                className={`flex items-center gap-2 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all shrink-0 ${
-                  isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW' && completedLoops < 1
-                    ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
-                    : 'bg-emerald-400 hover:bg-emerald-300 text-stone-950 cursor-pointer'
-                }`}
+                onClick={() => handleSwitchStage('PLAY')}
+                className="flex items-center gap-2 bg-emerald-400 hover:bg-emerald-300 text-stone-950 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all cursor-pointer shrink-0"
               >
-                <span>{isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW' ? 'Evaluate This Mission →' : 'Step 5: Play Independently →'}</span>
+                <span>Step 5: Play Independently →</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1747,12 +1273,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 type="button"
                 disabled={!independentRunCompleted}
                 onClick={() => {
-                  if (!independentRunCompleted) return;
-                  if (isGovernedCanonicalMission && canonicalTeachingStage === 'PLAY') {
-                    finishCanonicalTargetAndEvaluate();
-                  } else {
-                    handleSwitchStage('EVALUATE');
-                  }
+                  if (independentRunCompleted) handleSwitchStage('EVALUATE');
                 }}
                 className={`flex items-center gap-2 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all shrink-0 ${
                   independentRunCompleted
@@ -1767,7 +1288,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           )}
 
           {/* FOLLOW quick reflection only. Independent PLAY evidence must pass through Stage 6. */}
-          {instructionMode === 'FOLLOW' && !isGovernedCanonicalMission && (
+          {instructionMode === 'FOLLOW' && (
             <div className="pt-2 border-t border-stone-800/60 flex items-center justify-between">
               <span className="text-[10px] text-stone-500 font-bold uppercase">
                 Quick Follow Reflection
@@ -1797,7 +1318,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               </span>
               <div>
                 <h3 className="text-sm font-black text-white">
-                  {isStructureMission ? 'Follow Cues: Bar-Tracking Reflection' : 'Follow Cues: Placement Reflection'}
+                  Follow Cues: Placement Reflection
                 </h3>
                 <span className="text-[10px] text-stone-400 font-mono">
                   Assistance: {assistanceLevel} • Tempo: {currentTempo} BPM
@@ -1808,64 +1329,35 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
 
           <div className="space-y-2">
             <span className="text-xs font-bold text-stone-300 block">
-              {isStructureMission
-                ? 'How well did you keep beat count and bar count separate during guided practice?'
-                : 'How did the phrase placement feel during guided practice?'}
+              How did the phrase placement feel during guided practice?
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {(isStructureMission
-                ? [
-                    {
-                      id: 'CLEAN_COMFORTABLE' as FollowCuesReflection,
-                      label: 'Beat & Bar Count Locked',
-                      desc: 'Beat 1–4 stayed even and every new bar was clear without changing tempo.',
-                      color: 'hover:border-emerald-400 focus:border-emerald-400',
-                    },
-                    {
-                      id: 'ENTRY_TIMING_ISSUE' as FollowCuesReflection,
-                      label: 'Barline Felt Unclear',
-                      desc: 'The pulse stayed moving, but the exact reset from Beat 4 to the next Beat 1 was uncertain.',
-                      color: 'hover:border-amber-400 focus:border-amber-400',
-                    },
-                    {
-                      id: 'MISSED_LANDING' as FollowCuesReflection,
-                      label: 'Lost the Bar Number',
-                      desc: 'Beat counting continued, but I lost track of which bar I was in.',
-                      color: 'hover:border-rose-400 focus:border-rose-400',
-                    },
-                    {
-                      id: 'ROUGH_RECOVERY' as FollowCuesReflection,
-                      label: 'Phrase Grouping Blurred',
-                      desc: 'Individual bars were clear, but the larger 4-bar or 8-bar grouping became uncertain.',
-                      color: 'hover:border-purple-400 focus:border-purple-400',
-                    },
-                  ]
-                : [
-                    {
-                      id: 'CLEAN_COMFORTABLE' as FollowCuesReflection,
-                      label: 'Clean & Locked',
-                      desc: 'Groove, fill entry, and Beat 1 landing felt steady and relaxed',
-                      color: 'hover:border-emerald-400 focus:border-emerald-400',
-                    },
-                    {
-                      id: 'ENTRY_TIMING_ISSUE' as FollowCuesReflection,
-                      label: 'Rushed / Late Entry',
-                      desc: 'Hesitated on Beat 4 entry or rushed into the sticking',
-                      color: 'hover:border-amber-400 focus:border-amber-400',
-                    },
-                    {
-                      id: 'MISSED_LANDING' as FollowCuesReflection,
-                      label: 'Missed Beat 1 Landing',
-                      desc: 'Lost the downbeat anchor crash on Bar 2 Beat 1',
-                      color: 'hover:border-rose-400 focus:border-rose-400',
-                    },
-                    {
-                      id: 'ROUGH_RECOVERY' as FollowCuesReflection,
-                      label: 'Hesitant Groove Recovery',
-                      desc: 'Landed Beat 1, but stumbled returning to Beat 2 groove',
-                      color: 'hover:border-purple-400 focus:border-purple-400',
-                    },
-                  ]).map((opt) => (
+              {[
+                {
+                  id: 'CLEAN_COMFORTABLE' as FollowCuesReflection,
+                  label: 'Clean & Locked',
+                  desc: 'Groove, fill entry, and Beat 1 landing felt steady and relaxed',
+                  color: 'hover:border-emerald-400 focus:border-emerald-400',
+                },
+                {
+                  id: 'ENTRY_TIMING_ISSUE' as FollowCuesReflection,
+                  label: 'Rushed / Late Entry',
+                  desc: 'Hesitated on Beat 4 entry or rushed into the sticking',
+                  color: 'hover:border-amber-400 focus:border-amber-400',
+                },
+                {
+                  id: 'MISSED_LANDING' as FollowCuesReflection,
+                  label: 'Missed Beat 1 Landing',
+                  desc: 'Lost the downbeat anchor crash on Bar 2 Beat 1',
+                  color: 'hover:border-rose-400 focus:border-rose-400',
+                },
+                {
+                  id: 'ROUGH_RECOVERY' as FollowCuesReflection,
+                  label: 'Hesitant Groove Recovery',
+                  desc: 'Landed Beat 1, but stumbled returning to Beat 2 groove',
+                  color: 'hover:border-purple-400 focus:border-purple-400',
+                },
+              ].map((opt) => (
                 <button
                   key={opt.id}
                   onClick={() => handleSelectFollowReflection(opt.id)}
@@ -1929,19 +1421,12 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               Verify your execution landmarks:
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-              {(isStructureMission
-                ? [
-                    { id: 'groove_stable', label: '1. Quarter-note pulse stayed even through every beat' },
-                    { id: 'entry_clean', label: '2. Beat 4 completed fully before the next bar began' },
-                    { id: 'landing_on_1', label: '3. Every new Beat 1 was recognised as a bar-start reset' },
-                    { id: 'smooth_recovery', label: '4. Bar/phrase number stayed clear without stopping the pulse' },
-                  ]
-                : [
-                    { id: 'groove_stable', label: '1. Steady Groove Pulse (Beats 1–3)' },
-                    { id: 'entry_clean', label: '2. Clean Sticking Execution (Beat 4)' },
-                    { id: 'landing_on_1', label: '3. Downbeat Anchor Crash (Bar 2 Beat 1)' },
-                    { id: 'smooth_recovery', label: '4. Immediate Groove Return (Bar 2 Beat 2)' },
-                  ]).map((item) => {
+              {[
+                { id: 'groove_stable', label: '1. Steady Groove Pulse (Beats 1–3)' },
+                { id: 'entry_clean', label: '2. Clean Sticking Execution (Beat 4)' },
+                { id: 'landing_on_1', label: '3. Downbeat Anchor Crash (Bar 2 Beat 1)' },
+                { id: 'smooth_recovery', label: '4. Immediate Groove Return (Bar 2 Beat 2)' },
+              ].map((item) => {
                 const isChecked = independentChecklist.includes(item.id);
                 return (
                   <button

@@ -590,6 +590,14 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       isPad,
       loopLimit: maxLoopsCount,
       onLoopComplete: (completed) => {
+        // C7.15.1: latch canonical WATCH/FOLLOW completion directly from the
+        // transport callback. The transport can auto-stop immediately after a
+        // 1x long-form cycle, before the next animation frame has a chance to
+        // copy masterTransport.completedLoops into React state. Without this
+        // latch the UI can remain stuck on “Complete at least one full guided
+        // cycle” even though the authored cycle actually finished.
+        setCompletedLoops((previous) => Math.max(previous, completed));
+
         if (instructionMode === 'PLAY') {
           setIndependentLoopsCompleted(completed);
           if (completed >= evaluationUnlockLoops) {
