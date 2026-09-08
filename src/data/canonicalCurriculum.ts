@@ -462,7 +462,7 @@ export const CANONICAL_CURRICULUM_COMPETENCIES: CurriculumCompetency[] = [
     subdivision: '8th notes',
     durationCriterion: '16 bars without speeding up or dragging',
     supportedEquipment: 'Both',
-    musicalApplicationRequirement: 'Maintain identical limb volumes and micro-timing across 16 bars',
+    musicalApplicationRequirement: 'Maintain consistent limb balance and micro-timing across 16 bars, including controlled section-level dynamic changes',
     songTags: ['Dreams (Fleetwood Mac)', 'Billie Jean'],
     prerequisiteCompetencyIds: ['comp-grv-backbeat'],
     unlocksCompetencyIds: ['comp-grv-kick-variation', 'comp-fill-entry'],

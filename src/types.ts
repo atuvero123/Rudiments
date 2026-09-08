@@ -693,6 +693,10 @@ export interface CurriculumStructureSection {
   label: string;
   startBar: number;
   bars: number;
+  /** Optional musical direction shown while this section is active. */
+  performanceCue?: string;
+  /** Broad dynamic intent for song-form transfer work. */
+  intensity?: 'SOFT' | 'MEDIUM' | 'STRONG';
 }
 
 export interface CurriculumMissionMetadata {

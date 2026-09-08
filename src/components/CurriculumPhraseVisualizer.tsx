@@ -46,6 +46,19 @@ export const CurriculumPhraseVisualizer: React.FC<CurriculumPhraseVisualizerProp
         </div>
       </div>
 
+      {activeSection?.performanceCue && (
+        <div className={`rounded-xl border px-3 py-2.5 ${
+          activeSection.intensity === 'STRONG'
+            ? 'bg-amber-400/15 border-amber-400/50 text-amber-100'
+            : 'bg-emerald-400/10 border-emerald-400/40 text-emerald-100'
+        }`}>
+          <span className="text-[9px] uppercase tracking-widest font-black block opacity-80">
+            Section Responsibility — {activeSection.label}
+          </span>
+          <p className="text-[11px] font-semibold mt-0.5">{activeSection.performanceCue}</p>
+        </div>
+      )}
+
       {structure.showBarNumbers !== false && (
         <div className="grid grid-cols-4 sm:grid-cols-8 gap-1.5">
           {Array.from({ length: totalBars }, (_, index) => index + 1).map((bar) => {
@@ -92,6 +105,17 @@ export const CurriculumPhraseVisualizer: React.FC<CurriculumPhraseVisualizerProp
           </div>
         </div>
       )}
+
+      {structure.sections?.length ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+          {structure.sections.map((section) => (
+            <div key={`${section.label}-${section.startBar}`} className="rounded-lg bg-stone-900/70 border border-stone-800 px-2.5 py-2">
+              <span className="text-[9px] uppercase font-black text-stone-300">{section.label}</span>
+              <span className="text-[9px] font-mono text-stone-500 ml-2">Bars {section.startBar}–{section.startBar + section.bars - 1}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="text-[11px] text-stone-400 font-medium">
         Beat numbers repeat inside every bar. Bar numbers track the larger phrase. Beat 1 is the reset point — do not confuse it with Bar 1.

@@ -143,25 +143,48 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       return buildNotationProgressionDefinition(base, exercise.curriculumMission?.missionNumber || 1);
     }
 
-    // C6: phrase/bar-structure missions need the master clock to travel across
-    // the actual mission bar count (4/8/16/24), not loop a two-bar teaching
-    // demo. Expand the canonical first-bar event template across the mission.
-    if (matchedTeachingDef && exercise.curriculumMission?.competencyId === 'comp-meter-44' && structure) {
-      const baseBarEvents = base.events.filter((event) => (event.bar || 1) === 1);
-      const landmarks = new Set(structure.highlightLandmarkBars || [1]);
-      const expandedEvents = Array.from({ length: structure.totalBars }, (_, index) => index + 1).flatMap((bar) =>
-        baseBarEvents.map((event) => ({
-          ...event,
-          bar,
-          accent: event.beat === 1 ? landmarks.has(bar) : event.accent,
-          label: event.beat === 1 ? `Bar ${bar} (1)` : event.label,
-          description: event.beat === 1
-            ? landmarks.has(bar)
-              ? `Phrase landmark — Bar ${bar} Beat 1`
-              : `Bar ${bar} Beat 1`
-            : event.description,
-        }))
+    // C7.13 mission-length integrity: every governed canonical mission must
+    // drive the master transport across the same bar count shown by the C7
+    // structure visualizer. Previously only the authored 4/4 structure lesson
+    // expanded its event template, leaving generic groove missions with a
+    // misleading 8/16-bar visualizer over a one/two-bar audio loop. Repeat any
+    // authored source bars cyclically across the governed mission structure.
+    // Reading remains handled above because it has its own authored notation
+    // progression and must never be converted into a memorized generic pattern.
+    if (matchedTeachingDef && exercise.curriculumMission && structure) {
+      const authoredBars = Math.max(
+        1,
+        ...base.events.map((event) => Math.max(1, event.bar || 1))
       );
+      const landmarks = new Set(structure.highlightLandmarkBars || [1]);
+      const sections = structure.sections || [];
+      const expandedEvents = Array.from({ length: structure.totalBars }, (_, index) => index + 1).flatMap((bar) => {
+        const sourceBar = ((bar - 1) % authoredBars) + 1;
+        const sourceEvents = base.events.filter((event) => Math.max(1, event.bar || 1) === sourceBar);
+        const activeSection = sections.find((section) =>
+          bar >= section.startBar && bar < section.startBar + section.bars
+        );
+
+        return sourceEvents.map((event) => {
+          const isMeter44 = exercise.curriculumMission?.competencyId === 'comp-meter-44';
+          const sectionDirection = activeSection?.performanceCue
+            ? `${activeSection.label}: ${activeSection.performanceCue}`
+            : '';
+          return {
+            ...event,
+            bar,
+            accent: isMeter44 && event.beat === 1 ? landmarks.has(bar) : event.accent,
+            label: isMeter44 && event.beat === 1 ? `Bar ${bar} (1)` : event.label,
+            description: isMeter44 && event.beat === 1
+              ? landmarks.has(bar)
+                ? `Phrase landmark — Bar ${bar} Beat 1`
+                : `Bar ${bar} Beat 1`
+              : sectionDirection
+              ? `${event.description || event.label}. ${sectionDirection}`
+              : event.description,
+          };
+        });
+      });
       return { ...base, bars: structure.totalBars, events: expandedEvents };
     }
 
@@ -208,7 +231,9 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
 
   // Speed and Loop controls
   const [demoSpeedMultiplier, setDemoSpeedMultiplier] = useState<number>(0.75);
-  const [loopMode, setLoopMode] = useState<LoopMode>('2x');
+  const [loopMode, setLoopMode] = useState<LoopMode>(() =>
+    (exercise.curriculumMission?.structure?.totalBars || 0) >= 8 ? '1x' : '2x'
+  );
   const [followTutorBars, setFollowTutorBars] = useState<number>(() => {
     if (typeof window === 'undefined') return 1;
     const saved = Number(window.localStorage.getItem('rudiment-follow-tutor-bars'));
@@ -219,6 +244,15 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     const saved = Number(window.localStorage.getItem('rudiment-follow-learner-bars'));
     return [1, 2, 4].includes(saved) ? saved : 1;
   });
+
+  // C7.13: a long canonical phrase (8/16+ bars) is already the required
+  // endurance/form test, so one complete pass should unlock evaluation. Reset
+  // the loop selector when moving between missions so a two-bar default from a
+  // prior exercise cannot silently double a 16-bar song-form assignment.
+  useEffect(() => {
+    const totalBars = exercise.curriculumMission?.structure?.totalBars || 0;
+    setLoopMode(totalBars >= 8 ? '1x' : '2x');
+  }, [exercise.id, exercise.curriculumMission?.structure?.totalBars]);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [focusView, setFocusView] = useState<boolean>(true);
@@ -265,6 +299,17 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   const [independentLoopsCompleted, setIndependentLoopsCompleted] = useState<number>(0);
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
   const [diagnosticsData, setDiagnosticsData] = useState<TransportDiagnosticState | null>(null);
+
+  const activeCurriculumSection = useMemo(() => {
+    const structure = exercise.curriculumMission?.structure;
+    const sections = structure?.sections || [];
+    if (!structure || sections.length === 0) return null;
+    const totalBars = Math.max(1, structure.totalBars);
+    const liveBar = ((Math.max(1, currentBar) - 1) % totalBars) + 1;
+    return sections.find((section) =>
+      liveBar >= section.startBar && liveBar < section.startBar + section.bars
+    ) || null;
+  }, [currentBar, exercise.curriculumMission?.structure]);
 
   const animationFrameRef = useRef<number | null>(null);
 
@@ -1360,6 +1405,21 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                       : 'Tutor and learner play together. Match every note and dynamic in real time.'
                     : 'Press Start to begin audio playback with metronome pulse.'}
                 </p>
+
+                {exercise.curriculumMission?.musicalApplication && activeCurriculumSection?.performanceCue && (
+                  <div className={`mt-3 rounded-xl border px-3 py-2 text-left ${
+                    activeCurriculumSection.intensity === 'STRONG'
+                      ? 'bg-amber-400/15 border-amber-400/50 text-amber-100'
+                      : 'bg-emerald-400/10 border-emerald-400/40 text-emerald-100'
+                  }`}>
+                    <span className="text-[9px] uppercase tracking-widest font-black block">
+                      {activeCurriculumSection.label} • Bars {activeCurriculumSection.startBar}–{activeCurriculumSection.startBar + activeCurriculumSection.bars - 1}
+                    </span>
+                    <span className="text-[11px] font-semibold block mt-0.5">
+                      {activeCurriculumSection.performanceCue}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1394,6 +1454,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   ? `${timeline.totalBars}-Bar Structure`
                   : isNotationMission
                   ? `${timeline.totalBars}-Bar Reading Phrase`
+                  : exercise.curriculumMission?.structure
+                  ? `${timeline.totalBars}-Bar ${exercise.curriculumMission?.musicalApplication ? 'Song Form' : 'Phrase Cycle'}`
                   : `2-Bar Phrase Cycle`}
               </span>
             </div>

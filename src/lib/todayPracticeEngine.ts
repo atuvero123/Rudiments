@@ -23,7 +23,11 @@ import {
   deriveCompetencyAdvancementReadiness,
   deriveCompetencyPracticeAuthorityForSkill,
 } from './competencyAdvancementEngine';
-import { buildC7VerificationRepairSession } from './curriculumPracticeIntelligence';
+import {
+  buildC7GrooveIntegrityContinuationSession,
+  buildC7VerificationRepairSession,
+  needsC7GrooveIntegrityContinuation,
+} from './curriculumPracticeIntelligence';
 
 /**
  * Generates the 3 canonical practice lanes for Today's practice:
@@ -264,6 +268,24 @@ export function buildTodayCurriculumSession(
       ...boundRepair,
       focusTopic: `Today's Verification Repair: ${primaryComp.title}`,
       notes: `C7.12 repair authority: prior learning coverage is preserved. Complete only the targeted no-assistance repair before retesting.`,
+    };
+  }
+
+  // C7.13: if Groove Stability already has valid Missions 1–4 but its old
+  // independent/song-transfer evidence was collected on the short generic
+  // transport, Today's Practice must continue with only the corrected long-form
+  // Missions 5–6 rather than bypassing them through a placement-style session.
+  if (primaryComp && needsC7GrooveIntegrityContinuation(primaryComp.id)) {
+    const placementBand = CURRICULUM_UNITS_BY_ID.get(primaryComp.unitId)?.band || 'BEGINNER';
+    const continuation = buildC7GrooveIntegrityContinuationSession(
+      primaryComp,
+      profile,
+      placementBand
+    );
+    return {
+      ...continuation,
+      focusTopic: `Today's Long-Form Groove Continuation: ${primaryComp.title}`,
+      notes: 'C7.13 integrity continuation: earlier learning stages remain banked. Complete only the corrected 16-bar independent and song-form transfer missions.',
     };
   }
 

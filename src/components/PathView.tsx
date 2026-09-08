@@ -62,7 +62,16 @@ import {
   getSkillStatusAfterCompetencyVerification,
   recordCompetencyVerificationOutcome,
 } from '../lib/competencyAdvancementEngine';
-import { buildC7CompetencySession, buildC7ProtocolRevalidationSession, buildC7SecondSessionRevisitSession, buildC7VerificationRepairSession, buildC7VerificationStabilizationSession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
+import {
+  buildC7CompetencySession,
+  buildC7GrooveIntegrityContinuationSession,
+  buildC7ProtocolRevalidationSession,
+  buildC7SecondSessionRevisitSession,
+  buildC7VerificationRepairSession,
+  buildC7VerificationStabilizationSession,
+  getCurriculumEvidenceLedger,
+  needsC7GrooveIntegrityContinuation,
+} from '../lib/curriculumPracticeIntelligence';
 import { bindCanonicalRepairSessionToPlan, getActiveGapClosurePlan } from '../lib/gapClosureEngine';
 import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 
@@ -130,6 +139,12 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
   const advancementReadiness = deriveCompetencyAdvancementReadiness(activeCompetency, skills);
   const activeCoverageLedger = getCurriculumEvidenceLedger(activeCompetency.id);
   const activeUnmetCoverageCriteria = activeCoverageLedger.readinessCriteria.filter((criterion) => !criterion.met);
+  const activeNeedsGrooveIntegrityContinuation = Boolean(
+    needsC7GrooveIntegrityContinuation(activeCompetency.id) &&
+    advancementReadiness.state !== 'VERIFIED' &&
+    advancementReadiness.state !== 'BLOCKED' &&
+    advancementReadiness.state !== 'REPAIR_REQUIRED'
+  );
   const activeNeedsSeparateSessionRevisit =
     activeCoverageLedger.readiness === 5 &&
     activeUnmetCoverageCriteria.length === 1 &&
@@ -248,6 +263,12 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       repairPlan &&
       !repairPlan.isReadyForReassessment
     );
+    const shouldRunGrooveIntegrityContinuation = Boolean(
+      needsC7GrooveIntegrityContinuation(comp.id) &&
+      readiness.state !== 'VERIFIED' &&
+      readiness.state !== 'BLOCKED' &&
+      readiness.state !== 'REPAIR_REQUIRED'
+    );
     const shouldRunSecondSessionRevisit =
       ledger.readiness === 5 &&
       unmetCoverageCriteria.length === 1 &&
@@ -283,6 +304,12 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
           profile,
           placementSummary.highestVerifiedBand,
           readiness.highestQualifyingBpm || readiness.targetBpm
+        )
+      : shouldRunGrooveIntegrityContinuation
+      ? buildC7GrooveIntegrityContinuationSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand
         )
       : shouldRunSecondSessionRevisit
       ? buildC7SecondSessionRevisitSession(
@@ -562,7 +589,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             className="flex items-center gap-2 bg-[#4a523a] hover:bg-[#3d4430] text-white px-5 py-3 rounded-2xl font-black text-xs transition-transform transform active:scale-95 shadow-md cursor-pointer self-start sm:self-auto"
           >
             {activeReadyToVerify ? <ShieldCheck className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
-            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsVerificationRepair ? 'Repair Before Retest' : activeNeedsProtocolRevalidation ? 'Revalidate on Corrected Clock' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
+            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsVerificationRepair ? 'Repair Before Retest' : activeNeedsProtocolRevalidation ? 'Revalidate on Corrected Clock' : activeNeedsGrooveIntegrityContinuation ? 'Continue Corrected Long Form' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
           </button>
         </div>
 
@@ -571,6 +598,15 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             <div className="font-black">Corrected-verifier revalidation</div>
             <div className="mt-1 leading-relaxed">
               Your earlier learning and practice history are still preserved. Only the old formal C4 checkpoint was retired because it used the pre-v2 timing protocol. You do not need to repeat the full teaching journey; complete the short corrected-clock revalidation, then take the formal test again.
+            </div>
+          </div>
+        )}
+
+        {activeNeedsGrooveIntegrityContinuation && (
+          <div className="rounded-2xl border border-sky-300 bg-sky-50 px-4 py-3 text-xs text-sky-950">
+            <div className="font-black">Corrected long-form groove continuation</div>
+            <div className="mt-1 leading-relaxed">
+              Your valid Map, Count, Hear and Follow work is preserved. Only the old independent/song-transfer runs used the short generic transport. Continue with the corrected 16-bar independent run and 16-bar Verse → Chorus song form; you do not need to restart the teaching journey.
             </div>
           </div>
         )}

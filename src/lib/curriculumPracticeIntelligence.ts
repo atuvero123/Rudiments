@@ -18,6 +18,20 @@ const C6_EVIDENCE_KEY = 'RUDIMENT_C6_CURRICULUM_EVIDENCE_V1';
 // C7.4 staff/transport build must not be promoted into canonical readiness.
 export const C7_NOTATION_VALID_EVIDENCE_SINCE = Date.parse('2026-09-07T19:29:00Z');
 
+// C7.13 groove-integrity boundary. Earlier Groove Stability Mission 5/6 runs
+// used an 8/16-bar curriculum visualizer over a shorter generic transport loop,
+// and the musical-transfer mission had no real section/dynamic responsibility.
+// Preserve the learner's conceptual/guided evidence, but require fresh
+// independent + musical-transfer evidence on the corrected long-form transport.
+export const C7_GROOVE_STABILITY_VALID_TRANSFER_SINCE = Date.parse('2026-09-08T09:00:00Z');
+
+function isC7IntegrityValid(competencyId: string, missionNumber: number, timestamp: string): boolean {
+  if (competencyId === 'comp-grv-stability' && missionNumber >= 5) {
+    return new Date(timestamp).getTime() >= C7_GROOVE_STABILITY_VALID_TRANSFER_SINCE;
+  }
+  return true;
+}
+
 export interface CurriculumMissionEvidenceRecord {
   id: string;
   runId: string;
@@ -175,7 +189,8 @@ export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMi
     .filter((record) =>
       competencyId !== 'comp-reading-notation' ||
       new Date(record.timestamp).getTime() >= C7_NOTATION_VALID_EVIDENCE_SINCE
-    );
+    )
+    .filter((record) => isC7IntegrityValid(competencyId, record.missionNumber, record.timestamp));
   const competency = CURRICULUM_COMPETENCIES_BY_ID.get(competencyId);
   if (!competency) return direct;
 
@@ -193,6 +208,7 @@ export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMi
     .flatMap((attempt): CurriculumMissionEvidenceRecord[] => {
       const missionNumber = missionNumberFromExerciseId(attempt.exerciseId);
       if (!missionNumber) return [];
+      if (!isC7IntegrityValid(competencyId, missionNumber, attempt.timestamp)) return [];
 
       const missionKey = `${attempt.sessionId}:${missionNumber}`;
       if (directMissionKeys.has(missionKey)) return [];
@@ -599,10 +615,15 @@ function c7TimeSignature(competency: CurriculumCompetency): string {
   return '4/4';
 }
 
-function c7StructureFor(competency: CurriculumCompetency, bars: number) {
+function c7StructureFor(
+  competency: CurriculumCompetency,
+  bars: number,
+  domain?: ReturnType<typeof getCurriculumPedagogyProfile>['domain'],
+  missionNumber?: number
+) {
   const meter = c7TimeSignature(competency);
   const beatsPerBar = meter === '6/8' ? 6 : meter === '3/4' ? 3 : meter === '5/4' ? 5 : meter === '7/8' ? 7 : meter === '12/8' ? 12 : 4;
-  return {
+  const base = {
     totalBars: bars,
     phraseGroupSize: bars >= 8 ? 4 : Math.max(1, Math.min(4, bars)),
     beatsPerBar,
@@ -610,6 +631,24 @@ function c7StructureFor(competency: CurriculumCompetency, bars: number) {
     showBarNumbers: true,
     showBeatNumbers: true,
   };
+
+  // C7.13: the final groove transfer mission must be a real musical form, not
+  // another static two-bar loop carrying a "Serve the Song" label. Give the
+  // 16-bar journey explicit section/dynamic responsibilities so the learner has
+  // something musical to respond to while preserving identical tempo/pocket.
+  if (domain === 'GROOVE' && missionNumber === 6 && bars >= 16) {
+    return {
+      ...base,
+      sections: [
+        { label: 'VERSE', startBar: 1, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Keep the hi-hat controlled and the backbeat firm but restrained.' },
+        { label: 'CHORUS', startBar: 5, bars: 4, intensity: 'STRONG' as const, performanceCue: 'Lift the energy and backbeat without speeding up or changing the groove.' },
+        { label: 'VERSE RETURN', startBar: 9, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Bring the volume back down while keeping the same internal pulse.' },
+        { label: 'FINAL CHORUS', startBar: 13, bars: 4, intensity: 'STRONG' as const, performanceCue: 'Lift again, stay relaxed, and finish Bar 16 without rushing.' },
+      ],
+    };
+  }
+
+  return base;
 }
 
 /**
@@ -644,6 +683,8 @@ export function buildC7CompetencySession(
   // phrase while the staff and master transport are only presenting 2/4 bars.
   const bars = pedagogy.domain === 'READING'
     ? [1, 1, 2, 2, 4, 4]
+    : pedagogy.domain === 'GROOVE'
+    ? [2, 4, 4, 8, 16, 16]
     : [2, 4, 4, 8, 8, 16];
   const tempoOffsets = [0, 0, 2, 4, 6, target - base];
 
@@ -653,6 +694,7 @@ export function buildC7CompetencySession(
     const independent = n === 5;
     const bpm = musical ? target : Math.min(target, base + Math.max(0, tempoOffsets[index]));
     const isReading = pedagogy.domain === 'READING';
+    const isGrooveSongTransfer = pedagogy.domain === 'GROOVE' && musical;
     const readingPurposes = [
       'Identify the written drum voices and staff positions before playing.',
       'Count the written rhythm from left to right while keeping your eyes on the staff.',
@@ -672,6 +714,8 @@ export function buildC7CompetencySession(
 
     const purpose = isReading
       ? readingPurposes[index]
+      : isGrooveSongTransfer
+        ? 'Serve a complete 16-bar Verse → Chorus → Verse → Chorus form by changing dynamics without changing tempo or pocket.'
       : n === 1
         ? pedagogy.conceptualFocus
         : n === 2
@@ -685,6 +729,8 @@ export function buildC7CompetencySession(
                 : pedagogy.musicalTransfer;
     const instructions = isReading
       ? readingInstructions[index]
+      : isGrooveSongTransfer
+        ? `Metronome only. Play the full 16-bar form: Bars 1–4 VERSE (controlled), 5–8 CHORUS (lift), 9–12 VERSE RETURN (settle), 13–16 FINAL CHORUS (lift again). Keep the exact same groove and tempo throughout; only the musical energy changes. ${competency.musicalApplicationRequirement}.`
       : n === 1
         ? `${competency.description} Work below verification tempo and prioritize understanding over speed.`
         : n === 2
@@ -710,7 +756,7 @@ export function buildC7CompetencySession(
       patternDisplay: pedagogy.patternDisplay,
       requiredPatternLabel: pedagogy.patternDisplay === 'NONE' || pedagogy.patternDisplay === 'BAR_STRUCTURE' || pedagogy.patternDisplay === 'NOTATION' ? undefined : competency.stickingPattern,
       pedagogyDomain: pedagogy.domain,
-      structure: c7StructureFor(competency, bars[index]),
+      structure: c7StructureFor(competency, bars[index], pedagogy.domain, n),
     };
 
     return {
@@ -765,6 +811,61 @@ export function buildC7CompetencySession(
   };
 }
 
+
+/**
+ * C7.13 — Groove Stability long-form integrity continuation.
+ *
+ * The learner may already have completed Missions 1–4 before the transport
+ * length / song-form correction landed. Preserve those valid conceptual,
+ * listening and reduced-guidance records. Only Mission 5 (real 16-bar
+ * independent endurance) and Mission 6 (real 16-bar section-aware transfer)
+ * need to be repeated on the corrected transport.
+ */
+export function needsC7GrooveIntegrityContinuation(competencyId: string): boolean {
+  if (competencyId !== 'comp-grv-stability') return false;
+  const records = getCurriculumEvidenceRecords(competencyId);
+  const success = (record: CurriculumMissionEvidenceRecord) =>
+    record.assessment === 'CLEAN_AND_RELAXED' || record.assessment === 'MOSTLY_CLEAN';
+  const hasMission = (missionNumber: number) =>
+    records.some((record) => record.missionNumber === missionNumber && success(record));
+  const earlierJourneyComplete = [1, 2, 3, 4].every(hasMission);
+  const correctedLongFormComplete = [5, 6].every(hasMission);
+  return earlierJourneyComplete && !correctedLongFormComplete;
+}
+
+export function buildC7GrooveIntegrityContinuationSession(
+  competency: CurriculumCompetency,
+  profile: LearnerProfile,
+  placementBand: CurriculumBand
+): PracticeSession {
+  const fullSession = buildC7CompetencySession(competency, profile, placementBand);
+  const records = getCurriculumEvidenceRecords(competency.id);
+  const success = (record: CurriculumMissionEvidenceRecord) =>
+    record.assessment === 'CLEAN_AND_RELAXED' || record.assessment === 'MOSTLY_CLEAN';
+  const hasMission = (missionNumber: number) =>
+    records.some((record) => record.missionNumber === missionNumber && success(record));
+  const missingMissionNumbers = [5, 6].filter((missionNumber) => !hasMission(missionNumber));
+  const sessionId = `c7-13-groove-integrity-${competency.id}-${Date.now()}`;
+  const exercises = fullSession.exercises
+    .filter((exercise) => missingMissionNumbers.includes(exercise.curriculumMission?.missionNumber || 0))
+    .map((exercise) => ({
+      ...exercise,
+      id: `${sessionId}-m${exercise.curriculumMission?.missionNumber || 0}`,
+    }));
+
+  return {
+    ...fullSession,
+    id: sessionId,
+    durationMinutes: exercises.length <= 1 ? 8 : 14,
+    focusTopic: `${competency.title} — Corrected Long-Form Continuation`,
+    notes: 'C7.13 integrity continuation: Missions 1–4 remain banked. Complete only the missing corrected 16-bar independent/song-form work; prior learning evidence is preserved.',
+    exercises,
+    curriculumPractice: {
+      ...fullSession.curriculumPractice!,
+      missionCount: exercises.length,
+    },
+  };
+}
 
 /**
  * C7.9 — Targeted second-session revisit.

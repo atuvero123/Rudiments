@@ -1482,7 +1482,13 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
             </div>
 
             <p className="text-[10px] text-stone-400 leading-relaxed">
-              This is the limb/sticking pattern required by the current exercise. Counting is shown separately below.
+              {currentExercise.curriculumMission?.pedagogyDomain === 'GROOVE' || currentExercise.curriculumMission?.pedagogyDomain === 'STYLE'
+                ? 'This is the limb/voice map required by the current exercise. Counting is shown separately below.'
+                : currentExercise.curriculumMission?.pedagogyDomain === 'RUDIMENT'
+                ? 'This is the sticking pattern required by the current exercise. Counting is shown separately below.'
+                : currentExercise.curriculumMission?.pedagogyDomain === 'COORDINATION'
+                ? 'This is the limb sequence required by the current exercise. Counting is shown separately below.'
+                : 'This is the required performance pattern for the current exercise. Counting is shown separately below.'}
             </p>
 
             {currentExercise.padAdaptationNote && (
