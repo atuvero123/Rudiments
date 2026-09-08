@@ -23,6 +23,7 @@ interface CountingTutorViewProps {
   teachingDef: CompetencyTeachingDefinition;
   currentTempo: number;
   onProceedToWatch: () => void;
+  proceedLabel?: string;
   onTempoAdjust?: (delta: number) => void;
 }
 
@@ -32,6 +33,7 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
   teachingDef,
   currentTempo,
   onProceedToWatch,
+  proceedLabel,
   onTempoAdjust,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -154,7 +156,7 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
           }}
           className="self-start sm:self-auto flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-stone-950 px-4 py-2.5 rounded-2xl font-black text-xs transition-all shadow-md active:scale-95 cursor-pointer whitespace-nowrap"
         >
-          <span>3. Watch Coach Demo</span>
+          <span>{proceedLabel || '3. Watch Coach Demo'}</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

@@ -272,9 +272,9 @@ export function getCurriculumEvidenceLedger(competencyId: string): CurriculumEvi
       detail: `${musicalApplications} successful musical application${musicalApplications === 1 ? '' : 's'}`,
     },
     {
-      label: 'Control repeated separately',
+      label: 'Learning revisited separately',
       met: separateSessions >= 2,
-      detail: `${separateSessions}/2 separate practice sessions`,
+      detail: `${separateSessions}/2 separate curriculum sessions (coverage only; C4 still requires separate qualifying independent sessions)`,
     },
   ];
 
@@ -764,3 +764,47 @@ export function buildC7CompetencySession(
     },
   };
 }
+
+/**
+ * C7.7 — Short verification-stabilization session.
+ *
+ * Once the learner has already covered all six curriculum evidence dimensions,
+ * repeating the whole teaching journey is wasteful and can encourage stage
+ * bypassing. This continuation keeps only the canonical no-assistance missions
+ * (independent execution + musical transfer) and runs them at the formal target
+ * tempo, creating a fresh session boundary for C4's separate-session criterion.
+ */
+export function buildC7VerificationStabilizationSession(
+  competency: CurriculumCompetency,
+  profile: LearnerProfile,
+  placementBand: CurriculumBand
+): PracticeSession {
+  const fullSession = buildC7CompetencySession(competency, profile, placementBand);
+  const independentExercises = (fullSession.exercises || [])
+    .filter((exercise) => {
+      const assistance = exercise.curriculumMission?.assistanceTarget;
+      return assistance === 'NONE' || assistance === 'MINIMAL';
+    })
+    .map((exercise) => ({
+      ...exercise,
+      tempo: competency.tempoStandard.bpm,
+      targetTempo: competency.tempoStandard.bpm,
+      durationSeconds: Math.max(60, exercise.durationSeconds || 60),
+    }));
+
+  // Defensive fallback: if a future competency journey has no explicit NONE /
+  // MINIMAL stage, preserve the original session rather than returning an empty one.
+  if (independentExercises.length === 0) return fullSession;
+
+  return {
+    ...fullSession,
+    durationMinutes: Math.max(6, independentExercises.length * 4),
+    focusTopic: `${competency.title} — Verification Stabilization`,
+    notes: `C7.7 targeted continuation: curriculum coverage is already complete, so this session repeats only genuine independent and musical-transfer evidence at the formal standard.`,
+    exercises: independentExercises,
+    curriculumPractice: fullSession.curriculumPractice
+      ? { ...fullSession.curriculumPractice, missionCount: independentExercises.length }
+      : undefined,
+  };
+}
+

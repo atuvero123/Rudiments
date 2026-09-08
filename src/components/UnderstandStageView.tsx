@@ -26,6 +26,7 @@ interface UnderstandStageViewProps {
   isPad: boolean;
   currentTempo: number;
   onProceedToCount: () => void;
+  proceedLabel?: string;
 }
 
 export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
@@ -35,6 +36,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
   isPad,
   currentTempo,
   onProceedToCount,
+  proceedLabel,
 }) => {
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
 
@@ -135,7 +137,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
           onClick={onProceedToCount}
           className="self-start sm:self-auto flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-stone-950 px-4 py-2.5 rounded-2xl font-black text-xs transition-all shadow-md active:scale-95 cursor-pointer whitespace-nowrap"
         >
-          <span>{isNotationMission ? '2. Count the Written Bar' : '2. Count It'}</span>
+          <span>{proceedLabel || (isNotationMission ? '2. Count the Written Bar' : '2. Count It')}</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>

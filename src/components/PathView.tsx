@@ -61,7 +61,7 @@ import {
   getSkillStatusAfterCompetencyVerification,
   recordCompetencyVerificationOutcome,
 } from '../lib/competencyAdvancementEngine';
-import { buildC7CompetencySession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
+import { buildC7CompetencySession, buildC7VerificationStabilizationSession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
 import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 
 interface PathViewProps {
@@ -126,6 +126,13 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
     currentComfortTempo: activeCompetency.tempoStandard.bpm,
   } as any);
   const advancementReadiness = deriveCompetencyAdvancementReadiness(activeCompetency, skills);
+  const activeCoverageLedger = getCurriculumEvidenceLedger(activeCompetency.id);
+  const activeNeedsVerificationStabilization =
+    activeCoverageLedger.readiness === 6 &&
+    advancementReadiness.state !== 'VERIFIED' &&
+    advancementReadiness.state !== 'BLOCKED' &&
+    advancementReadiness.state !== 'REPAIR_REQUIRED' &&
+    !advancementReadiness.recurringFriction;
 
   const handleCompetencyVerificationComplete = (result: {
     startedAt: string;
@@ -204,15 +211,30 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       return;
     }
 
-    // C7: every canonical competency now enters a competency-specific governed
-    // journey. 4/4 preserves the validated C6.1 structure curriculum; the
-    // remaining competencies use their own pedagogy family instead of the
-    // generic phrase-insertion fallback.
-    const session = buildC7CompetencySession(
-      comp,
-      profile,
-      placementSummary.highestVerifiedBand
-    );
+    // C7.7: once all curriculum learning stages are already covered, do not
+    // send the learner back through the entire teaching journey merely to earn
+    // another qualifying independent session. A short governed stabilization
+    // session repeats only the true no-assistance missions at the formal tempo.
+    const readiness = deriveCompetencyAdvancementReadiness(comp, skills);
+    const ledger = getCurriculumEvidenceLedger(comp.id);
+    const shouldStabilizeForVerification =
+      ledger.readiness === 6 &&
+      readiness.state !== 'VERIFIED' &&
+      readiness.state !== 'BLOCKED' &&
+      readiness.state !== 'REPAIR_REQUIRED' &&
+      !readiness.recurringFriction;
+
+    const session = shouldStabilizeForVerification
+      ? buildC7VerificationStabilizationSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand
+        )
+      : buildC7CompetencySession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand
+        );
     startGuidedSession(session);
   };
 
@@ -469,7 +491,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             className="flex items-center gap-2 bg-[#4a523a] hover:bg-[#3d4430] text-white px-5 py-3 rounded-2xl font-black text-xs transition-transform transform active:scale-95 shadow-md cursor-pointer self-start sm:self-auto"
           >
             <Play className="w-4 h-4 fill-white" />
-            <span>Practice This Competency</span>
+            <span>{activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
           </button>
         </div>
 

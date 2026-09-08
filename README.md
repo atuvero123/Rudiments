@@ -75,3 +75,6 @@ C7.2 hardens timing and guided repetition after C7.1 field testing. Spoken count
 ## C7.6 — Canonical Evidence Unification & Formal-Readiness Hardening
 
 C7.6 makes the stage-aware C6/C7 curriculum evidence stream authoritative for canonical formal-readiness counting. Guided curriculum screens can no longer be credited as independent merely because their generic interaction mode is `PLAY`, valid post-fix canonical attempts can be reconstructed into the curriculum ledger when older builds omitted the dedicated record, and the UI now distinguishes **C7 Learning Coverage** from **C4 Formal Verification Readiness**. See `C7_6_BUILD_REPORT.md`.
+
+## C7.7 — Mission Governance & Verification Stabilization
+C7.7 hardens the canonical learning-to-verification handoff. Canonical missions now lock the inner tutor to the mission's authored teaching stage and assistance contract, completed 6/6 competencies use short verification-stabilization sessions instead of repeating the full journey, and all pre-verification coaching respects the formal tempo ceiling. See `C7_7_BUILD_REPORT.md`.

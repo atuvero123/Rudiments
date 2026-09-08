@@ -174,6 +174,15 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       : buildRhythmTimeline(exercise);
   }, [exercise, isPad, matchedTeachingDef, teachingDef]);
 
+  // C7.7: canonical curriculum missions own their teaching stage. The six-stage
+  // strip remains a progress map, but it is not a bypass control inside governed
+  // C6/C7 sessions. This keeps Mission 1 in Understand, Mission 2 in Count,
+  // reduced-guidance missions in Follow, and only true independence missions in Play.
+  const isGovernedCanonicalMission = Boolean(
+    exercise.curriculumMission && exercise.sessionSource === 'C7_CANONICAL_COMPETENCY'
+  );
+  const canonicalTeachingStage = getMissionInitialTeachingStage(exercise, Boolean(matchedTeachingDef));
+
   // 2. Primary Teaching Continuum: UNDERSTAND -> COUNT -> WATCH -> FOLLOW -> PLAY -> EVALUATE
   const [teachingStage, setTeachingStage] = useState<TeachingStage>(() => getMissionInitialTeachingStage(exercise, true));
   const [isCoachThenYou, setIsCoachThenYou] = useState<boolean>(false);
@@ -181,6 +190,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   const [isLearnerTurn, setIsLearnerTurn] = useState<boolean>(false);
   const [activeCountToken, setActiveCountToken] = useState<string | null>(null);
   const [showNoteBreakdown, setShowNoteBreakdown] = useState<boolean>(false);
+  const [canonicalTargetCompleted, setCanonicalTargetCompleted] = useState<boolean>(false);
 
   // Sync Coach-Then-You into master transport
   useEffect(() => {
@@ -350,6 +360,11 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   // Stage Switcher helper for the 6-stage continuum
   const handleSwitchStage = useCallback(
     (stage: TeachingStage) => {
+      // Governed curriculum missions may use only their authored practice stage
+      // plus Stage 6 evaluation after that target stage has been completed.
+      const allowedEvaluation = stage === 'EVALUATE' && canonicalTargetCompleted;
+      if (isGovernedCanonicalMission && stage !== canonicalTeachingStage && !allowedEvaluation) return;
+
       stopTransport();
       setTeachingStage(stage);
       masterTransport.setTeachingStage(stage);
@@ -362,8 +377,28 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         setInstructionMode('PLAY');
       }
     },
-    [stopTransport]
+    [stopTransport, isGovernedCanonicalMission, canonicalTeachingStage, canonicalTargetCompleted]
   );
+
+  const finishCanonicalTargetAndEvaluate = useCallback(() => {
+    if (!isGovernedCanonicalMission) return;
+    setCanonicalTargetCompleted(true);
+    setShowFollowCheckIn(false);
+    setShowIndependentCheckIn(false);
+    stopTransport();
+    setTeachingStage('EVALUATE');
+    masterTransport.setTeachingStage('EVALUATE');
+  }, [isGovernedCanonicalMission, stopTransport]);
+
+  const returnToCanonicalTarget = useCallback(() => {
+    if (!isGovernedCanonicalMission) return;
+    stopTransport();
+    setCanonicalTargetCompleted(false);
+    setTeachingStage(canonicalTeachingStage);
+    masterTransport.setTeachingStage(canonicalTeachingStage);
+    setInstructionMode(getTeachingStageInstructionMode(canonicalTeachingStage));
+    setAssistanceLevel(exercise.curriculumMission?.assistanceTarget || 'FULL');
+  }, [isGovernedCanonicalMission, canonicalTeachingStage, exercise.curriculumMission?.assistanceTarget, stopTransport]);
 
   // Cleanup on unmount or exercise change
   useEffect(() => {
@@ -376,8 +411,10 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     setAssistanceLevel(exercise.curriculumMission?.assistanceTarget || 'FULL');
     setIndependentRunCompleted(false);
     setIndependentLoopsCompleted(0);
+    setCompletedLoops(0);
     setShowIndependentCheckIn(false);
     setShowFollowCheckIn(false);
+    setCanonicalTargetCompleted(false);
     return () => {
       stopTransport();
     };
@@ -482,6 +519,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
 
     setShowFollowCheckIn(false);
     setShowIndependentCheckIn(false);
+    setCompletedLoops(0);
     if (instructionMode === 'PLAY') {
       setIndependentRunCompleted(false);
       setIndependentLoopsCompleted(0);
@@ -517,7 +555,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         if (maxLoopsCount !== Infinity && completed >= maxLoopsCount) {
           stopTransport();
           if (instructionMode === 'FOLLOW') {
-            setShowFollowCheckIn(true);
+            if (!isGovernedCanonicalMission) setShowFollowCheckIn(true);
           } else if (instructionMode === 'PLAY') {
             setIndependentRunCompleted(true);
           }
@@ -765,12 +803,18 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           const Icon = step.icon;
           const isUnsupportedLegacyStage = !matchedTeachingDef &&
             (step.id === 'UNDERSTAND' || step.id === 'COUNT' || step.id === 'EVALUATE');
-          const isLockedEvaluation = step.id === 'EVALUATE' && !independentRunCompleted;
-          const isLocked = isUnsupportedLegacyStage || isLockedEvaluation;
-          const lockTitle = isUnsupportedLegacyStage
+          const isLockedEvaluation = step.id === 'EVALUATE' && (
+            isGovernedCanonicalMission ? !canonicalTargetCompleted : !independentRunCompleted
+          );
+          const isAllowedGovernedEvaluation = isGovernedCanonicalMission && step.id === 'EVALUATE' && canonicalTargetCompleted;
+          const isOutsideGovernedMission = isGovernedCanonicalMission && step.id !== canonicalTeachingStage && !isAllowedGovernedEvaluation;
+          const isLocked = isUnsupportedLegacyStage || isLockedEvaluation || isOutsideGovernedMission;
+          const lockTitle = isOutsideGovernedMission
+            ? `This curriculum mission is governed by its ${canonicalTeachingStage.toLowerCase()} stage. Complete the authored target, then evaluate it.`
+            : isUnsupportedLegacyStage
             ? 'This legacy/explore exercise does not yet have a canonical C2 teaching definition.'
             : isLockedEvaluation
-            ? 'Complete an independent Play run before evaluation.'
+            ? 'Complete the current mission target before evaluation.'
             : undefined;
 
           return (
@@ -804,6 +848,13 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         })}
       </div>
 
+      {isGovernedCanonicalMission && (
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 text-[10px] font-bold text-stone-600">
+          <span>Mission-governed stage: <strong className="text-stone-900">{canonicalTeachingStage}</strong></span>
+          <span>Assistance contract: <strong className="text-stone-900">{exercise.curriculumMission?.assistanceTarget || 'FULL'}</strong></span>
+        </div>
+      )}
+
       {exercise.curriculumMission?.structure && (
         <CurriculumPhraseVisualizer
           mission={exercise.curriculumMission}
@@ -822,7 +873,14 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             teachingDef={teachingDef}
             isPad={isPad}
             currentTempo={currentTempo}
-            onProceedToCount={() => handleSwitchStage('COUNT')}
+            onProceedToCount={() => {
+              if (isGovernedCanonicalMission && canonicalTeachingStage === 'UNDERSTAND') {
+                finishCanonicalTargetAndEvaluate();
+              } else {
+                handleSwitchStage('COUNT');
+              }
+            }}
+            proceedLabel={isGovernedCanonicalMission && canonicalTeachingStage === 'UNDERSTAND' ? 'Evaluate This Mission' : undefined}
           />
 
           {isNotationMission ? (
@@ -871,7 +929,14 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             timeline={timeline}
             teachingDef={teachingDef}
             currentTempo={currentTempo}
-            onProceedToWatch={() => handleSwitchStage('WATCH')}
+            onProceedToWatch={() => {
+              if (isGovernedCanonicalMission && canonicalTeachingStage === 'COUNT') {
+                finishCanonicalTargetAndEvaluate();
+              } else {
+                handleSwitchStage('WATCH');
+              }
+            }}
+            proceedLabel={isGovernedCanonicalMission && canonicalTeachingStage === 'COUNT' ? 'Evaluate This Mission' : undefined}
             onTempoAdjust={onTempoAdjust}
           />
         </div>
@@ -885,7 +950,13 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             onSaveEvaluation={(partialResult) => {
               onCheckIn('PLAY', partialResult);
             }}
-            onRepeatStage={(stage) => handleSwitchStage(stage)}
+            onRepeatStage={(stage) => {
+              if (isGovernedCanonicalMission) {
+                returnToCanonicalTarget();
+              } else {
+                handleSwitchStage(stage);
+              }
+            }}
           />
         </div>
       ) : (
@@ -896,15 +967,19 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             {/* 3 Practice Modes: WATCH | FOLLOW | PLAY */}
             <div className="flex items-center gap-1.5 p-1 bg-stone-900 rounded-2xl border border-stone-800 w-full sm:w-auto">
               <button
+                disabled={isGovernedCanonicalMission && canonicalTeachingStage !== 'WATCH'}
                 onClick={() => {
+                  if (isGovernedCanonicalMission && canonicalTeachingStage !== 'WATCH') return;
                   stopTransport();
                   setInstructionMode('WATCH');
                   setTeachingStage('WATCH');
                 }}
-                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 ${
                   instructionMode === 'WATCH'
-                    ? 'bg-amber-400 text-stone-950 shadow-md font-black'
-                    : 'text-stone-400 hover:text-stone-200'
+                    ? 'bg-amber-400 text-stone-950 shadow-md font-black cursor-pointer'
+                    : isGovernedCanonicalMission && canonicalTeachingStage !== 'WATCH'
+                    ? 'text-stone-600 opacity-50 cursor-not-allowed'
+                    : 'text-stone-400 hover:text-stone-200 cursor-pointer'
                 }`}
               >
                 <Eye className="w-3.5 h-3.5" />
@@ -912,15 +987,19 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               </button>
 
               <button
+                disabled={isGovernedCanonicalMission && canonicalTeachingStage !== 'FOLLOW'}
                 onClick={() => {
+                  if (isGovernedCanonicalMission && canonicalTeachingStage !== 'FOLLOW') return;
                   stopTransport();
                   setInstructionMode('FOLLOW');
                   setTeachingStage('FOLLOW');
                 }}
-                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 ${
                   instructionMode === 'FOLLOW'
-                    ? 'bg-sky-400 text-stone-950 shadow-md font-black'
-                    : 'text-stone-400 hover:text-stone-200'
+                    ? 'bg-sky-400 text-stone-950 shadow-md font-black cursor-pointer'
+                    : isGovernedCanonicalMission && canonicalTeachingStage !== 'FOLLOW'
+                    ? 'text-stone-600 opacity-50 cursor-not-allowed'
+                    : 'text-stone-400 hover:text-stone-200 cursor-pointer'
                 }`}
               >
                 <Zap className="w-3.5 h-3.5" />
@@ -928,15 +1007,19 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               </button>
 
               <button
+                disabled={isGovernedCanonicalMission && canonicalTeachingStage !== 'PLAY'}
                 onClick={() => {
+                  if (isGovernedCanonicalMission && canonicalTeachingStage !== 'PLAY') return;
                   stopTransport();
                   setInstructionMode('PLAY');
                   setTeachingStage('PLAY');
                 }}
-                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                className={`flex-1 sm:flex-none py-2 px-3.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-1.5 ${
                   instructionMode === 'PLAY'
-                    ? 'bg-emerald-400 text-stone-950 shadow-md font-black'
-                    : 'text-stone-400 hover:text-stone-200'
+                    ? 'bg-emerald-400 text-stone-950 shadow-md font-black cursor-pointer'
+                    : isGovernedCanonicalMission && canonicalTeachingStage !== 'PLAY'
+                    ? 'text-stone-600 opacity-50 cursor-not-allowed'
+                    : 'text-stone-400 hover:text-stone-200 cursor-pointer'
                 }`}
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
@@ -1005,14 +1088,18 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                   {(['FULL', 'REDUCED', 'MINIMAL'] as AssistanceLevel[]).map((lvl) => (
                     <button
                       key={lvl}
+                      disabled={isGovernedCanonicalMission && exercise.curriculumMission?.assistanceTarget !== lvl}
                       onClick={() => {
+                        if (isGovernedCanonicalMission && exercise.curriculumMission?.assistanceTarget !== lvl) return;
                         if (isPlaying) stopTransport();
                         setAssistanceLevel(lvl);
                       }}
-                      className={`py-1.5 px-3 rounded-xl font-black text-[10px] uppercase transition-all cursor-pointer ${
+                      className={`py-1.5 px-3 rounded-xl font-black text-[10px] uppercase transition-all ${
                         assistanceLevel === lvl
-                          ? 'bg-sky-400 text-stone-950 font-black shadow-md ring-2 ring-sky-300'
-                          : 'bg-stone-950 text-stone-400 border border-stone-800 hover:text-stone-200'
+                          ? 'bg-sky-400 text-stone-950 font-black shadow-md ring-2 ring-sky-300 cursor-pointer'
+                          : isGovernedCanonicalMission && exercise.curriculumMission?.assistanceTarget !== lvl
+                          ? 'bg-stone-950 text-stone-700 border border-stone-900 opacity-50 cursor-not-allowed'
+                          : 'bg-stone-950 text-stone-400 border border-stone-800 hover:text-stone-200 cursor-pointer'
                       }`}
                     >
                       {lvl === 'FULL' ? '1. FULL' : lvl === 'REDUCED' ? '2. REDUCED' : '3. MINIMAL'}
@@ -1524,14 +1611,31 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           {instructionMode === 'WATCH' && (
             <div className="pt-3 border-t border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-xs text-stone-400 text-center sm:text-left">
-                {isNotationMission ? 'Followed the written notes and heard how the staff becomes sound? Move to guided reading practice.' : 'Observed the coach sticking and dynamic accents? Move to interactive guided practice.'}
+                {isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH'
+                  ? completedLoops >= 1
+                    ? 'Coach model heard. Evaluate this mission before moving to the next authored curriculum target.'
+                    : 'Play at least one complete coach demonstration before evaluating this mission.'
+                  : isNotationMission
+                  ? 'Followed the written notes and heard how the staff becomes sound? Move to guided reading practice.'
+                  : 'Observed the coach sticking and dynamic accents? Move to interactive guided practice.'}
               </div>
               <button
                 type="button"
-                onClick={() => handleSwitchStage('FOLLOW')}
-                className="flex items-center gap-2 bg-sky-400 hover:bg-sky-300 text-stone-950 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all cursor-pointer shrink-0"
+                disabled={isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH' && completedLoops < 1}
+                onClick={() => {
+                  if (isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH') {
+                    if (completedLoops >= 1) finishCanonicalTargetAndEvaluate();
+                  } else {
+                    handleSwitchStage('FOLLOW');
+                  }
+                }}
+                className={`flex items-center gap-2 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all shrink-0 ${
+                  isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH' && completedLoops < 1
+                    ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                    : 'bg-sky-400 hover:bg-sky-300 text-stone-950 cursor-pointer'
+                }`}
               >
-                <span>Step 4: Follow Along With Cues →</span>
+                <span>{isGovernedCanonicalMission && canonicalTeachingStage === 'WATCH' ? 'Evaluate This Mission →' : 'Step 4: Follow Along With Cues →'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1540,14 +1644,31 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           {instructionMode === 'FOLLOW' && (
             <div className="pt-3 border-t border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-xs text-stone-400 text-center sm:text-left">
-                {isNotationMission ? 'Reading the staff comfortably with cues? Remove coach assistance and sight-read it independently.' : 'Locked in with the cues? Remove coach assistance and hold down the tempo solo.'}
+                {isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW'
+                  ? completedLoops >= 1
+                    ? 'Guided target completed. Evaluate this mission at its authored assistance level before continuing.'
+                    : 'Complete at least one full guided cycle before evaluating this mission.'
+                  : isNotationMission
+                  ? 'Reading the staff comfortably with cues? Remove coach assistance and sight-read it independently.'
+                  : 'Locked in with the cues? Remove coach assistance and hold down the tempo solo.'}
               </div>
               <button
                 type="button"
-                onClick={() => handleSwitchStage('PLAY')}
-                className="flex items-center gap-2 bg-emerald-400 hover:bg-emerald-300 text-stone-950 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all cursor-pointer shrink-0"
+                disabled={isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW' && completedLoops < 1}
+                onClick={() => {
+                  if (isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW') {
+                    if (completedLoops >= 1) finishCanonicalTargetAndEvaluate();
+                  } else {
+                    handleSwitchStage('PLAY');
+                  }
+                }}
+                className={`flex items-center gap-2 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all shrink-0 ${
+                  isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW' && completedLoops < 1
+                    ? 'bg-stone-800 text-stone-500 cursor-not-allowed'
+                    : 'bg-emerald-400 hover:bg-emerald-300 text-stone-950 cursor-pointer'
+                }`}
               >
-                <span>Step 5: Play Independently →</span>
+                <span>{isGovernedCanonicalMission && canonicalTeachingStage === 'FOLLOW' ? 'Evaluate This Mission →' : 'Step 5: Play Independently →'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1564,7 +1685,12 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 type="button"
                 disabled={!independentRunCompleted}
                 onClick={() => {
-                  if (independentRunCompleted) handleSwitchStage('EVALUATE');
+                  if (!independentRunCompleted) return;
+                  if (isGovernedCanonicalMission && canonicalTeachingStage === 'PLAY') {
+                    finishCanonicalTargetAndEvaluate();
+                  } else {
+                    handleSwitchStage('EVALUATE');
+                  }
                 }}
                 className={`flex items-center gap-2 font-black text-xs uppercase px-5 py-3 rounded-2xl shadow-xl transition-all shrink-0 ${
                   independentRunCompleted
@@ -1579,7 +1705,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           )}
 
           {/* FOLLOW quick reflection only. Independent PLAY evidence must pass through Stage 6. */}
-          {instructionMode === 'FOLLOW' && (
+          {instructionMode === 'FOLLOW' && !isGovernedCanonicalMission && (
             <div className="pt-2 border-t border-stone-800/60 flex items-center justify-between">
               <span className="text-[10px] text-stone-500 font-bold uppercase">
                 Quick Follow Reflection

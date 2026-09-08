@@ -465,9 +465,13 @@ export function computeSessionWorkingRange(
       workingBpm,
       summaryText: authority?.verificationPriority
         ? `Verification-priority range: hold at or below ${workingBpm} BPM`
+        : authority?.tempoCeiling
+        ? `Canonical pre-verification range: hold at or below ${workingBpm} BPM`
         : `Working range established today: ${workingBpm} BPM`,
       nextSessionGuidance: authority?.verificationPriority
         ? `Do not chase a higher tempo. The next progression action is the formal verification test${authority.verificationStandardText ? `: ${authority.verificationStandardText}` : ''}.`
+        : authority?.tempoCeiling
+        ? `Keep ${skillName} at or below the ${authority.tempoCeiling} BPM certification ceiling while you close the remaining formal-readiness requirements. Do not add +5 BPM before verification.`
         : `Stabilize ${skillName} at ${workingBpm} BPM before musical application.`,
     };
   }

@@ -469,6 +469,12 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
     const verificationReadyButSequenced = Boolean(
       completionAuthority?.verificationPriority && isNonActiveCanonicalPractice
     );
+    const canonicalPreVerificationActive = Boolean(
+      completionAuthority?.tempoCeiling && isCompletionCompetencyCanonicalActive && !effectiveVerificationPriority
+    );
+    const unmetReadinessLabels = completionReadiness?.requirements
+      .filter((requirement) => !requirement.met)
+      .map((requirement) => requirement.label) || [];
     const workingRangeInfo = computeSessionWorkingRange(session, {
       tempoCeiling: completionAuthority?.tempoCeiling,
       verificationPriority: effectiveVerificationPriority,
@@ -654,6 +660,8 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
                 ? `NEXT TIME: Formal verification has priority. Do not push beyond ${completionReadiness?.targetBpm || completionAuthority?.targetBpm} BPM; use ordinary practice only as a short warm-up or consolidation.`
                 : isNonActiveCanonicalPractice
                 ? `${completionCompetency?.title || 'This competency'} evidence has been banked, but the canonical path still points to ${canonicalActiveCompetencyAtCompletion?.title || 'the earlier active competency'}. Complete that active target first${verificationReadyButSequenced ? '; this competency already has enough local readiness evidence for later verification' : ''}.`
+                : canonicalPreVerificationActive
+                ? `NEXT TIME: Stay at or below ${completionAuthority?.targetBpm} BPM and close the remaining formal-readiness requirement${unmetReadinessLabels.length === 1 ? '' : 's'}${unmetReadinessLabels.length ? `: ${unmetReadinessLabels.join('; ')}` : ''}. Do not add +5 BPM before verification.`
                 : generateNextTimeRecommendation(session)}
             </p>
           </div>
@@ -670,6 +678,12 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
               <div className="font-black uppercase tracking-wider text-[10px]">Evidence Banked · Canonical Order Preserved</div>
               <div className="font-black text-sm">{verificationReadyButSequenced ? 'Local readiness reached; certification still waits for the active path.' : 'Practice evidence saved; canonical progression remains on the earlier active target.'}</div>
               <div>Complete <strong>{canonicalActiveCompetencyAtCompletion?.title || 'the earlier active competency'}</strong> first. Your evidence for {completionCompetency?.title || 'this competency'} remains saved and will be available when the canonical path reaches it.</div>
+            </div>
+          ) : canonicalPreVerificationActive && completionReadiness ? (
+            <div className="rounded-2xl border-2 border-sky-300 bg-sky-50 p-4 text-xs text-sky-950 space-y-1.5">
+              <div className="font-black uppercase tracking-wider text-[10px]">C4 Canonical Readiness Still Active</div>
+              <div className="font-black text-sm">Curriculum coverage is complete; certification evidence is still being stabilized.</div>
+              <div>Tempo remains capped at <strong>{completionReadiness.targetBpm} BPM</strong>. Next practice should target only the unmet readiness requirement{unmetReadinessLabels.length === 1 ? '' : 's'}{unmetReadinessLabels.length ? `: ${unmetReadinessLabels.join('; ')}` : '.'}</div>
             </div>
           ) : (() => {
             const primarySkillId = session.skillId || session.selectedSkillIds?.[0] || '';
