@@ -12,6 +12,19 @@ export interface CanonicalVerificationTransportSpec {
   totalPulses: number | null;
 }
 
+export interface VerificationTransportPosition {
+  /** Number of canonical pulses already emitted by the verifier. */
+  completedPulses: number;
+  /** 1-based bar currently being performed. */
+  currentBar: number;
+  /** 1-based canonical pulse inside the current bar. */
+  currentPulse: number;
+  /** Percentage of the authored bar/pulse requirement already emitted. */
+  progressPercent: number;
+  /** True only after every authored canonical pulse has been emitted. */
+  isComplete: boolean;
+}
+
 function parseMeter(meter?: string): { numerator: number; denominator: number } | null {
   if (!meter) return null;
   const match = meter.match(/(\d+)\s*\/\s*(\d+)/);
@@ -116,6 +129,40 @@ export function deriveCanonicalVerificationTransport(
     requiredBars: null,
     pulsesPerBar,
     totalPulses: null,
+  };
+}
+
+
+/**
+ * C7.15 phrase-position authority for bar-governed verification UIs.
+ *
+ * UI labels, segmented bar rails and progress bars should all be derived from
+ * this function so a wall clock can never become a second competing progress
+ * source. `emittedPulses` is the number of canonical metronome pulses already
+ * produced by the verification transport.
+ */
+export function deriveVerificationTransportPosition(
+  spec: CanonicalVerificationTransportSpec,
+  emittedPulses: number
+): VerificationTransportPosition | null {
+  if (spec.completionMode !== 'BARS' || !spec.requiredBars || !spec.totalPulses) {
+    return null;
+  }
+
+  const completedPulses = Math.max(0, Math.min(spec.totalPulses, Math.floor(emittedPulses)));
+  const displayPulseIndex = completedPulses === 0 ? 0 : completedPulses - 1;
+  const currentBar = Math.min(
+    spec.requiredBars,
+    Math.floor(displayPulseIndex / spec.pulsesPerBar) + 1
+  );
+  const currentPulse = (displayPulseIndex % spec.pulsesPerBar) + 1;
+
+  return {
+    completedPulses,
+    currentBar,
+    currentPulse,
+    progressPercent: Math.min(100, (completedPulses / spec.totalPulses) * 100),
+    isComplete: completedPulses >= spec.totalPulses,
   };
 }
 
