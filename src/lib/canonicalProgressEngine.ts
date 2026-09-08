@@ -52,6 +52,22 @@ export function getCanonicalVerifications(): Map<string, CompetencyVerificationR
 /**
  * Saves or updates canonical verification records.
  */
+
+/**
+ * Returns a legacy C4 checkpoint record that was created before the corrected
+ * verifier-v2 protocol. The record is retained for audit/history, but is not
+ * authoritative certification evidence.
+ */
+export function getLegacyInvalidC4Checkpoint(
+  competencyId: string,
+  verificationMap?: Map<string, CompetencyVerificationRecord>
+): CompetencyVerificationRecord | null {
+  const verifications = verificationMap || getCanonicalVerifications();
+  const record = verifications.get(competencyId);
+  if (!record || record.source !== 'checkpoint') return null;
+  return record.protocol === CURRENT_C4_VERIFICATION_PROTOCOL ? null : record;
+}
+
 export function recordCanonicalVerification(
   competencyId: string,
   source: 'placement_test' | 'checkpoint' | 'qualifying_practice',

@@ -50,6 +50,7 @@ import {
   isUnitComplete,
   isUnitUnlocked,
   deriveCurrentCurriculumPosition,
+  getLegacyInvalidC4Checkpoint,
 } from '../lib/canonicalProgressEngine';
 import { useLearner } from '../context/LearnerContext';
 import { buildPlacementSession } from '../lib/placementEngine';
@@ -61,7 +62,7 @@ import {
   getSkillStatusAfterCompetencyVerification,
   recordCompetencyVerificationOutcome,
 } from '../lib/competencyAdvancementEngine';
-import { buildC7CompetencySession, buildC7SecondSessionRevisitSession, buildC7VerificationStabilizationSession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
+import { buildC7CompetencySession, buildC7ProtocolRevalidationSession, buildC7SecondSessionRevisitSession, buildC7VerificationStabilizationSession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
 import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 
 interface PathViewProps {
@@ -140,6 +141,15 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
     advancementReadiness.state !== 'REPAIR_REQUIRED' &&
     !advancementReadiness.recurringFriction;
   const activeReadyToVerify = advancementReadiness.state === 'READY_TO_VERIFY';
+  const activeLegacyInvalidCheckpoint = getLegacyInvalidC4Checkpoint(activeCompetency.id);
+  const activeNeedsProtocolRevalidation = Boolean(
+    activeLegacyInvalidCheckpoint &&
+    advancementReadiness.state !== 'READY_TO_VERIFY' &&
+    advancementReadiness.state !== 'VERIFIED' &&
+    advancementReadiness.state !== 'BLOCKED' &&
+    advancementReadiness.state !== 'REPAIR_REQUIRED' &&
+    !advancementReadiness.recurringFriction
+  );
 
   const handleCompetencyVerificationComplete = (result: {
     startedAt: string;
@@ -237,7 +247,24 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       readiness.state !== 'REPAIR_REQUIRED' &&
       !readiness.recurringFriction;
 
-    const session = shouldRunSecondSessionRevisit
+    const legacyInvalidCheckpoint = getLegacyInvalidC4Checkpoint(comp.id);
+    const needsProtocolRevalidation = Boolean(
+      legacyInvalidCheckpoint &&
+      readiness.state !== 'READY_TO_VERIFY' &&
+      readiness.state !== 'VERIFIED' &&
+      readiness.state !== 'BLOCKED' &&
+      readiness.state !== 'REPAIR_REQUIRED' &&
+      !readiness.recurringFriction
+    );
+
+    const session = needsProtocolRevalidation
+      ? buildC7ProtocolRevalidationSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand,
+          readiness.highestQualifyingBpm || readiness.targetBpm
+        )
+      : shouldRunSecondSessionRevisit
       ? buildC7SecondSessionRevisitSession(
           comp,
           profile,
@@ -510,9 +537,18 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             className="flex items-center gap-2 bg-[#4a523a] hover:bg-[#3d4430] text-white px-5 py-3 rounded-2xl font-black text-xs transition-transform transform active:scale-95 shadow-md cursor-pointer self-start sm:self-auto"
           >
             {activeReadyToVerify ? <ShieldCheck className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
-            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
+            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsProtocolRevalidation ? 'Revalidate on Corrected Clock' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
           </button>
         </div>
+
+        {activeLegacyInvalidCheckpoint && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+            <div className="font-black">Corrected-verifier revalidation</div>
+            <div className="mt-1 leading-relaxed">
+              Your earlier learning and practice history are still preserved. Only the old formal C4 checkpoint was retired because it used the pre-v2 timing protocol. You do not need to repeat the full teaching journey; complete the short corrected-clock revalidation, then take the formal test again.
+            </div>
+          </div>
+        )}
 
         <p className="text-xs sm:text-sm text-stone-700 font-medium leading-relaxed">
           {activeCompetency.description}

@@ -87,3 +87,6 @@ C7.9 handles the final 5/6 learning-coverage case without forcing the learner th
 
 ## C7.10 — Formal Verification Integrity
 C7.10 corrects the C4 verifier's metronome argument order, adds a true staff-only eight-bar notation verification, versions trusted C4 checkpoint evidence with `c4-verifier-v2`, and invalidates earlier unversioned C4 checkpoint passes without deleting practice evidence. See `C7_10_BUILD_REPORT.md` for the field-validation sequence.
+
+## C7.11 — Legacy C4 protocol revalidation bridge
+C7.11 adds a migration path for competencies whose pre-v2 C4 checkpoint was retired by the C7.10 verifier correction. Historical learning/practice evidence is preserved, the app avoids forcing a full six-stage relearn, and the learner completes a short corrected-clock no-assistance revalidation before taking the new formal test. See `C7_11_BUILD_REPORT.md`.

@@ -851,3 +851,52 @@ export function buildC7VerificationStabilizationSession(
   };
 }
 
+
+
+/**
+ * C7.11 — Protocol revalidation session for competencies whose historical C4
+ * checkpoint was invalidated by verifier-v2.
+ *
+ * These learners already completed the older competency journey. We preserve
+ * that history and ask only for fresh no-assistance evidence on the corrected
+ * clock before exposing the new formal verification. This prevents a protocol
+ * migration from forcing a full six-mission relearn.
+ */
+export function buildC7ProtocolRevalidationSession(
+  competency: CurriculumCompetency,
+  profile: LearnerProfile,
+  placementBand: CurriculumBand,
+  workingBpm?: number | null
+): PracticeSession {
+  const fullSession = buildC7CompetencySession(competency, profile, placementBand);
+  const target = competency.tempoStandard.bpm;
+  const safeBpm = Math.max(
+    30,
+    Math.min(target, workingBpm && Number.isFinite(workingBpm) ? Math.round(workingBpm) : Math.round(target * 0.9))
+  );
+
+  const independentExercises = (fullSession.exercises || [])
+    .filter((exercise) => {
+      const assistance = exercise.curriculumMission?.assistanceTarget;
+      return assistance === 'NONE' || assistance === 'MINIMAL';
+    })
+    .map((exercise) => ({
+      ...exercise,
+      tempo: safeBpm,
+      targetTempo: target,
+      durationSeconds: Math.max(60, exercise.durationSeconds || 60),
+    }));
+
+  if (independentExercises.length === 0) return fullSession;
+
+  return {
+    ...fullSession,
+    durationMinutes: Math.max(6, independentExercises.length * 4),
+    focusTopic: `${competency.title} — Corrected-Clock Revalidation`,
+    notes: `C7.11 protocol migration: earlier learning and practice history are preserved. The old formal checkpoint used the pre-v2 verifier, so this short session collects fresh no-assistance evidence on the corrected clock without repeating the full curriculum journey.`,
+    exercises: independentExercises,
+    curriculumPractice: fullSession.curriculumPractice
+      ? { ...fullSession.curriculumPractice, missionCount: independentExercises.length }
+      : undefined,
+  };
+}
