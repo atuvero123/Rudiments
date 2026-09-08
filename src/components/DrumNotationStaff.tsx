@@ -9,6 +9,11 @@ interface DrumNotationStaffProps {
   isPlaying?: boolean;
   compact?: boolean;
   showLegend?: boolean;
+  showCounts?: boolean;
+  showPlayhead?: boolean;
+  showVoiceLabels?: boolean;
+  showBarLabels?: boolean;
+  showInstruction?: boolean;
   title?: string;
 }
 
@@ -38,6 +43,11 @@ export const DrumNotationStaff: React.FC<DrumNotationStaffProps> = ({
   isPlaying = false,
   compact = false,
   showLegend = true,
+  showCounts = true,
+  showPlayhead = true,
+  showVoiceLabels = true,
+  showBarLabels = true,
+  showInstruction = true,
   title = 'Read the Written Bar',
 }) => {
   const slotsPerBar = Math.max(1, teachingDef.beatsPerBar * teachingDef.subdivisionCount);
@@ -97,9 +107,11 @@ export const DrumNotationStaff: React.FC<DrumNotationStaffProps> = ({
       <div className="space-y-2">
         {bars.map(({ bar, slots }) => (
           <div key={bar} className="rounded-xl bg-white border border-stone-300 overflow-x-auto relative">
-            <div className={`absolute z-10 left-2 top-2 text-[9px] font-black px-2 py-1 rounded-full ${isPlaying && currentBar === bar ? 'bg-amber-300 text-stone-950' : 'bg-stone-100 text-stone-600'}`}>
-              BAR {bar}
-            </div>
+            {showBarLabels && (
+              <div className={`absolute z-10 left-2 top-2 text-[9px] font-black px-2 py-1 rounded-full ${showPlayhead && isPlaying && currentBar === bar ? 'bg-amber-300 text-stone-950' : 'bg-stone-100 text-stone-600'}`}>
+                BAR {bar}
+              </div>
+            )}
             <svg
               viewBox={`0 0 ${width} 126`}
               className={`${compact ? 'min-w-[560px]' : 'min-w-[660px]'} w-full h-auto block`}
@@ -114,13 +126,17 @@ export const DrumNotationStaff: React.FC<DrumNotationStaffProps> = ({
               <line x1={left - 22} x2={left - 22} y1="35" y2="75" stroke="#292524" strokeWidth="2" />
               <line x1={width - 12} x2={width - 12} y1="35" y2="75" stroke="#292524" strokeWidth="2" />
 
-              <text x="8" y="27" fontSize="11" fontWeight="700" fill="#57534e">HH</text>
-              <text x="10" y="58" fontSize="11" fontWeight="700" fill="#57534e">S</text>
-              <text x="12" y="82" fontSize="11" fontWeight="700" fill="#57534e">K</text>
+              {showVoiceLabels && (
+                <>
+                  <text x="8" y="27" fontSize="11" fontWeight="700" fill="#57534e">HH</text>
+                  <text x="10" y="58" fontSize="11" fontWeight="700" fill="#57534e">S</text>
+                  <text x="12" y="82" fontSize="11" fontWeight="700" fill="#57534e">K</text>
+                </>
+              )}
 
               {slots.map((slot) => {
                 const x = left + step * slot.index + step / 2;
-                const active = isPlaying && currentBar === bar && slot.index === activeIndex;
+                const active = showPlayhead && isPlaying && currentBar === bar && slot.index === activeIndex;
                 return (
                   <g key={slot.index}>
                     {active && (
@@ -159,20 +175,24 @@ export const DrumNotationStaff: React.FC<DrumNotationStaffProps> = ({
                       <text x={x} y="60" textAnchor="middle" fontSize="17" fontWeight="700" fill="#78716c">𝄽</text>
                     )}
 
-                    <text
-                      x={x}
-                      y="102"
-                      textAnchor="middle"
-                      fontSize="12"
-                      fontWeight={slot.subdivision === 0 ? 800 : 600}
-                      fill={active ? '#92400e' : '#44403c'}
-                    >
-                      {slot.token}
-                    </text>
-                    {slot.subdivision === 0 && (
-                      <text x={x} y="116" textAnchor="middle" fontSize="8" fontWeight="700" fill="#78716c">
-                        beat {slot.beat}
-                      </text>
+                    {showCounts && (
+                      <>
+                        <text
+                          x={x}
+                          y="102"
+                          textAnchor="middle"
+                          fontSize="12"
+                          fontWeight={slot.subdivision === 0 ? 800 : 600}
+                          fill={active ? '#92400e' : '#44403c'}
+                        >
+                          {slot.token}
+                        </text>
+                        {slot.subdivision === 0 && (
+                          <text x={x} y="116" textAnchor="middle" fontSize="8" fontWeight="700" fill="#78716c">
+                            beat {slot.beat}
+                          </text>
+                        )}
+                      </>
                     )}
                   </g>
                 );
@@ -203,9 +223,11 @@ export const DrumNotationStaff: React.FC<DrumNotationStaffProps> = ({
         </div>
       )}
 
-      <p className="text-[11px] text-stone-400 leading-relaxed">
-        The staff is the instruction. Do not convert it into an R/L sticking sequence. Read each written voice at its horizontal position, count underneath it, preserve rests, and let simultaneous noteheads sound together.
-      </p>
+      {showInstruction && (
+        <p className="text-[11px] text-stone-400 leading-relaxed">
+          The staff is the instruction. Do not convert it into an R/L sticking sequence. Read each written voice at its horizontal position, count underneath it, preserve rests, and let simultaneous noteheads sound together.
+        </p>
+      )}
     </div>
   );
 };

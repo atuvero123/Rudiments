@@ -57,7 +57,7 @@ export const AdvancementReadinessCard: React.FC<AdvancementReadinessCardProps> =
 
       <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
         <div className="rounded-xl border border-current/10 bg-white/60 p-2.5"><span className="block text-[9px] font-black uppercase opacity-60">Formal Standard</span><strong>{readiness.targetBpm} BPM</strong></div>
-        <div className="rounded-xl border border-current/10 bg-white/60 p-2.5"><span className="block text-[9px] font-black uppercase opacity-60">Test Duration</span><strong>{readiness.targetDurationSeconds}s</strong></div>
+        <div className="rounded-xl border border-current/10 bg-white/60 p-2.5"><span className="block text-[9px] font-black uppercase opacity-60">{competency.id === 'comp-reading-notation' ? 'Test Length' : 'Test Duration'}</span><strong>{competency.id === 'comp-reading-notation' ? '8 bars' : `${readiness.targetDurationSeconds}s`}</strong></div>
         <div className="rounded-xl border border-current/10 bg-white/60 p-2.5"><span className="block text-[9px] font-black uppercase opacity-60">Independent Clean</span><strong>{readiness.cleanIndependentAttempts}</strong></div>
         <div className="rounded-xl border border-current/10 bg-white/60 p-2.5"><span className="block text-[9px] font-black uppercase opacity-60">Readiness</span><strong>{readiness.metRequirements}/{readiness.totalRequirements || '—'}</strong></div>
       </div>

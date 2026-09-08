@@ -412,7 +412,7 @@ export const CANONICAL_CURRICULUM_COMPETENCIES: CurriculumCompetency[] = [
     unlocksCompetencyIds: ['comp-grv-backbeat'],
     description: 'Reading basic drum set notation on the 5-line staff.',
     countingPattern: 'Visual identification',
-    stickingPattern: 'K / S / HH mapping',
+    stickingPattern: 'Notation voice map: HH above staff • S middle • K low',
     musicalRole: 'Empowers self-directed learning from drum method books and charts.',
   },
 

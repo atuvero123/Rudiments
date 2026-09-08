@@ -84,3 +84,6 @@ C7.8 fixes the post-verification skip exposed after the successful 4/4 certifica
 
 ## C7.9 — Targeted Revisit & Direct Verification Action
 C7.9 handles the final 5/6 learning-coverage case without forcing the learner through a full curriculum replay. When the only missing criterion is a separate-session revisit, Path launches only the genuine independent and musical-transfer missions at the formal target tempo. Once C4 reaches `READY_TO_VERIFY`, the primary competency action becomes **Run Verification** directly. See `C7_9_BUILD_REPORT.md`.
+
+## C7.10 — Formal Verification Integrity
+C7.10 corrects the C4 verifier's metronome argument order, adds a true staff-only eight-bar notation verification, versions trusted C4 checkpoint evidence with `c4-verifier-v2`, and invalidates earlier unversioned C4 checkpoint passes without deleting practice evidence. See `C7_10_BUILD_REPORT.md` for the field-validation sequence.

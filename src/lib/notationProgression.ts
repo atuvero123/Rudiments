@@ -160,3 +160,38 @@ export function buildNotationProgressionDefinition(
     ],
   };
 }
+
+
+/**
+ * C7.10 formal notation verification chart.
+ *
+ * The certification standard is eight continuous bars. This chart is authored
+ * independently from the guided mission display and deliberately includes
+ * changing voice/rest combinations so the learner must actually read.
+ */
+export function buildNotationVerificationDefinition(
+  base: CompetencyTeachingDefinition
+): CompetencyTeachingDefinition {
+  const events = [
+    ...basicBar(1),
+    ...restAwarenessBar(2),
+    ...syncopationBar(3),
+    ...mixedReadingBar(4),
+    ...restAwarenessBar(5),
+    ...basicBar(6),
+    ...mixedReadingBar(7),
+    ...syncopationBar(8),
+  ];
+
+  return {
+    ...base,
+    bars: 8,
+    events,
+    sticking: 'Formal staff reading — no sticking mnemonic',
+    limbPattern: 'Read only the written staff voices',
+    certificationTempo: {
+      ...base.certificationTempo,
+      standardText: 'Sight-read 8 bars of basic notation at 70 BPM',
+    },
+  };
+}

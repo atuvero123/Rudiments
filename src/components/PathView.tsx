@@ -548,6 +548,13 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
               Beat 1-2-3-4 → next bar • phrases grouped 4 + 4
             </span>
           </div>
+        ) : activeCompetency.id === 'comp-reading-notation' ? (
+          <div className="bg-white p-3 rounded-xl border border-stone-200 flex items-center justify-between gap-4 text-xs font-mono">
+            <span className="text-[11px] font-bold text-stone-500 uppercase font-sans">Notation Voice Map:</span>
+            <span className="font-black text-stone-900 bg-stone-100 px-3 py-1 rounded-md">
+              {activeCompetency.stickingPattern}
+            </span>
+          </div>
         ) : activeCompetency.stickingPattern ? (
           <div className="bg-white p-3 rounded-xl border border-stone-200 flex items-center justify-between gap-4 text-xs font-mono">
             <span className="text-[11px] font-bold text-stone-500 uppercase font-sans">Required Pattern — Play This:</span>

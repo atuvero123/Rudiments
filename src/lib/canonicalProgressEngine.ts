@@ -20,9 +20,11 @@ export interface CompetencyVerificationRecord {
   verifiedAt: string;
   source: 'placement_test' | 'checkpoint' | 'qualifying_practice';
   notes?: string;
+  protocol?: string;
 }
 
 const VERIFICATIONS_STORAGE_KEY = 'RUDIMENT_CANONICAL_VERIFICATIONS_V1';
+export const CURRENT_C4_VERIFICATION_PROTOCOL = 'c4-verifier-v2';
 
 /**
  * Loads all canonically verified competency records from persistent storage.
@@ -53,7 +55,8 @@ export function getCanonicalVerifications(): Map<string, CompetencyVerificationR
 export function recordCanonicalVerification(
   competencyId: string,
   source: 'placement_test' | 'checkpoint' | 'qualifying_practice',
-  notes?: string
+  notes?: string,
+  protocol?: string
 ): void {
   try {
     const current = getCanonicalVerifications();
@@ -62,6 +65,7 @@ export function recordCanonicalVerification(
       verifiedAt: new Date().toISOString(),
       source,
       notes,
+      protocol,
     });
     const arr = Array.from(current.values());
     localStorage.setItem(VERIFICATIONS_STORAGE_KEY, JSON.stringify(arr));
@@ -85,7 +89,16 @@ export function isCompetencyVerified(
   verificationMap?: Map<string, CompetencyVerificationRecord>
 ): boolean {
   const verifications = verificationMap || getCanonicalVerifications();
-  if (verifications.has(competencyId)) {
+  const record = verifications.get(competencyId);
+  if (record) {
+    // C7.10 protocol hardening: C4 formal-verification checkpoints created
+    // before verifier-v2 used the metronome arguments in the wrong order.
+    // Those historical checkpoint passes are preserved in storage for audit,
+    // but they cannot certify canonical progression. Placement-test evidence is
+    // independent of this verifier and remains valid.
+    if (record.source === 'checkpoint') {
+      return record.protocol === CURRENT_C4_VERIFICATION_PROTOCOL;
+    }
     return true;
   }
 

@@ -14,6 +14,7 @@ import {
   getCanonicalVerifications,
   isCompetencyVerified,
   recordCanonicalVerification,
+  CURRENT_C4_VERIFICATION_PROTOCOL,
 } from './canonicalProgressEngine';
 import { deriveSkillEvidenceMemory, getAttemptsForSkill, getSkillEvidenceMemory } from './evidenceEngine';
 import { getAllPlacementAttemptsForSkill } from './placementEngine';
@@ -510,7 +511,8 @@ export function recordCompetencyVerificationOutcome(params: {
     recordCanonicalVerification(
       competency.id,
       'checkpoint',
-      `C4 practical verification passed: ${target.standardText}`
+      `C4 practical verification passed: ${target.standardText}`,
+      CURRENT_C4_VERIFICATION_PROTOCOL
     );
   }
 
