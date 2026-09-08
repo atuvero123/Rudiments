@@ -9,8 +9,14 @@ import {
   SelfCheckFeeling,
 } from '../types';
 import { getCurriculumPedagogyProfile } from './curriculumPedagogyEngine';
+import { CURRICULUM_COMPETENCIES_BY_ID } from '../data/canonicalCurriculum';
+import { getAttemptsForSkill } from './evidenceEngine';
 
 const C6_EVIDENCE_KEY = 'RUDIMENT_C6_CURRICULUM_EVIDENCE_V1';
+
+// C7.6 shared migration boundary. Notation evidence created before the corrected
+// C7.4 staff/transport build must not be promoted into canonical readiness.
+export const C7_NOTATION_VALID_EVIDENCE_SINCE = Date.parse('2026-09-07T19:29:00Z');
 
 export interface CurriculumMissionEvidenceRecord {
   id: string;
@@ -108,8 +114,118 @@ export function recordCurriculumMissionEvidence(input: {
   return record;
 }
 
+function missionNumberFromExerciseId(exerciseId: string): number | null {
+  const match = (exerciseId || '').match(/(?:-c6)?-m(\d+)$/i);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
+}
+
+function inferredCanonicalAssistance(competencyId: string, missionNumber: number): AssistanceLevel {
+  if (competencyId === 'comp-meter-44') {
+    if (missionNumber <= 3) return 'FULL';
+    if (missionNumber <= 6) return 'REDUCED';
+    return 'NONE';
+  }
+  if (missionNumber <= 3) return 'FULL';
+  if (missionNumber === 4) return 'REDUCED';
+  return 'NONE';
+}
+
+function canonicalMissionFlags(competencyId: string, missionNumber: number) {
+  if (competencyId === 'comp-meter-44') {
+    return {
+      conceptualTarget: missionNumber !== 6,
+      executionTarget: true,
+      musicalApplication: missionNumber === 5 || missionNumber === 8,
+    };
+  }
+  return {
+    conceptualTarget: missionNumber <= 3,
+    executionTarget: missionNumber >= 2,
+    musicalApplication: missionNumber === 6,
+  };
+}
+
+function assessmentFromPracticeAttempt(
+  assessment: ReturnType<typeof getAttemptsForSkill>[number]['assessment']
+): SelfCheckFeeling {
+  if (assessment === 'clean_relaxed') return 'CLEAN_AND_RELAXED';
+  if (assessment === 'mostly_clean') return 'MOSTLY_CLEAN';
+  if (assessment === 'inconsistent') return 'INCONSISTENT';
+  return 'TOO_DIFFICULT';
+}
+
+function isCanonicalExerciseForCompetency(competencyId: string, exerciseId: string): boolean {
+  const id = exerciseId || '';
+  return id.startsWith(`c6-${competencyId}-`) || id.startsWith(`c7-${competencyId}-`);
+}
+
+/**
+ * Returns the canonical curriculum evidence stream for one competency.
+ *
+ * C7.6 also reconstructs valid C6/C7 mission evidence from the generic attempt
+ * store when an older build recorded the practice attempt but did not yet write
+ * the dedicated curriculum ledger. Direct curriculum records always win, so the
+ * reconstruction never double-counts the same mission in the same session.
+ */
+export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMissionEvidenceRecord[] {
+  const direct = readAllEvidence()
+    .filter((record) => record.competencyId === competencyId)
+    .filter((record) =>
+      competencyId !== 'comp-reading-notation' ||
+      new Date(record.timestamp).getTime() >= C7_NOTATION_VALID_EVIDENCE_SINCE
+    );
+  const competency = CURRICULUM_COMPETENCIES_BY_ID.get(competencyId);
+  if (!competency) return direct;
+
+  const directMissionKeys = new Set(
+    direct.map((record) => `${record.sessionId}:${record.missionNumber}`)
+  );
+  const pedagogy = getCurriculumPedagogyProfile(competency);
+
+  const reconstructed = getAttemptsForSkill(competency.skillId)
+    .filter((attempt) => isCanonicalExerciseForCompetency(competencyId, attempt.exerciseId))
+    .filter((attempt) =>
+      competencyId !== 'comp-reading-notation' ||
+      new Date(attempt.timestamp).getTime() >= C7_NOTATION_VALID_EVIDENCE_SINCE
+    )
+    .flatMap((attempt): CurriculumMissionEvidenceRecord[] => {
+      const missionNumber = missionNumberFromExerciseId(attempt.exerciseId);
+      if (!missionNumber) return [];
+
+      const missionKey = `${attempt.sessionId}:${missionNumber}`;
+      if (directMissionKeys.has(missionKey)) return [];
+
+      const flags = canonicalMissionFlags(competencyId, missionNumber);
+      const assistanceLevel =
+        attempt.assistanceLevel || inferredCanonicalAssistance(competencyId, missionNumber);
+
+      return [{
+        id: `c7-migrated-${attempt.id}`,
+        runId: `legacy-attempt:${attempt.id}`,
+        sessionId: attempt.sessionId,
+        competencyId,
+        missionId: `${competencyId === 'comp-meter-44' ? 'c6' : 'c7'}-${competencyId}-m${missionNumber}`,
+        missionNumber,
+        timestamp: attempt.timestamp,
+        date: attempt.timestamp.slice(0, 10),
+        bpm: attempt.bpm,
+        assessment: assessmentFromPracticeAttempt(attempt.assessment),
+        assistanceLevel,
+        conceptualTarget: flags.conceptualTarget,
+        executionTarget: flags.executionTarget,
+        musicalApplication: flags.musicalApplication,
+        issueTags: attempt.frictions || [],
+        pedagogyDomain: pedagogy.domain,
+      }];
+    });
+
+  return [...direct, ...reconstructed].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+}
+
 export function getCurriculumEvidenceLedger(competencyId: string): CurriculumEvidenceLedger {
-  const records = readAllEvidence().filter((record) => record.competencyId === competencyId);
+  const records = getCurriculumEvidenceRecords(competencyId);
   const success = (record: CurriculumMissionEvidenceRecord) =>
     record.assessment === 'CLEAN_AND_RELAXED' || record.assessment === 'MOSTLY_CLEAN';
   const clean = (record: CurriculumMissionEvidenceRecord) => record.assessment === 'CLEAN_AND_RELAXED';

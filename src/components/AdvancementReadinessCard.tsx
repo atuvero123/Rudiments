@@ -40,11 +40,12 @@ export const AdvancementReadinessCard: React.FC<AdvancementReadinessCardProps> =
           <Icon className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-black uppercase tracking-widest">C4 Advancement Readiness</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">C4 Formal Verification Readiness</span>
               <span className="rounded-full border border-current/20 bg-white/50 px-2 py-0.5 text-[10px] font-black uppercase">{readiness.label}</span>
             </div>
             <h3 className="mt-1 text-sm font-black">{competency.title}</h3>
             <p className="mt-1 text-xs leading-relaxed opacity-80">{readiness.summary}</p>
+            <p className="mt-1 text-[10px] font-bold opacity-60">Canonical mission assistance levels are authoritative: guided PLAY screens do not count as independent evidence.</p>
           </div>
         </div>
         {readiness.state === 'READY_TO_VERIFY' && onVerify && (

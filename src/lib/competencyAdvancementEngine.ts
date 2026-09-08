@@ -25,6 +25,10 @@ import {
   saveGapClosurePlan,
 } from './gapClosureEngine';
 import { CheckpointAttempt, CheckpointCriterionResult } from '../types';
+import {
+  C7_NOTATION_VALID_EVIDENCE_SINCE,
+  getCurriculumEvidenceRecords,
+} from './curriculumPracticeIntelligence';
 
 export type CompetencyAdvancementState =
   | 'VERIFIED'
@@ -106,11 +110,6 @@ export interface CurriculumAdvancementEvent {
 
 const VERIFICATION_ATTEMPTS_KEY = 'RUDIMENT_COMPETENCY_VERIFICATION_ATTEMPTS_V1';
 const ADVANCEMENT_EVENTS_KEY = 'RUDIMENT_CURRICULUM_ADVANCEMENT_EVENTS_V1';
-
-// C7.5 migration guard: notation sessions before the C7.4 staff/transport correction
-// used mismatched drill content and must not qualify for formal readiness. The first
-// corrected C7.4 build was produced at this point; later evidence remains valid.
-const C7_NOTATION_VALID_EVIDENCE_SINCE = Date.parse('2026-09-07T19:29:00Z');
 
 function isValidCanonicalPracticeAttempt(comp: CurriculumCompetency, attempt: ReturnType<typeof getAttemptsForSkill>[number]): boolean {
   if (comp.id !== 'comp-reading-notation') return true;
@@ -230,27 +229,48 @@ export function deriveCompetencyAdvancementReadiness(
     (id) => !isCompetencyVerified(id, skills, verifications)
   );
 
-  const skill = skills.find((s) => s.id === comp.skillId);
-  const attempts = getAttemptsForSkill(comp.skillId).filter((attempt) =>
+  const allAttempts = getAttemptsForSkill(comp.skillId).filter((attempt) =>
     isValidCanonicalPracticeAttempt(comp, attempt)
   );
+  const canonicalRecords = getCurriculumEvidenceRecords(comp.id);
+
+  // C7.6: canonical C6/C7 mission attempts are represented by the curriculum
+  // evidence stream above. Exclude their duplicate generic records from C4 so
+  // a guided screen running in PLAY mode cannot be misclassified as independent.
+  const nonCanonicalAttempts = allAttempts.filter((attempt) => {
+    const exerciseId = attempt.exerciseId || '';
+    return !exerciseId.startsWith(`c6-${comp.id}-`) && !exerciseId.startsWith(`c7-${comp.id}-`);
+  });
+
   const placementAttempts = getAllPlacementAttemptsForSkill(comp.skillId).filter(
     isGenuinePlacementAttemptForCanonicalReadiness
   );
-  const memory = comp.id === 'comp-reading-notation'
-    ? deriveSkillEvidenceMemory(comp.skillId, attempts)
-    : getSkillEvidenceMemory(comp.skillId);
+
+  // Friction/trend memory may still use valid generic attempts from canonical
+  // lessons, because those records carry the learner's actual self-checks. Only
+  // readiness counting is de-duplicated and stage-aware.
+  const memory = deriveSkillEvidenceMemory(comp.skillId, allAttempts);
   const activeGapPlan = getActiveGapClosurePlan(comp.skillId);
   const priorVerificationAttempts = getCompetencyVerificationAttempts(comp.id)
     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
   const latestFailedVerificationAt = priorVerificationAttempts[0] && !priorVerificationAttempts[0].passed ? priorVerificationAttempts[0].completedAt : null;
 
-  const independentPracticeRuns = attempts
+  const independentCanonicalRuns = canonicalRecords
+    .filter((record) =>
+      record.assessment === 'CLEAN_AND_RELAXED' &&
+      (record.assistanceLevel === 'MINIMAL' || record.assistanceLevel === 'NONE')
+    )
+    .map((record) => ({
+      bpm: record.bpm,
+      sessionKey: `curriculum:${record.sessionId}`,
+      timestamp: record.timestamp,
+    }));
+
+  const independentPracticeRuns = nonCanonicalAttempts
     .filter((attempt) => {
       const assessmentPass = attempt.assessment === 'clean_relaxed';
       const independent =
         attempt.evidenceCategory === 'SELF_ASSESSED_EXECUTION' ||
-        attempt.instructionMode === 'PLAY' ||
         attempt.assistanceLevel === 'MINIMAL' ||
         attempt.assistanceLevel === 'NONE';
       return assessmentPass && independent;
@@ -258,10 +278,8 @@ export function deriveCompetencyAdvancementReadiness(
     .map((attempt) => ({ bpm: attempt.bpm, sessionKey: `practice:${attempt.sessionId}`, timestamp: attempt.timestamp }));
 
   // C2 already stored richer independent PLAY evidence in the placement engine.
-  // C4 reads that legacy evidence so the learner does not lose genuine work from
-  // previous builds. Because older placement attempts did not carry the parent
-  // Guided Practice session ID, group them by calendar date to avoid one practice
-  // sitting falsely counting as several separate sessions.
+  // C4 reads only genuine placement exercises; synthetic C6/C7 placement records
+  // remain quarantined by isGenuinePlacementAttemptForCanonicalReadiness().
   const independentPlacementRuns = placementAttempts
     .filter((attempt) =>
       attempt.success &&
@@ -271,7 +289,11 @@ export function deriveCompetencyAdvancementReadiness(
     )
     .map((attempt) => ({ bpm: attempt.bpm, sessionKey: `placement-date:${attempt.timestamp.split('T')[0]}`, timestamp: attempt.timestamp }));
 
-  const cleanIndependent = [...independentPracticeRuns, ...independentPlacementRuns];
+  const cleanIndependent = [
+    ...independentCanonicalRuns,
+    ...independentPracticeRuns,
+    ...independentPlacementRuns,
+  ];
 
   // C4 readiness is deliberately below the formal verification standard.
   // A learner should approach the test before they can already perform it at 100% target speed.
@@ -287,10 +309,11 @@ export function deriveCompetencyAdvancementReadiness(
   const unresolvedFailedVerification = Boolean(latestFailedVerificationAt && postFailureQualifyingCount < 2);
 
   const allEvidenceSessionKeys = new Set([
-    ...attempts.map((a) => `practice:${a.sessionId}`),
-    ...placementAttempts.map((a) => `placement-date:${a.timestamp.split('T')[0]}`),
+    ...canonicalRecords.map((record) => `curriculum:${record.sessionId}`),
+    ...nonCanonicalAttempts.map((attempt) => `practice:${attempt.sessionId}`),
+    ...placementAttempts.map((attempt) => `placement-date:${attempt.timestamp.split('T')[0]}`),
   ]);
-  const totalEvidenceAttempts = attempts.length + placementAttempts.length;
+  const totalEvidenceAttempts = canonicalRecords.length + nonCanonicalAttempts.length + placementAttempts.length;
   const hasPracticeBreadth = totalEvidenceAttempts >= 3 && allEvidenceSessionKeys.size >= 2;
   const hasIndependentClean = cleanIndependent.length >= 2;
   const hasNearTargetControl = qualifyingTempoAttempts.length >= 2;
