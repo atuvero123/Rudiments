@@ -17,6 +17,9 @@ import {
 import { PracticeExercise, RhythmTimeline, CompetencyTeachingDefinition } from '../types';
 import { audioEngine } from '../lib/audioEngine';
 import { masterTransport } from '../lib/masterTransportEngine';
+import { DrumNotationStaff } from './DrumNotationStaff';
+import { CURRICULUM_COMPETENCIES_BY_ID } from '../data/canonicalCurriculum';
+import { deriveCanonicalVerificationTransport, formatVerificationLength } from '../lib/verificationTransportEngine';
 
 interface UnderstandStageViewProps {
   exercise: PracticeExercise;
@@ -25,6 +28,7 @@ interface UnderstandStageViewProps {
   isPad: boolean;
   currentTempo: number;
   onProceedToCount: () => void;
+  proceedLabel?: string;
 }
 
 export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
@@ -34,6 +38,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
   isPad,
   currentTempo,
   onProceedToCount,
+  proceedLabel,
 }) => {
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
 
@@ -91,7 +96,24 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
     }
   };
 
+  const canonicalCompetency = CURRICULUM_COMPETENCIES_BY_ID.get(teachingDef.competencyId);
+  const verificationTransport = canonicalCompetency
+    ? deriveCanonicalVerificationTransport(canonicalCompetency, teachingDef)
+    : null;
   const explanation = teachingDef.musicalExplanation;
+  const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
+  const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
+  const executionReferenceLabel = pedagogyDomain === 'RUDIMENT'
+    ? 'Required Sticking — Play This'
+    : pedagogyDomain === 'GROOVE' || pedagogyDomain === 'STYLE'
+    ? 'Required Limb / Voice Pattern — Play This'
+    : pedagogyDomain === 'COORDINATION'
+    ? 'Required Limb Sequence — Play This'
+    : pedagogyDomain === 'FILL_TRANSITION'
+    ? 'Required Fill Pattern — Play This'
+    : pedagogyDomain === 'DYNAMICS'
+    ? 'Suggested Accent / Motion Pattern'
+    : 'Required Pulse Pattern — Play This';
 
   return (
     <div className="bg-stone-950 text-white rounded-3xl p-5 sm:p-7 border-2 border-stone-800 shadow-2xl space-y-6 animate-in fade-in duration-200">
@@ -110,7 +132,9 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
             {teachingDef.title}
           </h2>
           <p className="text-xs text-stone-300 font-medium mt-0.5">
-            Internalize the musical meaning, rhythm mechanics, and limb choreography before you hit.
+            {isNotationMission
+              ? 'Learn what the written drum symbols mean, where they sit on the staff, and when they sound before you play them.'
+              : 'Internalize the musical meaning, rhythm mechanics, and limb choreography before you hit.'}
           </p>
         </div>
 
@@ -119,7 +143,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
           onClick={onProceedToCount}
           className="self-start sm:self-auto flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-stone-950 px-4 py-2.5 rounded-2xl font-black text-xs transition-all shadow-md active:scale-95 cursor-pointer whitespace-nowrap"
         >
-          <span>2. Count It</span>
+          <span>{proceedLabel || (isNotationMission ? '2. Count the Written Bar' : '2. Count It')}</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>
@@ -177,55 +201,87 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
         <div className="bg-stone-900 p-3 rounded-2xl border border-stone-800 space-y-1">
           <span className="text-[10px] uppercase font-bold text-stone-400">Verification Goal</span>
           <p className="font-mono font-black text-emerald-400 text-base">
-            {teachingDef.certificationTempo.bpm} BPM
+            {verificationTransport?.bpm || teachingDef.certificationTempo.bpm} BPM
           </p>
-          <span className="text-[10px] text-stone-400">{teachingDef.certificationTempo.durationSeconds}s standard</span>
+          <span className="text-[10px] text-stone-400">{verificationTransport ? `${formatVerificationLength(verificationTransport)} standard` : `${teachingDef.certificationTempo.durationSeconds}s standard`}</span>
         </div>
 
         <div className="bg-stone-900 p-3 rounded-2xl border border-stone-800 space-y-1">
           <span className="text-[10px] uppercase font-bold text-stone-400">Equipment</span>
           <p className="font-mono font-black text-amber-300 text-base">
-            {isPad ? 'Practice Pad' : 'Full Kit'}
+            {exercise.equipmentRequired === 'Practice Pad'
+              ? 'Practice Pad'
+              : exercise.equipmentRequired === 'Full Drum Kit'
+              ? 'Full Kit'
+              : 'Pad or Kit'}
           </p>
           <span className="text-[10px] text-stone-400">{teachingDef.drumSurfaces.join(', ')}</span>
         </div>
       </div>
 
-      {/* Sticking & Visual Notation Ribbon */}
-      <div className="bg-stone-900 rounded-2xl p-4 border border-stone-800 space-y-2 text-center">
-        <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-stone-400 font-bold border-b border-stone-800 pb-1.5">
-          <span>Sticking & Dynamic Map</span>
-          <span>Click any note to hear sound</span>
+      {/* Contextual execution reference. Reading uses actual staff notation; conceptual meter uses structure; motor skills use sticking. */}
+      {exercise.curriculumMission?.patternDisplay === 'NOTATION' ? (
+        <DrumNotationStaff
+          teachingDef={teachingDef}
+          title="See the Note — Name the Voice — Count the Time"
+          showLegend
+        />
+      ) : exercise.curriculumMission?.patternDisplay === 'BAR_STRUCTURE' ? (
+        <div className="bg-stone-900 rounded-2xl p-4 border border-stone-800 space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-sky-300 font-black">Musical Structure — Track This, Not a Sticking Pattern</div>
+          <div className="grid grid-cols-4 gap-2">
+            {[1, 2, 3, 4].map((beat) => (
+              <div key={beat} className={`rounded-xl border py-3 text-center font-mono font-black ${beat === 1 ? 'bg-amber-400 text-stone-950 border-amber-300' : 'bg-stone-950 text-stone-300 border-stone-800'}`}>
+                <span className="text-[9px] uppercase block opacity-70">Beat</span>
+                <span className="text-lg">{beat}</span>
+              </div>
+            ))}
+          </div>
+          <div className="text-xs text-stone-300 font-medium">
+            Count <strong>1 2 3 4</strong>, then the beat count resets to 1 while the <strong>bar number advances</strong>. Your job is to feel both layers at the same time.
+          </div>
         </div>
+      ) : exercise.curriculumMission?.patternDisplay === 'NONE' ? null : (
+        <div className="bg-stone-900 rounded-2xl p-4 border border-stone-800 space-y-2 text-center">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-stone-400 font-bold border-b border-stone-800 pb-1.5">
+            <span>{exercise.curriculumMission?.patternDisplay === 'SUGGESTED' ? 'Suggested Pattern — Optional' : executionReferenceLabel}</span>
+            <span>Click any note to hear sound</span>
+          </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-2 py-2">
-          {teachingDef.events.map((ev, idx) => (
-            <button
-              key={idx}
-              onClick={() => handlePlaySingleSurface(ev.surface, ev.accent)}
-              className={`flex flex-col items-center justify-center min-w-[3rem] px-2.5 py-2 rounded-xl border transition-all cursor-pointer active:scale-95 ${
-                ev.accent
-                  ? 'bg-amber-400 text-stone-950 border-amber-300 font-black shadow-md'
-                  : 'bg-stone-950 text-stone-200 border-stone-800 hover:border-stone-700 font-bold'
-              }`}
-            >
-              <span className="text-[9px] uppercase font-mono tracking-wider opacity-80">
-                {ev.accent ? '> ACCENT' : 'TAP'}
-              </span>
-              <span className="text-base sm:text-lg font-mono font-black">
-                {ev.accent ? `>${ev.hand}` : ev.hand}
-              </span>
-              <span className="text-[9px] font-mono opacity-80 mt-0.5">
-                {ev.countToken}
-              </span>
-            </button>
-          ))}
-        </div>
+          <div className="flex flex-wrap items-center justify-center gap-2 py-2">
+            {teachingDef.events.map((ev, idx) => (
+              <button
+                key={idx}
+                onClick={() => handlePlaySingleSurface(ev.surface, ev.accent)}
+                className={`flex flex-col items-center justify-center min-w-[3rem] px-2.5 py-2 rounded-xl border transition-all cursor-pointer active:scale-95 ${
+                  ev.accent
+                    ? 'bg-amber-400 text-stone-950 border-amber-300 font-black shadow-md'
+                    : 'bg-stone-950 text-stone-200 border-stone-800 hover:border-stone-700 font-bold'
+                }`}
+              >
+                <span className="text-[9px] uppercase font-mono tracking-wider opacity-80">
+                  {ev.accent ? '> ACCENT' : 'TAP'}
+                </span>
+                <span className="text-base sm:text-lg font-mono font-black">
+                  {ev.accent ? `>${ev.hand}` : ev.hand}
+                </span>
+                <span className="text-[9px] font-mono opacity-80 mt-0.5">
+                  {ev.countToken}
+                </span>
+              </button>
+            ))}
+          </div>
 
-        <div className="text-xs font-mono font-bold text-amber-300/90 pt-1">
-          {teachingDef.sticking}
+          <div className="pt-2 border-t border-stone-800/80 space-y-1">
+            <div className="text-[9px] font-black uppercase tracking-wider text-emerald-300">
+              {exercise.curriculumMission?.patternDisplay === 'SUGGESTED' ? 'Suggested Pattern — Optional' : executionReferenceLabel.replace(' — Play This', ' — Play This Now')}
+            </div>
+            <div className="text-xs font-mono font-bold text-amber-300/90">
+              {teachingDef.sticking}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Deep Pedagogical Explanations */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">

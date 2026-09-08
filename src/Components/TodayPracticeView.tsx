@@ -6,6 +6,7 @@ import {
   FocusModeOption,
   GranularSkill,
   ActiveLearningThread,
+  SelfCheckFeeling,
 } from '../types';
 import { useLearner } from '../context/LearnerContext';
 import { generatePracticeSession } from '../lib/practiceSessionGenerator';
@@ -24,8 +25,19 @@ import {
   CURRICULUM_UNITS_BY_ID,
 } from '../data/canonicalCurriculum';
 import { GuidedPracticeSession } from './GuidedPracticeSession';
+import { getPlayAlongById, recommendPlayAlongForCompetency } from '../data/playAlongTracks';
+import { recommendMusicalDevelopmentStepForCompetency } from '../data/musicalDevelopment';
 import { RoadmapWhyThisNextCard } from './RoadmapWhyThisNextCard';
 import { CurriculumDecisionCard } from './CurriculumDecisionCard';
+import { AdvancementReadinessCard } from './AdvancementReadinessCard';
+import { CompetencyVerificationModal } from './CompetencyVerificationModal';
+import { deriveCanonicalVerificationTransport, formatVerificationLength } from '../lib/verificationTransportEngine';
+import { findTeachingDefinition } from '../lib/teachingDefinitions';
+import {
+  deriveCompetencyAdvancementReadiness,
+  getSkillStatusAfterCompetencyVerification,
+  recordCompetencyVerificationOutcome,
+} from '../lib/competencyAdvancementEngine';
 import {
   Play,
   Clock,
@@ -52,11 +64,13 @@ import {
 interface TodayPracticeViewProps {
   practiceSessions: PracticeSession[];
   onAddSession: (session: PracticeSession) => void;
+  onOpenMusicalApplication?: (trackId: string, developmentStepId?: string) => void;
 }
 
 export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
   practiceSessions,
   onAddSession,
+  onOpenMusicalApplication,
 }) => {
   const {
     profile,
@@ -74,6 +88,9 @@ export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
 
   // Active Interactive Session State (fallback if context session not used)
   const [activeSession, setActiveSession] = useState<PracticeSession | null>(null);
+  const [showVerification, setShowVerification] = useState(false);
+  const [verificationRevision, setVerificationRevision] = useState(0);
+  const [advancementNotice, setAdvancementNotice] = useState<string | null>(null);
 
   // Setup Screen States
   const [durationMinutes, setDurationMinutes] = useState<number>(30);
@@ -102,6 +119,9 @@ export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
   >('PRIMARY_PATH');
 
   // Unified Canonical Curriculum Position & Today 3-Lane Generation
+  // verificationRevision intentionally forces a fresh deterministic read after a
+  // practical verification writes canonical evidence to localStorage.
+  void verificationRevision;
   const canonicalPosition = deriveCurrentCurriculumPosition(skills);
   const activeUnit =
     CURRICULUM_UNITS_BY_ID.get(canonicalPosition.activeUnitId) || CANONICAL_CURRICULUM_UNITS[0];
@@ -115,6 +135,9 @@ export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
   const perfLane = todayLanes.find((l) => l.laneType === 'PERFORMANCE_PREP') || todayLanes[2];
 
   const activeLane = todayLanes.find((l) => l.laneType === selectedLaneType) || primaryLane;
+  const recommendedPlayAlong = recommendPlayAlongForCompetency(canonicalPosition.activeCompetencyId);
+  const recommendedMusicalStep = recommendMusicalDevelopmentStepForCompetency(canonicalPosition.activeCompetencyId);
+  const recommendedMusicalTrack = getPlayAlongById(recommendedMusicalStep.trackId) || recommendedPlayAlong;
 
   const canonicalActiveSkill: GranularSkill =
     skills.find((s) => s.id === activeLane.targetSkillId) ||
@@ -129,6 +152,45 @@ export const TodayPracticeView: React.FC<TodayPracticeViewProps> = ({
       practiceCount: 0,
       currentComfortTempo: canonicalActiveComp.tempoStandard.bpm,
     } as GranularSkill);
+
+  const verificationSkill: GranularSkill =
+    skills.find((s) => s.id === canonicalActiveComp.skillId) || canonicalActiveSkill;
+  const advancementReadiness = deriveCompetencyAdvancementReadiness(canonicalActiveComp, skills);
+  const verificationTransport = deriveCanonicalVerificationTransport(canonicalActiveComp, findTeachingDefinition(canonicalActiveComp.id));
+
+  const handleVerificationComplete = (result: {
+    startedAt: string;
+    durationSeconds: number;
+    completedRequiredRun: boolean;
+    selfAssessment: SelfCheckFeeling;
+    frictions: string[];
+  }) => {
+    const outcome = recordCompetencyVerificationOutcome({
+      competency: canonicalActiveComp,
+      skill: verificationSkill,
+      skills,
+      ...result,
+    });
+
+    if (outcome.passed) {
+      updateSkill(verificationSkill.id, {
+        status: getSkillStatusAfterCompetencyVerification(verificationSkill.status, canonicalActiveComp.targetStatus),
+        source: 'assessment',
+        dateLastPracticed: new Date().toISOString().split('T')[0],
+      });
+      const nextComp = CURRICULUM_COMPETENCIES_BY_ID.get(outcome.attempt.nextActiveCompetencyId);
+      setAdvancementNotice(
+        outcome.advancementEvent?.unitAdvanced
+          ? `Verified ${canonicalActiveComp.title}. Unit complete — the curriculum advanced to ${nextComp?.title || 'the next unit'}.`
+          : `Verified ${canonicalActiveComp.title}. Next target: ${nextComp?.title || 'the next competency'}.`
+      );
+    } else {
+      setAdvancementNotice(`Verification not passed. A focused repair plan has been created for ${canonicalActiveComp.title}; no curriculum progress was lost.`);
+    }
+
+    setShowVerification(false);
+    setVerificationRevision((value) => value + 1);
+  };
 
   // New Thing Protection Dialog State
   const [pendingExploreSkill, setPendingExploreSkill] = useState<GranularSkill | null>(null);
@@ -577,44 +639,86 @@ COACH NOTE: Focus on relaxed wrists and strict subdivision accuracy.
                 <span className="text-indigo-700 font-bold">Song Integration</span>
               </div>
             </div>
+
+            {onOpenMusicalApplication && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenMusicalApplication(recommendedMusicalTrack.id, recommendedMusicalStep.id);
+                }}
+                className="w-full min-h-[42px] rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black flex items-center justify-center gap-2 transition-colors"
+              >
+                <Music className="w-3.5 h-3.5" />
+                Step {recommendedMusicalStep.order}: {recommendedMusicalStep.shortTitle} · {recommendedMusicalTrack.bpm} BPM
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* BU2F-R2F ADAPTIVE CURRICULUM DECISION CARD */}
-      {currentCurriculumDecision && (
-        <CurriculumDecisionCard
-          decision={currentCurriculumDecision}
-          targetSkill={activeTargetSkill}
-          onPracticeDecision={() =>
-            currentCurriculumDecision &&
-            launchCurriculumDecisionPractice(currentCurriculumDecision, equipment)
-          }
-          onPracticeSupportingGroove={() =>
-            activeTargetSkill &&
-            launchSupportingGrooveMiniLesson(
-              activeTargetSkill,
-              currentCurriculumDecision.supportingContext?.anchorGroove,
-              equipment
-            )
-          }
-        />
+      {/* C4 — EVIDENCE -> READINESS -> PRACTICAL VERIFICATION -> ADVANCEMENT */}
+      <AdvancementReadinessCard
+        competency={canonicalActiveComp}
+        readiness={advancementReadiness}
+        onVerify={() => setShowVerification(true)}
+      />
+
+      {advancementNotice && (
+        <div className={`rounded-2xl border p-4 text-xs font-bold ${advancementNotice.startsWith('Verified') ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+          {advancementNotice}
+        </div>
       )}
 
-      {/* WHY THIS NEXT ROADMAP CARD */}
-      {currentRoadmapDecision && (
-        <RoadmapWhyThisNextCard
-          decision={currentRoadmapDecision}
-          targetSkill={activeTargetSkill}
-          onPracticeSupportingGroove={() =>
-            activeTargetSkill &&
-            launchSupportingGrooveMiniLesson(
-              activeTargetSkill,
-              currentRoadmapDecision.supportingSkill?.anchorGroove,
-              equipment
-            )
-          }
-        />
+      {/* C4.2: once canonical readiness is complete, verification becomes the
+          single progression authority. Legacy Vary/Extend/Roadmap advice is
+          hidden so it cannot compete with the formal certification gate. */}
+      {advancementReadiness.state === 'READY_TO_VERIFY' ? (
+        <div className="rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 sm:p-5 text-emerald-950 space-y-2 shadow-sm">
+          <div className="text-[10px] font-black uppercase tracking-wider">C4.2 Advancement Authority</div>
+          <div className="font-black text-base">Verification is now the primary next action.</div>
+          <p className="text-xs font-medium leading-relaxed">
+            Your evidence gate is complete. Ordinary guided practice is now optional consolidation only and is capped at {advancementReadiness.targetBpm} BPM. The curriculum will not ask you to Vary, Extend, or collect more legacy checkpoint evidence before this formal test.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* BU2F-R2F ADAPTIVE CURRICULUM DECISION CARD */}
+          {currentCurriculumDecision && (
+            <CurriculumDecisionCard
+              decision={currentCurriculumDecision}
+              targetSkill={activeTargetSkill}
+              onPracticeDecision={() =>
+                currentCurriculumDecision &&
+                launchCurriculumDecisionPractice(currentCurriculumDecision, equipment)
+              }
+              onPracticeSupportingGroove={() =>
+                activeTargetSkill &&
+                launchSupportingGrooveMiniLesson(
+                  activeTargetSkill,
+                  currentCurriculumDecision.supportingContext?.anchorGroove,
+                  equipment
+                )
+              }
+            />
+          )}
+
+          {/* WHY THIS NEXT ROADMAP CARD */}
+          {currentRoadmapDecision && (
+            <RoadmapWhyThisNextCard
+              decision={currentRoadmapDecision}
+              targetSkill={activeTargetSkill}
+              onPracticeSupportingGroove={() =>
+                activeTargetSkill &&
+                launchSupportingGrooveMiniLesson(
+                  activeTargetSkill,
+                  currentRoadmapDecision.supportingSkill?.anchorGroove,
+                  equipment
+                )
+              }
+            />
+          )}
+        </>
       )}
 
       {/* SETUP FORM CARD */}
@@ -884,15 +988,36 @@ COACH NOTE: Focus on relaxed wrists and strict subdivision accuracy.
           )}
         </div>
 
-        {/* START GUIDED PRACTICE BUTTON */}
-        <button
-          id="btn-start-guided-practice"
-          onClick={handleStartGuidedSession}
-          className="w-full py-4 bg-[#4a523a] hover:bg-[#3d4430] text-white font-black text-base rounded-2xl shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 min-h-[52px] cursor-pointer"
-        >
-          <Play className="w-5 h-5 fill-current" />
-          <span>START GUIDED PRACTICE SESSION</span>
-        </button>
+        {/* C4.2 PRIMARY ACTION: verification outranks ordinary practice once ready. */}
+        {advancementReadiness.state === 'READY_TO_VERIFY' ? (
+          <div className="space-y-2">
+            <button
+              id="btn-run-formal-verification"
+              onClick={() => setShowVerification(true)}
+              className="w-full py-4 bg-emerald-700 hover:bg-emerald-800 text-white font-black text-base rounded-2xl shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 min-h-[52px] cursor-pointer"
+            >
+              <ShieldAlert className="w-5 h-5" />
+              <span>RUN FORMAL VERIFICATION · {verificationTransport.bpm} BPM · {formatVerificationLength(verificationTransport)}</span>
+            </button>
+            <button
+              id="btn-start-guided-practice"
+              onClick={handleStartGuidedSession}
+              className="w-full py-3 bg-stone-100 hover:bg-stone-200 text-stone-800 font-black text-xs rounded-2xl border border-stone-300 transition-all flex items-center justify-center gap-2 min-h-[46px] cursor-pointer"
+            >
+              <Play className="w-4 h-4" />
+              <span>OPTIONAL WARM-UP / CONSOLIDATION — NO SPEED CHASING</span>
+            </button>
+          </div>
+        ) : (
+          <button
+            id="btn-start-guided-practice"
+            onClick={handleStartGuidedSession}
+            className="w-full py-4 bg-[#4a523a] hover:bg-[#3d4430] text-white font-black text-base rounded-2xl shadow-xl transition-all transform active:scale-[0.99] flex items-center justify-center gap-2 min-h-[52px] cursor-pointer"
+          >
+            <Play className="w-5 h-5 fill-current" />
+            <span>START GUIDED PRACTICE SESSION</span>
+          </button>
+        )}
 
         {/* Legacy Written Plan Option */}
         <div className="text-center pt-2 border-t border-stone-100">
@@ -1038,6 +1163,14 @@ COACH NOTE: Focus on relaxed wrists and strict subdivision accuracy.
           </div>
         </div>
       )}
+      <CompetencyVerificationModal
+        isOpen={showVerification}
+        competency={canonicalActiveComp}
+        skill={verificationSkill}
+        readiness={advancementReadiness}
+        onClose={() => setShowVerification(false)}
+        onComplete={handleVerificationComplete}
+      />
     </div>
   );
 };

@@ -19,6 +19,7 @@ import {
 import { deriveSkillEvidenceMemory, getAttemptsForSkill, getSkillEvidenceMemory } from './evidenceEngine';
 import { getAllPlacementAttemptsForSkill } from './placementEngine';
 import { findTeachingDefinition } from './teachingDefinitions';
+import { deriveCanonicalVerificationTransport } from './verificationTransportEngine';
 import {
   completeOrDismissGapClosurePlan,
   generateGapClosurePlan,
@@ -153,38 +154,11 @@ function getTargetSpec(comp: CurriculumCompetency): {
   standardText: string;
 } {
   const teaching = findTeachingDefinition(comp.id);
-  if (teaching) {
-    return {
-      bpm: teaching.certificationTempo.bpm,
-      durationSeconds: teaching.certificationTempo.durationSeconds,
-      standardText: teaching.certificationTempo.standardText,
-    };
-  }
-
-  const secondsMatch = `${comp.tempoStandard.durationOrCycles} ${comp.durationCriterion}`.match(/(\d+)\s*seconds?/i);
-  if (secondsMatch) {
-    return {
-      bpm: comp.tempoStandard.bpm,
-      durationSeconds: Math.max(10, Number(secondsMatch[1])),
-      standardText: comp.tempoStandard.standardText,
-    };
-  }
-
-  const barsMatch = `${comp.tempoStandard.durationOrCycles} ${comp.durationCriterion}`.match(/(\d+)\s*bars?/i);
-  if (barsMatch) {
-    const bars = Number(barsMatch[1]);
-    const beatsPerBar = comp.title.includes('6/8') || comp.subdivision.includes('6/8') ? 6 : 4;
-    return {
-      bpm: comp.tempoStandard.bpm,
-      durationSeconds: Math.max(10, Math.round((bars * beatsPerBar * 60) / comp.tempoStandard.bpm)),
-      standardText: comp.tempoStandard.standardText,
-    };
-  }
-
+  const transport = deriveCanonicalVerificationTransport(comp, teaching);
   return {
-    bpm: comp.tempoStandard.bpm,
-    durationSeconds: 30,
-    standardText: comp.tempoStandard.standardText,
+    bpm: transport.bpm,
+    durationSeconds: transport.durationSeconds,
+    standardText: transport.standardText,
   };
 }
 
@@ -505,7 +479,13 @@ export function recordCompetencyVerificationOutcome(params: {
   advancementEvent?: CurriculumAdvancementEvent;
 } {
   const { competency, skill, skills, startedAt, durationSeconds, completedRequiredRun, selfAssessment, frictions } = params;
-  const target = getTargetSpec(competency);
+  const teaching = findTeachingDefinition(competency.id);
+  const verificationTransport = deriveCanonicalVerificationTransport(competency, teaching);
+  const target = {
+    bpm: verificationTransport.bpm,
+    durationSeconds: verificationTransport.durationSeconds,
+    standardText: verificationTransport.standardText,
+  };
   const before = deriveCurrentCurriculumPosition(skills);
   const passed = completedRequiredRun && selfAssessment === 'CLEAN_AND_RELAXED' && frictions.length === 0;
 
@@ -547,7 +527,9 @@ export function recordCompetencyVerificationOutcome(params: {
       criterionName: target.standardText,
       passed,
       description: competency.durationCriterion,
-      testMethod: `Timed metronome verification at ${target.bpm} BPM for ${target.durationSeconds} seconds.`,
+      testMethod: verificationTransport.completionMode === 'BARS' && verificationTransport.requiredBars
+        ? `Bar-governed metronome verification: ${verificationTransport.requiredBars} bars at ${target.bpm} BPM.`
+        : `Timed metronome verification at ${target.bpm} BPM for ${target.durationSeconds} seconds.`,
       bpmRequirement: target.bpm,
     },
   ];

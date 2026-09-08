@@ -9,7 +9,6 @@ import { audioEngine } from '../lib/audioEngine';
 import {
   ShieldCheck,
   Play,
-  Square,
   CheckCircle2,
   AlertCircle,
   Clock,
@@ -28,6 +27,8 @@ interface PlacementTestModalProps {
   tests: PlacementTest[];
   estimatedBand: CurriculumBand;
   onComplete: (results: PlacementTestResult[]) => void;
+  onResultSaved?: (result: PlacementTestResult) => void;
+  batteryLabel?: string;
 }
 
 export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
@@ -36,6 +37,8 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
   tests,
   estimatedBand,
   onComplete,
+  onResultSaved,
+  batteryLabel = 'Placement Battery',
 }) => {
   const [currentTestIndex, setCurrentTestIndex] = useState(0);
   const [testState, setTestState] = useState<'READY' | 'COUNT_IN' | 'PLAYING' | 'SELF_CHECK'>('READY');
@@ -49,8 +52,10 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
 
   // Duration in seconds calculated deterministically from bars & tempo
   const calculateDurationSeconds = (t: PlacementTest): number => {
-    const totalBeats = (t.durationBars || 8) * 4;
-    return Math.max(5, Math.round((totalBeats * 60) / t.tempo));
+    if (t.durationSeconds && t.durationSeconds > 0) return t.durationSeconds;
+    const pulsesPerBar = t.metronomePulsesPerBar || 4;
+    const totalPulses = (t.durationBars || 8) * pulsesPerBar;
+    return Math.max(5, Math.round((totalPulses * 60) / t.tempo));
   };
 
   // Clean up metronome on unmount or close
@@ -64,6 +69,8 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
   const handleClose = () => {
     audioEngine.stopMetronome();
     setTestState('READY');
+    setCurrentTestIndex(0);
+    setAccumulatedResults([]);
     onClose();
   };
 
@@ -82,16 +89,17 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
     if (testState !== 'COUNT_IN' || !currentTest) return;
 
     audioEngine.initCtx();
+    const pulsesPerBar = currentTest.metronomePulsesPerBar || 4;
     let beat = 1;
     setCountInBeat(beat);
-    audioEngine.playCountInClick(beat, 4);
+    audioEngine.playCountInClick(beat, pulsesPerBar);
 
     const intervalMs = (60 / currentTest.tempo) * 1000;
     const timer = setInterval(() => {
       beat++;
-      if (beat <= 4) {
+      if (beat <= pulsesPerBar) {
         setCountInBeat(beat);
-        audioEngine.playCountInClick(beat, 4);
+        audioEngine.playCountInClick(beat, pulsesPerBar);
       } else {
         clearInterval(timer);
         startLiveExecution();
@@ -131,17 +139,18 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
     setCurrentBar(1);
     setCurrentBeat(0);
 
-    let beatsAccumulator = 0;
-    const totalBeats = (currentTest.durationBars || 8) * 4;
+    let pulsesAccumulator = 0;
+    const pulsesPerBar = currentTest.metronomePulsesPerBar || 4;
+    const totalPulses = (currentTest.durationBars || 8) * pulsesPerBar;
 
-    audioEngine.startMetronome(currentTest.tempo, 1, 4, (beatInBar) => {
+    audioEngine.startMetronome(currentTest.tempo, pulsesPerBar, 1, (beatInBar) => {
       setCurrentBeat(beatInBar);
-      beatsAccumulator++;
+      pulsesAccumulator++;
 
-      const calculatedBar = Math.floor(beatsAccumulator / 4) + 1;
+      const calculatedBar = Math.floor((pulsesAccumulator - 1) / pulsesPerBar) + 1;
       setCurrentBar(Math.min(currentTest.durationBars, calculatedBar));
 
-      if (beatsAccumulator >= totalBeats) {
+      if (pulsesAccumulator >= totalPulses) {
         handleFinishTestRun();
       }
     });
@@ -171,6 +180,7 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
 
     const nextAccumulated = [...accumulatedResults, result];
     setAccumulatedResults(nextAccumulated);
+    onResultSaved?.(result);
 
     if (currentTestIndex < tests.length - 1) {
       setCurrentTestIndex((prev) => prev + 1);
@@ -193,10 +203,10 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
             <ShieldCheck className="w-5 h-5 text-[#4a523a]" />
             <div>
               <h3 className="text-base sm:text-lg font-black text-stone-900 leading-tight">
-                Practical Placement Verification
+                {batteryLabel}
               </h3>
               <p className="text-[11px] text-stone-500 font-medium">
-                Test {currentTestIndex + 1} of {tests.length} • Estimated Level: {estimatedBand}
+                Test {currentTestIndex + 1} of {tests.length} • Profile estimate: {estimatedBand}
               </p>
             </div>
           </div>
@@ -227,7 +237,7 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
         </div>
 
         {/* Key Metrics Grid */}
-        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
           <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200">
             <span className="text-[10px] font-bold text-stone-400 uppercase block">Tempo</span>
             <span className="font-black text-stone-900 text-sm">{currentTest.tempo} BPM</span>
@@ -237,8 +247,12 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
             <span className="font-black text-stone-900 text-xs truncate block">{currentTest.subdivision}</span>
           </div>
           <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200">
-            <span className="text-[10px] font-bold text-stone-400 uppercase block">Required Bars</span>
-            <span className="font-black text-stone-900 text-sm">{currentTest.durationBars} Bars</span>
+            <span className="text-[10px] font-bold text-stone-400 uppercase block">Meter / Bars</span>
+            <span className="font-black text-stone-900 text-sm">{currentTest.meter || '4/4'} · {currentTest.durationBars}</span>
+          </div>
+          <div className="bg-stone-50 p-2.5 rounded-xl border border-stone-200">
+            <span className="text-[10px] font-bold text-stone-400 uppercase block">Equipment</span>
+            <span className="font-black text-stone-900 text-[11px]">{currentTest.requiredEquipment || 'Both'}</span>
           </div>
         </div>
 
@@ -309,9 +323,9 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
               </span>
             </div>
 
-            {/* Visual Beat Indicator 1 - 2 - 3 - 4 */}
-            <div className="grid grid-cols-4 gap-2">
-              {[0, 1, 2, 3].map((b) => {
+            {/* Visual metronome pulse indicator */}
+            <div className={`grid gap-2 ${(currentTest.metronomePulsesPerBar || 4) === 2 ? 'grid-cols-2' : 'grid-cols-4'}`}>
+              {Array.from({ length: currentTest.metronomePulsesPerBar || 4 }, (_, b) => b).map((b) => {
                 const isActive = currentBeat === b;
                 const isDownbeat = b === 0;
                 return (
@@ -327,7 +341,7 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
                   >
                     <span className="text-lg block">{b + 1}</span>
                     <span className="text-[9px] uppercase tracking-wider block opacity-75">
-                      {isDownbeat ? 'DOWNBEAT' : 'BEAT'}
+                      {(currentTest.metronomePulsesPerBar || 4) === 2 ? `PULSE ${b + 1}` : isDownbeat ? 'DOWNBEAT' : 'BEAT'}
                     </span>
                   </div>
                 );
@@ -338,13 +352,9 @@ export const PlacementTestModal: React.FC<PlacementTestModalProps> = ({
               <span className="text-stone-300 font-bold">
                 Progress: Bar <strong className="text-white">{currentBar}</strong> of {currentTest.durationBars}
               </span>
-              <button
-                onClick={handleFinishTestRun}
-                className="flex items-center gap-1 text-[11px] font-bold bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-              >
-                <Square className="w-3 h-3 fill-white" />
-                <span>Finish & Grade</span>
-              </button>
+              <span className="text-[10px] text-stone-400 font-semibold">
+                Complete the full timed run to unlock grading.
+              </span>
             </div>
           </div>
         )}

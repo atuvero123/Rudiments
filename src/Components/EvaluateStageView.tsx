@@ -49,6 +49,75 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
   const [selectedIssues, setSelectedIssues] = useState<string[]>([]);
   const [downbeatLandedCleanly, setDownbeatLandedCleanly] = useState<boolean | null>(true);
 
+  const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
+  const missionStage = exercise.curriculumMission?.stage;
+  const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
+  const isGrooveMission = pedagogyDomain === 'GROOVE';
+
+  const grooveEvaluationCopy = (() => {
+    if (!isGrooveMission) return null;
+    switch (missionStage) {
+      case 'UNDERSTAND':
+        return {
+          title: 'Limb-Map Understanding Check',
+          intro: 'Grade whether you actually understood and demonstrated which limb owns each groove voice.',
+          prompt: 'Could you identify the hi-hat, snare and kick roles and place them correctly',
+          clean: 'Limb roles were clear and the basic groove map was demonstrated without confusion.',
+        };
+      case 'INTERNALIZE':
+        return {
+          title: 'Counting & Coordination Check',
+          intro: 'Grade whether the spoken subdivision and the three limb roles stayed connected.',
+          prompt: 'Could you count the groove continuously while keeping every limb role aligned',
+          clean: 'The count remained continuous and each limb stayed on its intended subdivision.',
+        };
+      case 'HEAR':
+        return {
+          title: 'Pocket Listening Check',
+          intro: 'Grade what you genuinely heard in the model: stable time, balanced voices and no limb pulling another off pulse.',
+          prompt: 'Could you hear and recognize whether kick, snare and hi-hat stayed locked together',
+          clean: 'The pocket relationship was clearly recognized and the groove felt balanced and stable.',
+        };
+      case 'FOLLOW':
+      case 'REDUCED':
+        return {
+          title: 'Guided Pocket Check',
+          intro: 'Grade how well the groove survived the tutor-to-you exchange as assistance faded.',
+          prompt: 'Could you keep the groove stable through the reduced-cue exchange',
+          clean: 'The response bars matched the tutor pocket without rushing, dragging or dynamic imbalance.',
+        };
+      case 'INDEPENDENT':
+        return {
+          title: 'Independent Pocket Check',
+          intro: 'Grade the complete no-assistance run, not one good bar inside it.',
+          prompt: 'Did the complete independent groove stay even, balanced and relaxed',
+          clean: 'Kick, snare and hi-hat stayed coordinated with stable tempo and consistent balance for the whole run.',
+        };
+      case 'MUSICAL_APPLICATION':
+        return {
+          title: 'Song-Form Transfer Check',
+          intro: 'Grade whether the groove served the section changes while the underlying tempo and pocket stayed unchanged.',
+          prompt: 'Did you preserve the pocket while responding to the Verse/Chorus dynamic cues',
+          clean: 'The pocket stayed unchanged while the dynamics followed every section cue through the full form.',
+        };
+      default:
+        return null;
+    }
+  })();
+
+  const evaluationTitle = isNotationMission
+    ? 'Reading Accuracy & Timing Evaluation'
+    : grooveEvaluationCopy?.title || 'Performance & Feel Evaluation';
+  const evaluationIntro = isNotationMission
+    ? 'Grade what you actually read from the staff: correct voice, correct timing, and continuous visual tracking.'
+    : grooveEvaluationCopy?.intro || 'Evaluate honestly. Authentic evidence is the foundation of genuine drumming mastery.';
+  const evaluationPrompt = isNotationMission
+    ? 'How accurately did you read the staff'
+    : grooveEvaluationCopy?.prompt || 'How did the phrase feel';
+  const cleanDescription = isNotationMission
+    ? 'Read the correct written voices in time without losing your place on the staff.'
+    : grooveEvaluationCopy?.clean || 'Relaxed, controlled, and securely aligned with the intended pulse and pattern.';
+
   const diagnosticOptions = teachingDef.diagnosticIssues?.length
     ? teachingDef.diagnosticIssues
     : COMMON_DRUMMING_ISSUES;
@@ -94,17 +163,17 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
           </span>
         </div>
         <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
-          Performance & Feel Evaluation
+          {evaluationTitle}
         </h2>
         <p className="text-xs text-stone-300 font-medium mt-0.5">
-          Evaluate honestly. Authentic evidence is the foundation of genuine drumming mastery.
+          {evaluationIntro}
         </p>
       </div>
 
       {/* 1. Overall Timing & Execution Rating */}
       <div className="space-y-3">
         <label className="text-xs font-black uppercase tracking-wider text-stone-300 block">
-          1. How did the phrase feel at {currentTempo} BPM?
+          1. {evaluationPrompt} at {currentTempo} BPM?
         </label>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -125,7 +194,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Locked in</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              Relaxed, controlled, and securely aligned with the intended pulse and pattern.
+              {cleanDescription}
             </p>
           </button>
 
@@ -146,7 +215,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Minor Drift</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              The phrase stayed together with only small timing, sound, or coordination imperfections.
+              {isNotationMission ? 'The written line was mostly correct with only a small timing or voice-reading mistake.' : 'The phrase stayed together with only small timing, sound, or coordination imperfections.'}
             </p>
           </button>
 
@@ -167,7 +236,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Needs Work</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              Timing, sticking, coordination, or sound became unreliable during the run.
+              {isNotationMission ? 'Lost the written position, misread a voice, or timing became unreliable during the line.' : 'Timing, sticking, coordination, or sound became unreliable during the run.'}
             </p>
           </button>
 
@@ -188,7 +257,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Step Down</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              Could not maintain the required phrase or count comfortably at this working tempo.
+              {isNotationMission ? 'Could not keep reading the written line accurately at this working tempo.' : 'Could not maintain the required phrase or count comfortably at this working tempo.'}
             </p>
           </button>
         </div>

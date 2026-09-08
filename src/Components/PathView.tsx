@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Compass,
   CheckCircle2,
@@ -37,9 +37,12 @@ import {
 import {
   CANONICAL_PLACEMENT_TESTS,
   getOrInitializePlacementAssessment,
-  getPlacementTestsForEstimation,
   evaluatePlacementResults,
   savePlacementAssessment,
+  savePlacementTestProgress,
+  reconcilePlacementAssessment,
+  getPlacementCalibrationSummary,
+  getPlacementTestsForAssessment,
   STRAND_DEFINITIONS,
 } from '../lib/drummerPlacementEngine';
 import {
@@ -47,25 +50,59 @@ import {
   isUnitComplete,
   isUnitUnlocked,
   deriveCurrentCurriculumPosition,
+  getLegacyInvalidC4Checkpoint,
 } from '../lib/canonicalProgressEngine';
 import { useLearner } from '../context/LearnerContext';
 import { buildPlacementSession } from '../lib/placementEngine';
 import { PlacementTestModal } from './PlacementTestModal';
+import { AdvancementReadinessCard } from './AdvancementReadinessCard';
+import { CompetencyVerificationModal } from './CompetencyVerificationModal';
+import {
+  deriveCompetencyAdvancementReadiness,
+  getSkillStatusAfterCompetencyVerification,
+  recordCompetencyVerificationOutcome,
+} from '../lib/competencyAdvancementEngine';
+import {
+  buildC7CompetencySession,
+  buildC7GrooveIntegrityContinuationSession,
+  buildC7ProtocolRevalidationSession,
+  buildC7SecondSessionRevisitSession,
+  buildC7VerificationRepairSession,
+  buildC7VerificationStabilizationSession,
+  getCurriculumEvidenceLedger,
+  needsC7GrooveIntegrityContinuation,
+} from '../lib/curriculumPracticeIntelligence';
+import { bindCanonicalRepairSessionToPlan, getActiveGapClosurePlan } from '../lib/gapClosureEngine';
+import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 
 interface PathViewProps {
   onStartPracticeCompetency?: (competency: CurriculumCompetency) => void;
 }
 
 export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency }) => {
-  const { profile, skills, startGuidedSession } = useLearner();
+  const { profile, skills, startGuidedSession, updateSkill } = useLearner();
+  const [verificationRevision, setVerificationRevision] = useState(0);
+  const [showCompetencyVerification, setShowCompetencyVerification] = useState(false);
+  const [advancementNotice, setAdvancementNotice] = useState<string | null>(null);
 
   // Deterministic canonical curriculum position from evidence
+  void verificationRevision;
   const canonicalPosition = deriveCurrentCurriculumPosition(skills);
 
   // Load placement assessment
   const [assessment, setAssessment] = useState<DrummerPlacementAssessment>(() =>
     getOrInitializePlacementAssessment(profile, skills)
   );
+
+  useEffect(() => {
+    const refreshed = reconcilePlacementAssessment(profile, skills, assessment);
+    savePlacementAssessment(refreshed);
+    setAssessment(refreshed);
+    // Re-run only when the live learner evidence/profile changes; assessment itself is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skills, profile.selfReportedLevel, profile.yearsPlaying]);
+
+  const placementSummary = getPlacementCalibrationSummary(assessment, skills);
 
   // Selected Band Tab for Browsing
   const [selectedBand, setSelectedBand] = useState<CurriculumBand>(
@@ -80,7 +117,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
   // Placement Test Modal State
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
 
-  const availableTests = getPlacementTestsForEstimation(assessment.estimatedBand);
+  const availableTests = getPlacementTestsForAssessment(assessment, skills);
 
   // Active Unit & Competency details derived from canonical source of truth
   const activeUnit =
@@ -88,6 +125,91 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
   const activeCompetency =
     CURRICULUM_COMPETENCIES_BY_ID.get(canonicalPosition.activeCompetencyId) ||
     CANONICAL_CURRICULUM_COMPETENCIES[0];
+  const activeSkill = skills.find((s) => s.id === activeCompetency.skillId) || ({
+    id: activeCompetency.skillId,
+    name: activeCompetency.title,
+    parentTrack: 'rudiments',
+    category: 'Curriculum',
+    description: activeCompetency.description,
+    status: 'LEARNING',
+    confidence: 2,
+    practiceCount: 0,
+    currentComfortTempo: activeCompetency.tempoStandard.bpm,
+  } as any);
+  const advancementReadiness = deriveCompetencyAdvancementReadiness(activeCompetency, skills);
+  const activeCoverageLedger = getCurriculumEvidenceLedger(activeCompetency.id);
+  const activeUnmetCoverageCriteria = activeCoverageLedger.readinessCriteria.filter((criterion) => !criterion.met);
+  const activeNeedsGrooveIntegrityContinuation = Boolean(
+    needsC7GrooveIntegrityContinuation(activeCompetency.id) &&
+    advancementReadiness.state !== 'VERIFIED' &&
+    advancementReadiness.state !== 'BLOCKED' &&
+    advancementReadiness.state !== 'REPAIR_REQUIRED'
+  );
+  const activeNeedsSeparateSessionRevisit =
+    activeCoverageLedger.readiness === 5 &&
+    activeUnmetCoverageCriteria.length === 1 &&
+    activeUnmetCoverageCriteria[0]?.label === 'Learning revisited separately';
+  const activeNeedsVerificationStabilization =
+    activeCoverageLedger.readiness === 6 &&
+    advancementReadiness.state !== 'VERIFIED' &&
+    advancementReadiness.state !== 'READY_TO_VERIFY' &&
+    advancementReadiness.state !== 'BLOCKED' &&
+    advancementReadiness.state !== 'REPAIR_REQUIRED' &&
+    !advancementReadiness.recurringFriction;
+  const activeReadyToVerify = advancementReadiness.state === 'READY_TO_VERIFY';
+  const activeRepairPlan = getActiveGapClosurePlan(activeCompetency.skillId);
+  const activeNeedsVerificationRepair = Boolean(
+    advancementReadiness.state === 'REPAIR_REQUIRED' &&
+    activeRepairPlan &&
+    !activeRepairPlan.isReadyForReassessment
+  );
+  const activeLegacyInvalidCheckpoint = getLegacyInvalidC4Checkpoint(activeCompetency.id);
+  const activeNeedsProtocolRevalidation = Boolean(
+    activeLegacyInvalidCheckpoint &&
+    advancementReadiness.state !== 'READY_TO_VERIFY' &&
+    advancementReadiness.state !== 'VERIFIED' &&
+    advancementReadiness.state !== 'BLOCKED' &&
+    advancementReadiness.state !== 'REPAIR_REQUIRED' &&
+    !advancementReadiness.recurringFriction
+  );
+
+  const handleCompetencyVerificationComplete = (result: {
+    startedAt: string;
+    durationSeconds: number;
+    completedRequiredRun: boolean;
+    selfAssessment: SelfCheckFeeling;
+    frictions: string[];
+  }) => {
+    const outcome = recordCompetencyVerificationOutcome({
+      competency: activeCompetency,
+      skill: activeSkill,
+      skills,
+      ...result,
+    });
+    if (outcome.passed) {
+      updateSkill(activeSkill.id, {
+        status: getSkillStatusAfterCompetencyVerification(activeSkill.status, activeCompetency.targetStatus),
+        source: 'assessment',
+        dateLastPracticed: new Date().toISOString().split('T')[0],
+      });
+      const nextComp = CURRICULUM_COMPETENCIES_BY_ID.get(outcome.attempt.nextActiveCompetencyId);
+      const nextUnit = CURRICULUM_UNITS_BY_ID.get(outcome.attempt.nextActiveUnitId);
+      setExpandedUnitId(outcome.attempt.nextActiveUnitId);
+      if (nextUnit) setSelectedBand(nextUnit.band);
+      setAdvancementNotice(
+        outcome.advancementEvent?.unitAdvanced
+          ? `Verified ${activeCompetency.title}. The unit is complete and the next unit is now active.`
+          : `Verified ${activeCompetency.title}. Next target: ${nextComp?.title || 'next competency'}.`
+      );
+    } else {
+      setAdvancementNotice(`Verification not passed. ${activeCompetency.title} remains active and a repair plan was created.`);
+    }
+    setShowCompetencyVerification(false);
+    setVerificationRevision((value) => value + 1);
+    const refreshedPlacement = reconcilePlacementAssessment(profile, skills, assessment);
+    savePlacementAssessment(refreshedPlacement);
+    setAssessment(refreshedPlacement);
+  };
 
   // Deterministic unit status based on real evidence and unlocking
   const getUnitStatus = (unit: CurriculumUnit): 'COMPLETED' | 'IN_PROGRESS' | 'UNLOCKED' | 'LOCKED' => {
@@ -127,19 +249,112 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       onStartPracticeCompetency(comp);
       return;
     }
-    const skill = skills.find((s) => s.id === comp.skillId) || {
-      id: comp.skillId,
-      name: comp.title,
-      parentTrack: 'rudiments',
-      currentComfortTempo: comp.tempoStandard.bpm,
-    };
-    const session = buildPlacementSession(skill as any, profile, '1 beat');
+
+    // C7.7: once all curriculum learning stages are already covered, do not
+    // send the learner back through the entire teaching journey merely to earn
+    // another qualifying independent session. A short governed stabilization
+    // session repeats only the true no-assistance missions at the formal tempo.
+    const readiness = deriveCompetencyAdvancementReadiness(comp, skills);
+    const ledger = getCurriculumEvidenceLedger(comp.id);
+    const unmetCoverageCriteria = ledger.readinessCriteria.filter((criterion) => !criterion.met);
+    const repairPlan = getActiveGapClosurePlan(comp.skillId);
+    const shouldRunVerificationRepair = Boolean(
+      readiness.state === 'REPAIR_REQUIRED' &&
+      repairPlan &&
+      !repairPlan.isReadyForReassessment
+    );
+    const shouldRunGrooveIntegrityContinuation = Boolean(
+      needsC7GrooveIntegrityContinuation(comp.id) &&
+      readiness.state !== 'VERIFIED' &&
+      readiness.state !== 'BLOCKED' &&
+      readiness.state !== 'REPAIR_REQUIRED'
+    );
+    const shouldRunSecondSessionRevisit =
+      ledger.readiness === 5 &&
+      unmetCoverageCriteria.length === 1 &&
+      unmetCoverageCriteria[0]?.label === 'Learning revisited separately';
+    const shouldStabilizeForVerification =
+      ledger.readiness === 6 &&
+      readiness.state !== 'VERIFIED' &&
+      readiness.state !== 'READY_TO_VERIFY' &&
+      readiness.state !== 'BLOCKED' &&
+      readiness.state !== 'REPAIR_REQUIRED' &&
+      !readiness.recurringFriction;
+
+    const legacyInvalidCheckpoint = getLegacyInvalidC4Checkpoint(comp.id);
+    const needsProtocolRevalidation = Boolean(
+      legacyInvalidCheckpoint &&
+      readiness.state !== 'READY_TO_VERIFY' &&
+      readiness.state !== 'VERIFIED' &&
+      readiness.state !== 'BLOCKED' &&
+      readiness.state !== 'REPAIR_REQUIRED' &&
+      !readiness.recurringFriction
+    );
+
+    let session = shouldRunVerificationRepair
+      ? buildC7VerificationRepairSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand,
+          readiness.highestQualifyingBpm || Math.round(readiness.targetBpm * 0.9)
+        )
+      : needsProtocolRevalidation
+      ? buildC7ProtocolRevalidationSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand,
+          readiness.highestQualifyingBpm || readiness.targetBpm
+        )
+      : shouldRunGrooveIntegrityContinuation
+      ? buildC7GrooveIntegrityContinuationSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand
+        )
+      : shouldRunSecondSessionRevisit
+      ? buildC7SecondSessionRevisitSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand
+        )
+      : shouldStabilizeForVerification
+      ? buildC7VerificationStabilizationSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand
+        )
+      : buildC7CompetencySession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand
+        );
+
+    if (shouldRunVerificationRepair && repairPlan) {
+      session = bindCanonicalRepairSessionToPlan(repairPlan, session);
+    }
+
     startGuidedSession(session);
   };
 
   // Handle Placement Test Completion from Interactive Modal
+  const handlePlacementProgress = (result: PlacementTestResult) => {
+    // Persist every anchor result immediately without mutating the open modal's test list.
+    savePlacementTestProgress(assessment, result);
+  };
+
+  const refreshPlacementFromStorage = () => {
+    const refreshed = getOrInitializePlacementAssessment(profile, skills);
+    setAssessment(refreshed);
+  };
+
   const handlePlacementCompleted = (resultsArray: PlacementTestResult[]) => {
-    const newAssessment = evaluatePlacementResults(assessment.estimatedBand, resultsArray, skills);
+    const evaluated = evaluatePlacementResults(
+      assessment.estimatedBand,
+      resultsArray,
+      skills,
+      assessment.testResults
+    );
+    const newAssessment = reconcilePlacementAssessment(profile, skills, evaluated);
     savePlacementAssessment(newAssessment);
     setAssessment(newAssessment);
     setSelectedBand(newAssessment.verifiedBand);
@@ -171,7 +386,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             className="self-start sm:self-auto flex items-center gap-2 bg-[#4a523a] hover:bg-[#3d4430] text-white px-4 py-2.5 rounded-xl font-bold text-xs transition-all shadow-md active:scale-95 cursor-pointer whitespace-nowrap"
           >
             <ShieldCheck className="w-4 h-4 text-amber-300" />
-            <span>{assessment.placementCompleted ? 'Retake Placement Test' : 'Verify Level with Practical Test'}</span>
+            <span>{placementSummary.targetBandConfirmed ? 'Recalibrate Placement' : placementSummary.status === 'NOT_STARTED' ? `Start ${placementSummary.targetStageLabel}` : `Continue ${placementSummary.targetStageLabel}`}</span>
           </button>
         </div>
 
@@ -185,36 +400,34 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
               {assessment.estimatedBand}
             </span>
             <span className="text-[11px] text-stone-400">
-              Based on profile questionnaire ({profile.yearsPlaying} yrs)
+              Profile hypothesis only{profile.yearsPlaying ? ` • ${profile.yearsPlaying} yrs playing` : ''}
             </span>
           </div>
 
           <div className="bg-stone-800/80 rounded-2xl p-3.5 border border-[#4a523a]/60 relative overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-[#a4b584] uppercase tracking-wider block">
-                Verified Level
+                Overall Placement
               </span>
               <span
                 className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                  assessment.placementCompleted && assessment.verifiedBand !== 'UNVERIFIED'
+                  placementSummary.status === 'VERIFIED'
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    : placementSummary.status === 'CALIBRATING'
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
                 }`}
               >
-                {assessment.placementCompleted && assessment.verifiedBand !== 'UNVERIFIED'
-                  ? 'VERIFIED'
-                  : 'PLACEMENT REQUIRED'}
+                {placementSummary.status === 'VERIFIED' ? 'VERIFIED' : placementSummary.status === 'CALIBRATING' ? 'CALIBRATING' : 'NOT TESTED'}
               </span>
             </div>
             <span className="text-base sm:text-lg font-black text-white mt-0.5 block">
-              {assessment.placementCompleted && assessment.verifiedBand !== 'UNVERIFIED'
-                ? assessment.verifiedBand
-                : 'Unverified'}
+              {placementSummary.displayLabel}
             </span>
             <span className="text-[11px] text-stone-400">
-              {assessment.placementCompleted && assessment.verifiedBand !== 'UNVERIFIED'
-                ? `${assessment.testResults.filter((r) => r.passed).length} of ${assessment.testResults.length} test criteria passed`
-                : 'Practical metronome test required'}
+              {placementSummary.targetBandConfirmed
+                ? `${assessment.estimatedBand} estimate confirmed by practical anchor evidence`
+                : `${placementSummary.canonicalVerifiedCount} curriculum competencies verified • next: ${placementSummary.targetStageLabel}`}
             </span>
           </div>
 
@@ -228,6 +441,32 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             <span className="text-[11px] text-stone-400 truncate block">
               Next: {activeCompetency.title}
             </span>
+          </div>
+        </div>
+
+        <div className="bg-black/25 rounded-2xl p-3.5 border border-stone-800 space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-stone-400 block">Placement Calibration</span>
+              <p className="text-xs text-stone-300 mt-1">
+                Practical anchor tests confirm the profile estimate without skipping the canonical curriculum.
+              </p>
+            </div>
+            <span className="text-[10px] font-bold text-amber-300 whitespace-nowrap">Next: {placementSummary.targetStageLabel}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className={`rounded-xl border p-2 ${placementSummary.foundation.complete ? 'border-emerald-700/50 bg-emerald-900/20' : placementSummary.targetStage === 'FOUNDATION' ? 'border-amber-500/50 bg-amber-900/20' : 'border-stone-700 bg-stone-900/40'}`}>
+              <span className="text-[9px] uppercase font-black text-stone-400 block">Foundation</span>
+              <span className="text-xs font-black text-white">{placementSummary.foundation.passed}/{placementSummary.foundation.total}</span>
+            </div>
+            <div className={`rounded-xl border p-2 ${placementSummary.intermediate.complete ? 'border-emerald-700/50 bg-emerald-900/20' : placementSummary.targetStage === 'INTERMEDIATE' ? 'border-blue-500/50 bg-blue-900/20' : 'border-stone-700 bg-stone-900/40'}`}>
+              <span className="text-[9px] uppercase font-black text-stone-400 block">Intermediate</span>
+              <span className="text-xs font-black text-white">{Math.max(0, placementSummary.intermediate.passed - placementSummary.foundation.passed)}/{Math.max(0, placementSummary.intermediate.total - placementSummary.foundation.total)}</span>
+            </div>
+            <div className={`rounded-xl border p-2 ${placementSummary.advanced.complete ? 'border-emerald-700/50 bg-emerald-900/20' : placementSummary.targetStage === 'ADVANCED' ? 'border-purple-500/50 bg-purple-900/20' : 'border-stone-700 bg-stone-900/40'}`}>
+              <span className="text-[9px] uppercase font-black text-stone-400 block">Advanced</span>
+              <span className="text-xs font-black text-white">{Math.max(0, placementSummary.advanced.passed - placementSummary.intermediate.passed)}/{Math.max(0, placementSummary.advanced.total - placementSummary.intermediate.total)}</span>
+            </div>
           </div>
         </div>
 
@@ -267,15 +506,27 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-black text-stone-900">{strand.strandName}</span>
-                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
-                  strand.verifiedBand === 'INTERMEDIATE'
-                    ? 'bg-blue-50 text-blue-700 border-blue-200'
-                    : strand.verifiedBand === 'ADVANCED'
-                    ? 'bg-purple-50 text-purple-700 border-purple-200'
-                    : 'bg-stone-100 text-stone-700 border-stone-300'
-                }`}>
-                  {strand.verifiedBand}
-                </span>
+                {(() => {
+                  const anchorTests = CANONICAL_PLACEMENT_TESTS.filter((test) => test.strandId === strand.strandId);
+                  const anchorPassed = anchorTests.filter((test) =>
+                    assessment.testResults.some((result) => result.testId === test.id && result.passed) ||
+                    isCompetencyVerified(test.associatedCompetencyId, skills)
+                  ).length;
+                  const label = anchorPassed === 0 ? 'UNVERIFIED' : strand.verifiedBand;
+                  return (
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                      label === 'INTERMEDIATE'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : label === 'ADVANCED'
+                        ? 'bg-purple-50 text-purple-700 border-purple-200'
+                        : label === 'UNVERIFIED'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : 'bg-stone-100 text-stone-700 border-stone-300'
+                    }`}>
+                      {label}
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Progress Bar */}
@@ -334,13 +585,31 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
           </div>
 
           <button
-            onClick={() => handlePracticeClick(activeCompetency)}
+            onClick={() => activeReadyToVerify ? setShowCompetencyVerification(true) : handlePracticeClick(activeCompetency)}
             className="flex items-center gap-2 bg-[#4a523a] hover:bg-[#3d4430] text-white px-5 py-3 rounded-2xl font-black text-xs transition-transform transform active:scale-95 shadow-md cursor-pointer self-start sm:self-auto"
           >
-            <Play className="w-4 h-4 fill-white" />
-            <span>Practice This Competency</span>
+            {activeReadyToVerify ? <ShieldCheck className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
+            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsVerificationRepair ? 'Repair Before Retest' : activeNeedsProtocolRevalidation ? 'Revalidate on Corrected Clock' : activeNeedsGrooveIntegrityContinuation ? 'Continue Corrected Long Form' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
           </button>
         </div>
+
+        {activeLegacyInvalidCheckpoint && (
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-xs text-amber-950">
+            <div className="font-black">Corrected-verifier revalidation</div>
+            <div className="mt-1 leading-relaxed">
+              Your earlier learning and practice history are still preserved. Only the old formal C4 checkpoint was retired because it used the pre-v2 timing protocol. You do not need to repeat the full teaching journey; complete the short corrected-clock revalidation, then take the formal test again.
+            </div>
+          </div>
+        )}
+
+        {activeNeedsGrooveIntegrityContinuation && (
+          <div className="rounded-2xl border border-sky-300 bg-sky-50 px-4 py-3 text-xs text-sky-950">
+            <div className="font-black">Corrected long-form groove continuation</div>
+            <div className="mt-1 leading-relaxed">
+              Your valid Map, Count, Hear and Follow work is preserved. Only the old independent/song-transfer runs used the short generic transport. Continue with the corrected 16-bar independent run and 16-bar Verse → Chorus song form; you do not need to restart the teaching journey.
+            </div>
+          </div>
+        )}
 
         <p className="text-xs sm:text-sm text-stone-700 font-medium leading-relaxed">
           {activeCompetency.description}
@@ -368,15 +637,29 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
           </div>
         </div>
 
-        {/* Sticking / Exercise Pattern */}
-        {activeCompetency.stickingPattern && (
+        {/* Contextual execution reference — C6 avoids arbitrary sticking for conceptual competencies. */}
+        {activeCompetency.id === 'comp-meter-44' ? (
+          <div className="bg-white p-3 rounded-xl border border-stone-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <span className="text-[11px] font-bold text-stone-500 uppercase">Musical Structure:</span>
+            <span className="font-black text-stone-900 bg-stone-100 px-3 py-1 rounded-md font-mono">
+              Beat 1-2-3-4 → next bar • phrases grouped 4 + 4
+            </span>
+          </div>
+        ) : activeCompetency.id === 'comp-reading-notation' ? (
           <div className="bg-white p-3 rounded-xl border border-stone-200 flex items-center justify-between gap-4 text-xs font-mono">
-            <span className="text-[11px] font-bold text-stone-500 uppercase font-sans">Sticking Pattern:</span>
+            <span className="text-[11px] font-bold text-stone-500 uppercase font-sans">Notation Voice Map:</span>
             <span className="font-black text-stone-900 bg-stone-100 px-3 py-1 rounded-md">
               {activeCompetency.stickingPattern}
             </span>
           </div>
-        )}
+        ) : activeCompetency.stickingPattern ? (
+          <div className="bg-white p-3 rounded-xl border border-stone-200 flex items-center justify-between gap-4 text-xs font-mono">
+            <span className="text-[11px] font-bold text-stone-500 uppercase font-sans">Required Pattern — Play This:</span>
+            <span className="font-black text-stone-900 bg-stone-100 px-3 py-1 rounded-md">
+              {activeCompetency.stickingPattern}
+            </span>
+          </div>
+        ) : null}
 
         {/* Pass Criteria List */}
         <div className="bg-white/80 p-4 rounded-2xl border border-stone-200 space-y-2">
@@ -395,6 +678,20 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
           </div>
         </div>
       </div>
+
+      <AdvancementReadinessCard
+        competency={activeCompetency}
+        readiness={advancementReadiness}
+        onVerify={() => setShowCompetencyVerification(true)}
+      />
+
+      <CurriculumEvidenceLedgerCard competency={activeCompetency} />
+
+      {advancementNotice && (
+        <div className={`rounded-2xl border p-4 text-xs font-bold ${advancementNotice.startsWith('Verified') ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-amber-200 bg-amber-50 text-amber-900'}`}>
+          {advancementNotice}
+        </div>
+      )}
 
       {/* 4. CURRICULUM BAND TABS & ROADMAP ACCORDION */}
       <div className="space-y-4">
@@ -516,6 +813,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
                     <div className="grid grid-cols-1 gap-2.5 pt-3">
                       {unitCompetencies.map((comp) => {
                         const compStatus = getCompetencyStatus(comp);
+                        const compLedger = getCurriculumEvidenceLedger(comp.id);
                         return (
                           <div
                             key={comp.id}
@@ -547,6 +845,11 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
                                 <h4 className="text-xs sm:text-sm font-black text-stone-900">
                                   {comp.title}
                                 </h4>
+                                {compLedger.totalAttempts > 0 && compStatus !== 'VERIFIED' && (
+                                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                                    Evidence {compLedger.readiness}/6
+                                  </span>
+                                )}
                               </div>
                               <p className="text-xs text-stone-600 font-medium">
                                 {comp.description}
@@ -591,10 +894,21 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       {/* 5. INTERACTIVE PRACTICAL PLACEMENT TEST MODAL (Audio, Metronome, Rubric) */}
       <PlacementTestModal
         isOpen={isTestModalOpen}
-        onClose={() => setIsTestModalOpen(false)}
+        onClose={() => { setIsTestModalOpen(false); refreshPlacementFromStorage(); }}
         tests={availableTests}
         estimatedBand={assessment.estimatedBand}
+        batteryLabel={`C5 ${placementSummary.targetStageLabel}`}
+        onResultSaved={handlePlacementProgress}
         onComplete={handlePlacementCompleted}
+      />
+
+      <CompetencyVerificationModal
+        isOpen={showCompetencyVerification}
+        competency={activeCompetency}
+        skill={activeSkill}
+        readiness={advancementReadiness}
+        onClose={() => setShowCompetencyVerification(false)}
+        onComplete={handleCompetencyVerificationComplete}
       />
     </div>
   );

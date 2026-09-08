@@ -15,6 +15,7 @@ import {
 import { PracticeExercise, RhythmTimeline, CompetencyTeachingDefinition } from '../types';
 import { masterTransport } from '../lib/masterTransportEngine';
 import { audioEngine } from '../lib/audioEngine';
+import { DrumNotationStaff } from './DrumNotationStaff';
 
 interface CountingTutorViewProps {
   exercise: PracticeExercise;
@@ -22,6 +23,7 @@ interface CountingTutorViewProps {
   teachingDef: CompetencyTeachingDefinition;
   currentTempo: number;
   onProceedToWatch: () => void;
+  proceedLabel?: string;
   onTempoAdjust?: (delta: number) => void;
 }
 
@@ -31,6 +33,7 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
   teachingDef,
   currentTempo,
   onProceedToWatch,
+  proceedLabel,
   onTempoAdjust,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -118,6 +121,7 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
     }
   };
 
+  const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
   const tokens = teachingDef.countTokens || ['1', '&', '2', '&', '3', '&', '4', '&'];
   const spoken = teachingDef.spokenTokens || ['one', 'and', 'two', 'and', 'three', 'and', 'four', 'and'];
 
@@ -135,10 +139,12 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
-            Internalize the Subdivision with Voice & Claps
+            {isNotationMission ? 'Count What You See on the Staff' : 'Internalize the Subdivision with Voice & Claps'}
           </h2>
           <p className="text-xs text-stone-300 font-medium mt-0.5">
-            If you can count it aloud steadily, you can play it effortlessly on the kit.
+            {isNotationMission
+              ? 'Keep your eyes moving left to right across the written bar. Say the count underneath each note position before you play it.'
+              : 'If you can count it aloud steadily, you can play it effortlessly on the kit.'}
           </p>
         </div>
 
@@ -150,7 +156,7 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
           }}
           className="self-start sm:self-auto flex items-center gap-2 bg-amber-400 hover:bg-amber-300 text-stone-950 px-4 py-2.5 rounded-2xl font-black text-xs transition-all shadow-md active:scale-95 cursor-pointer whitespace-nowrap"
         >
-          <span>3. Watch Coach Demo</span>
+          <span>{proceedLabel || '3. Watch Coach Demo'}</span>
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>
@@ -170,11 +176,24 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
         </div>
       )}
 
+      {isNotationMission && (
+        <DrumNotationStaff
+          teachingDef={teachingDef}
+          currentBar={currentBar}
+          currentBeat={currentBeat}
+          currentSubdivision={activeSubdivision}
+          isPlaying={isPlaying && !isCountIn}
+          title="Count Under the Staff — Do Not Memorize a Sticking"
+          showLegend={false}
+          compact
+        />
+      )}
+
       {/* Interactive Counting Syllables Strip */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-xs text-stone-400">
           <span className="font-bold uppercase tracking-wider text-[10px] text-stone-400">
-            Subdivision Grid & Spoken Tokens (Click any token to hear speech):
+            {isNotationMission ? 'Count beneath the written notes (tap any count to hear it):' : 'Subdivision Grid & Spoken Tokens (Click any token to hear speech):'}
           </span>
           <span className="text-[10px] font-mono text-stone-400">
             Bar {currentBar} • Beat {currentBeat}
@@ -297,7 +316,7 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
               <Mic className="w-4 h-4 text-amber-400" />
               <div className="text-left">
                 <span className="text-xs font-bold block">Spoken Voice</span>
-                <span className="text-[10px] text-stone-400">Speaks "{tokens[0]}, {tokens[1]}…"</span>
+                <span className="text-[10px] text-stone-400">Clock-locked to the groove • "{tokens[0]}, {tokens[1]}…"</span>
               </div>
             </div>
             <span

@@ -306,7 +306,9 @@ export const TEACHING_DEFINITIONS: Record<string, CompetencyTeachingDefinition> 
     workingTempo: 65,
     certificationTempo: {
       bpm: 75,
-      durationSeconds: 48,
+      // C7.14: legacy mirror only. Canonical verification derives this from
+      // 16 bars × 4 quarter-note pulses × 60 / 75 BPM = 51.2 seconds.
+      durationSeconds: 51.2,
       standardText: '16 unbroken bars at 75 BPM with metronome',
     },
     recommendedAssistance: 'FULL',
