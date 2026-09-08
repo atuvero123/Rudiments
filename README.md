@@ -78,3 +78,6 @@ C7.6 makes the stage-aware C6/C7 curriculum evidence stream authoritative for ca
 
 ## C7.7 — Mission Governance & Verification Stabilization
 C7.7 hardens the canonical learning-to-verification handoff. Canonical missions now lock the inner tutor to the mission's authored teaching stage and assistance contract, completed 6/6 competencies use short verification-stabilization sessions instead of repeating the full journey, and all pre-verification coaching respects the formal tempo ceiling. See `C7_7_BUILD_REPORT.md`.
+
+## C7.8 — Required-Supporting Competency Handoff & Unit-Completion Integrity
+C7.8 fixes the post-verification skip exposed after the successful 4/4 certification test. Ordered canonical units now require both CORE and SUPPORTING competencies; only ELECTIVE content is optional. This prevents Unit 1 from completing before Drum Notation Basics and applies the same protection to later supporting curriculum steps. Existing verification and banked learning evidence are preserved. See `C7_8_BUILD_REPORT.md`.

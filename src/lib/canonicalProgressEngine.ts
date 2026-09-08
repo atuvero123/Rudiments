@@ -142,8 +142,15 @@ export function getCompetencyVerificationStatus(
 
 /**
  * Checks whether a curriculum unit is COMPLETED.
- * Unit COMPLETED strictly means all its required CORE competencies are canonically verified.
- * Never derived merely from array index!
+ *
+ * Canonical units are complete only when every REQUIRED competency is verified.
+ * Both CORE and SUPPORTING competencies are required curriculum content; only
+ * ELECTIVE competencies are optional for core-unit progression.
+ *
+ * This distinction matters because a SUPPORTING competency can still be an
+ * authored step inside a canonical unit (for example Drum Notation Basics in
+ * Unit 1). It must not be silently skipped just because its role is SUPPORTING.
+ * Never derive completion merely from array index or CORE-only filtering.
  */
 export function isUnitComplete(
   unitId: string,
@@ -155,20 +162,24 @@ export function isUnitComplete(
 
   const verifications = verificationMap || getCanonicalVerifications();
 
-  // Find all core competencies in this unit
-  const coreCompetencies = unit.competencyIds
+  // Every non-elective competency authored inside a canonical unit is required.
+  // CORE identifies the primary skill target; SUPPORTING identifies curriculum
+  // content that supports it, but SUPPORTING is still part of the unit journey.
+  const requiredCompetencies = unit.competencyIds
     .map((id) => CURRICULUM_COMPETENCIES_BY_ID.get(id))
-    .filter((c): c is CurriculumCompetency => Boolean(c && c.role === 'CORE'));
+    .filter((c): c is CurriculumCompetency => Boolean(c && c.role !== 'ELECTIVE'));
 
-  if (coreCompetencies.length === 0) {
-    // If unit has only electives, check if all electives are verified
+  if (requiredCompetencies.length === 0) {
+    // Elective-only style units are not part of the ordered core-unit path, but
+    // when queried directly they count as complete only if all authored elective
+    // competencies have been verified.
     const allUnitComps = unit.competencyIds
       .map((id) => CURRICULUM_COMPETENCIES_BY_ID.get(id))
       .filter((c): c is CurriculumCompetency => Boolean(c));
     return allUnitComps.length > 0 && allUnitComps.every((c) => isCompetencyVerified(c.id, skills, verifications));
   }
 
-  return coreCompetencies.every((c) => isCompetencyVerified(c.id, skills, verifications));
+  return requiredCompetencies.every((c) => isCompetencyVerified(c.id, skills, verifications));
 }
 
 /**
@@ -200,9 +211,11 @@ export function isUnitUnlocked(
 }
 
 /**
- * Returns the first unverified core competency in a unit.
+ * Returns the first unverified REQUIRED competency in a unit.
+ * Required means CORE or SUPPORTING. ELECTIVE content never blocks the ordered
+ * canonical path.
  */
-export function getFirstUnverifiedCoreCompetency(
+export function getFirstUnverifiedRequiredCompetency(
   unitId: string,
   skills: GranularSkill[],
   verificationMap?: Map<string, CompetencyVerificationRecord>
@@ -214,17 +227,7 @@ export function getFirstUnverifiedCoreCompetency(
 
   for (const compId of unit.competencyIds) {
     const comp = CURRICULUM_COMPETENCIES_BY_ID.get(compId);
-    if (comp && comp.role === 'CORE') {
-      if (!isCompetencyVerified(comp.id, skills, verifications)) {
-        return comp;
-      }
-    }
-  }
-
-  // If all core are verified, check any electives
-  for (const compId of unit.competencyIds) {
-    const comp = CURRICULUM_COMPETENCIES_BY_ID.get(compId);
-    if (comp && !isCompetencyVerified(comp.id, skills, verifications)) {
+    if (comp && comp.role !== 'ELECTIVE' && !isCompetencyVerified(comp.id, skills, verifications)) {
       return comp;
     }
   }
@@ -233,9 +236,21 @@ export function getFirstUnverifiedCoreCompetency(
 }
 
 /**
+ * Backward-compatible alias kept for any older callers. Its semantics now match
+ * the canonical required-competency rule (CORE + SUPPORTING).
+ */
+export function getFirstUnverifiedCoreCompetency(
+  unitId: string,
+  skills: GranularSkill[],
+  verificationMap?: Map<string, CompetencyVerificationRecord>
+): CurriculumCompetency | null {
+  return getFirstUnverifiedRequiredCompetency(unitId, skills, verificationMap);
+}
+
+/**
  * Deterministically derives the learner's current curriculum position:
- * - Active Unit: First unlocked core unit that is not complete
- * - Active Competency: First unverified core competency within that unit
+ * - Active Unit: First unlocked canonical unit that is not complete
+ * - Active Competency: First unverified required (CORE or SUPPORTING) competency within that unit
  * - Band verification: Determined strictly by completed units
  */
 export function deriveCurrentCurriculumPosition(
@@ -274,9 +289,10 @@ export function deriveCurrentCurriculumPosition(
     activeUnit = coreUnits[coreUnits.length - 1];
   }
 
-  // Active competency is the first unverified core competency in the active unit
+  // Active competency is the first unverified required competency in the active unit.
+  // SUPPORTING competencies are authored curriculum steps and cannot be skipped.
   const activeComp =
-    getFirstUnverifiedCoreCompetency(activeUnit.id, skills, verifications) ||
+    getFirstUnverifiedRequiredCompetency(activeUnit.id, skills, verifications) ||
     CURRICULUM_COMPETENCIES_BY_ID.get(activeUnit.competencyIds[0]) ||
     CANONICAL_CURRICULUM_COMPETENCIES[0];
 
