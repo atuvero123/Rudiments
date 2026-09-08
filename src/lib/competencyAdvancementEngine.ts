@@ -20,6 +20,7 @@ import { deriveSkillEvidenceMemory, getAttemptsForSkill, getSkillEvidenceMemory 
 import { getAllPlacementAttemptsForSkill } from './placementEngine';
 import { findTeachingDefinition } from './teachingDefinitions';
 import {
+  completeOrDismissGapClosurePlan,
   generateGapClosurePlan,
   getActiveGapClosurePlan,
   recordCheckpointAttempt,
@@ -252,6 +253,7 @@ export function deriveCompetencyAdvancementReadiness(
   // readiness counting is de-duplicated and stage-aware.
   const memory = deriveSkillEvidenceMemory(comp.skillId, allAttempts);
   const activeGapPlan = getActiveGapClosurePlan(comp.skillId);
+  const blockingGapPlan = activeGapPlan && !activeGapPlan.isReadyForReassessment ? activeGapPlan : null;
   const priorVerificationAttempts = getCompetencyVerificationAttempts(comp.id)
     .sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
   const latestFailedVerificationAt = priorVerificationAttempts[0] && !priorVerificationAttempts[0].passed ? priorVerificationAttempts[0].completedAt : null;
@@ -319,7 +321,7 @@ export function deriveCompetencyAdvancementReadiness(
   const hasIndependentClean = cleanIndependent.length >= 2;
   const hasNearTargetControl = qualifyingTempoAttempts.length >= 2;
   const hasTwoQualifyingSessions = qualifyingSessions.size >= 2;
-  const noActiveFriction = !memory.primaryRecurringFriction && memory.recentTrend !== 'struggling' && !activeGapPlan && !unresolvedFailedVerification;
+  const noActiveFriction = !memory.primaryRecurringFriction && memory.recentTrend !== 'struggling' && !blockingGapPlan && !unresolvedFailedVerification;
 
   const requirements: CompetencyAdvancementRequirement[] = [
     {
@@ -359,7 +361,7 @@ export function deriveCompetencyAdvancementReadiness(
     {
       id: 'friction',
       label: 'No recurring blocker',
-      detail: activeGapPlan
+      detail: blockingGapPlan
         ? 'An active repair plan must be completed before another verification attempt.'
         : unresolvedFailedVerification
         ? `The latest formal verification did not pass. Log ${Math.max(0, 2 - postFailureQualifyingCount)} more clean near-target run${Math.max(0, 2 - postFailureQualifyingCount) === 1 ? '' : 's'} before retesting.`
@@ -380,8 +382,8 @@ export function deriveCompetencyAdvancementReadiness(
   let state: CompetencyAdvancementState = 'DEVELOPING';
   if (missingPrerequisiteIds.length > 0) {
     state = 'BLOCKED';
-  } else if (activeGapPlan || unresolvedFailedVerification || memory.recentTrend === 'struggling' || memory.primaryRecurringFriction) {
-    state = totalEvidenceAttempts >= 2 || activeGapPlan || unresolvedFailedVerification ? 'REPAIR_REQUIRED' : 'DEVELOPING';
+  } else if (blockingGapPlan || unresolvedFailedVerification || memory.recentTrend === 'struggling' || memory.primaryRecurringFriction) {
+    state = totalEvidenceAttempts >= 2 || blockingGapPlan || unresolvedFailedVerification ? 'REPAIR_REQUIRED' : 'DEVELOPING';
   } else if (requirements.every((r) => r.met)) {
     state = 'READY_TO_VERIFY';
   } else if (ratio >= 0.65) {
@@ -422,7 +424,7 @@ export function deriveCompetencyAdvancementReadiness(
     qualifyingSessionCount: qualifyingSessions.size,
     highestQualifyingBpm,
     missingPrerequisiteIds,
-    recurringFriction: activeGapPlan ? 'active verification repair plan' : unresolvedFailedVerification ? 'failed formal verification' : memory.primaryRecurringFriction?.tag || null,
+    recurringFriction: blockingGapPlan ? 'active verification repair plan' : unresolvedFailedVerification ? 'failed formal verification' : memory.primaryRecurringFriction?.tag || null,
   };
 }
 
@@ -568,6 +570,11 @@ export function recordCompetencyVerificationOutcome(params: {
 
   let advancementEvent: CurriculumAdvancementEvent | undefined;
   if (passed) {
+    const repairedPlan = getActiveGapClosurePlan(skill.id);
+    if (repairedPlan?.isReadyForReassessment) {
+      completeOrDismissGapClosurePlan(repairedPlan.id);
+    }
+
     const events = readArray<CurriculumAdvancementEvent>(ADVANCEMENT_EVENTS_KEY);
     advancementEvent = {
       id: `advance-${competency.id}-${Date.now()}`,

@@ -900,3 +900,65 @@ export function buildC7ProtocolRevalidationSession(
       : undefined,
   };
 }
+
+/**
+ * C7.12 — Targeted formal-verification repair.
+ *
+ * A failed formal C4 verification must not restart the six-mission curriculum
+ * journey when the learner already has complete C7 coverage. This repair keeps
+ * only the genuine no-assistance end stages, lowers the tempo into the readiness
+ * neighbourhood, and marks the exercises as remediation evidence so the active
+ * verification repair plan can be cleared by successful work.
+ */
+export function buildC7VerificationRepairSession(
+  competency: CurriculumCompetency,
+  profile: LearnerProfile,
+  placementBand: CurriculumBand,
+  workingBpm?: number | null
+): PracticeSession {
+  const fullSession = buildC7CompetencySession(competency, profile, placementBand);
+  const target = competency.tempoStandard.bpm;
+  const readinessFloor = Math.max(30, Math.round(target * 0.85));
+  const defaultRepairBpm = Math.max(readinessFloor, Math.round(target * 0.9));
+  const observedWorkingBpm = workingBpm && Number.isFinite(workingBpm)
+    ? Math.round(workingBpm)
+    : defaultRepairBpm;
+  const repairBpm = Math.max(
+    readinessFloor,
+    Math.min(defaultRepairBpm, observedWorkingBpm)
+  );
+
+  const repairExercises = (fullSession.exercises || [])
+    .filter((exercise) => {
+      const assistance = exercise.curriculumMission?.assistanceTarget;
+      return assistance === 'NONE' || assistance === 'MINIMAL';
+    })
+    .map((exercise) => ({
+      ...exercise,
+      tempo: repairBpm,
+      targetTempo: target,
+      durationSeconds: Math.max(60, exercise.durationSeconds || 60),
+      isGapClosure: true,
+      countsTowardRemediation: true,
+      sessionSource: 'gap-closure',
+      gapClosureReason: 'Targeted repair after a formal verification attempt did not pass.',
+      gapClosureSuccessTarget: `Complete this no-assistance run Clean & Relaxed at ${repairBpm} BPM before retesting.`,
+    }));
+
+  if (repairExercises.length === 0) return fullSession;
+
+  return {
+    ...fullSession,
+    durationMinutes: Math.max(6, repairExercises.length * 4),
+    focusTopic: `${competency.title} — Verification Repair`,
+    notes: `C7.12 targeted repair: the curriculum journey is already complete. This session repeats only genuine no-assistance evidence at a relaxed near-target tempo before the next formal verification attempt.`,
+    exercises: repairExercises,
+    sessionStatus: 'NOT_STARTED',
+    sessionSource: 'gap-closure',
+    isGapClosure: true,
+    curriculumPractice: fullSession.curriculumPractice
+      ? { ...fullSession.curriculumPractice, missionCount: repairExercises.length }
+      : undefined,
+  };
+}
+

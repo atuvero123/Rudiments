@@ -15,8 +15,7 @@ import {
   CURRICULUM_UNITS_BY_ID,
 } from '../data/canonicalCurriculum';
 import { deriveCurrentCurriculumPosition, isCompetencyVerified } from './canonicalProgressEngine';
-import { getOrInitializePlacementAssessment } from './drummerPlacementEngine';
-import { getActiveGapClosurePlan } from './gapClosureEngine';
+import { bindCanonicalRepairSessionToPlan, getActiveGapClosurePlan } from './gapClosureEngine';
 import { getSkillEvidenceMemory } from './evidenceEngine';
 import { buildPlacementSession } from './placementEngine';
 import { selectBestAnchorGrooveForSkill } from './roadmapEngine';
@@ -24,6 +23,7 @@ import {
   deriveCompetencyAdvancementReadiness,
   deriveCompetencyPracticeAuthorityForSkill,
 } from './competencyAdvancementEngine';
+import { buildC7VerificationRepairSession } from './curriculumPracticeIntelligence';
 
 /**
  * Generates the 3 canonical practice lanes for Today's practice:
@@ -104,7 +104,7 @@ export function generateTodayPracticeLanes(
   let isBlocking = false;
 
   const activePlan = getActiveGapClosurePlan(primarySkill.id);
-  if (activePlan && activePlan.failedCriteria.length > 0) {
+  if (activePlan && !activePlan.isReadyForReassessment && activePlan.failedCriteria.length > 0) {
     repairCompetency = primaryCompetency;
     repairSkill = primarySkill;
     repairReason = `Active Checkpoint Gap: ${activePlan.failedCriteria[0].criterionTitle}`;
@@ -240,6 +240,33 @@ export function buildTodayCurriculumSession(
     ? deriveCompetencyAdvancementReadiness(primaryComp, skills)
     : null;
   const primaryAuthority = deriveCompetencyPracticeAuthorityForSkill(primarySkill.id, skills);
+
+  // C7.12: Today's Practice must obey the same repair authority as Path. If a
+  // formal verification failed, do not route the learner into the generic
+  // placement-style session or a full curriculum replay. Launch the targeted
+  // canonical no-assistance repair and bind it to the active repair plan.
+  const activeRepairPlan = getActiveGapClosurePlan(primarySkill.id);
+  if (
+    primaryComp &&
+    primaryReadiness?.state === 'REPAIR_REQUIRED' &&
+    activeRepairPlan &&
+    !activeRepairPlan.isReadyForReassessment
+  ) {
+    const placementBand = CURRICULUM_UNITS_BY_ID.get(primaryComp.unitId)?.band || 'BEGINNER';
+    const targetedRepair = buildC7VerificationRepairSession(
+      primaryComp,
+      profile,
+      placementBand,
+      primaryReadiness.highestQualifyingBpm || Math.round(primaryReadiness.targetBpm * 0.9)
+    );
+    const boundRepair = bindCanonicalRepairSessionToPlan(activeRepairPlan, targetedRepair);
+    return {
+      ...boundRepair,
+      focusTopic: `Today's Verification Repair: ${primaryComp.title}`,
+      notes: `C7.12 repair authority: prior learning coverage is preserved. Complete only the targeted no-assistance repair before retesting.`,
+    };
+  }
+
   const governedBpm = primaryAuthority?.tempoCeiling
     ? Math.min(primaryLane.suggestedTempo, primaryAuthority.tempoCeiling)
     : primaryLane.suggestedTempo;

@@ -62,7 +62,8 @@ import {
   getSkillStatusAfterCompetencyVerification,
   recordCompetencyVerificationOutcome,
 } from '../lib/competencyAdvancementEngine';
-import { buildC7CompetencySession, buildC7ProtocolRevalidationSession, buildC7SecondSessionRevisitSession, buildC7VerificationStabilizationSession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
+import { buildC7CompetencySession, buildC7ProtocolRevalidationSession, buildC7SecondSessionRevisitSession, buildC7VerificationRepairSession, buildC7VerificationStabilizationSession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
+import { bindCanonicalRepairSessionToPlan, getActiveGapClosurePlan } from '../lib/gapClosureEngine';
 import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 
 interface PathViewProps {
@@ -141,6 +142,12 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
     advancementReadiness.state !== 'REPAIR_REQUIRED' &&
     !advancementReadiness.recurringFriction;
   const activeReadyToVerify = advancementReadiness.state === 'READY_TO_VERIFY';
+  const activeRepairPlan = getActiveGapClosurePlan(activeCompetency.skillId);
+  const activeNeedsVerificationRepair = Boolean(
+    advancementReadiness.state === 'REPAIR_REQUIRED' &&
+    activeRepairPlan &&
+    !activeRepairPlan.isReadyForReassessment
+  );
   const activeLegacyInvalidCheckpoint = getLegacyInvalidC4Checkpoint(activeCompetency.id);
   const activeNeedsProtocolRevalidation = Boolean(
     activeLegacyInvalidCheckpoint &&
@@ -235,6 +242,12 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
     const readiness = deriveCompetencyAdvancementReadiness(comp, skills);
     const ledger = getCurriculumEvidenceLedger(comp.id);
     const unmetCoverageCriteria = ledger.readinessCriteria.filter((criterion) => !criterion.met);
+    const repairPlan = getActiveGapClosurePlan(comp.skillId);
+    const shouldRunVerificationRepair = Boolean(
+      readiness.state === 'REPAIR_REQUIRED' &&
+      repairPlan &&
+      !repairPlan.isReadyForReassessment
+    );
     const shouldRunSecondSessionRevisit =
       ledger.readiness === 5 &&
       unmetCoverageCriteria.length === 1 &&
@@ -257,7 +270,14 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       !readiness.recurringFriction
     );
 
-    const session = needsProtocolRevalidation
+    let session = shouldRunVerificationRepair
+      ? buildC7VerificationRepairSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand,
+          readiness.highestQualifyingBpm || Math.round(readiness.targetBpm * 0.9)
+        )
+      : needsProtocolRevalidation
       ? buildC7ProtocolRevalidationSession(
           comp,
           profile,
@@ -281,6 +301,11 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
           profile,
           placementSummary.highestVerifiedBand
         );
+
+    if (shouldRunVerificationRepair && repairPlan) {
+      session = bindCanonicalRepairSessionToPlan(repairPlan, session);
+    }
+
     startGuidedSession(session);
   };
 
@@ -537,7 +562,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             className="flex items-center gap-2 bg-[#4a523a] hover:bg-[#3d4430] text-white px-5 py-3 rounded-2xl font-black text-xs transition-transform transform active:scale-95 shadow-md cursor-pointer self-start sm:self-auto"
           >
             {activeReadyToVerify ? <ShieldCheck className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
-            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsProtocolRevalidation ? 'Revalidate on Corrected Clock' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
+            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsVerificationRepair ? 'Repair Before Retest' : activeNeedsProtocolRevalidation ? 'Revalidate on Corrected Clock' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
           </button>
         </div>
 

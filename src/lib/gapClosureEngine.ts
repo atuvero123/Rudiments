@@ -1056,3 +1056,69 @@ export function buildGapClosureSession(
   const session = generateGapClosureSessionFromPlan(plan, equipment);
   return { session, plan };
 }
+
+/**
+ * C7.12 — Bind a canonical targeted repair session to the active gap-closure
+ * plan. The formal verifier currently emits one canonical failed criterion per
+ * competency; all targeted no-assistance repair exercises are therefore mapped
+ * to that criterion so clean self-checks close the repair deterministically.
+ */
+export function bindCanonicalRepairSessionToPlan(
+  plan: GapClosurePlan,
+  session: PracticeSession
+): PracticeSession {
+  const repairExercises = (session.exercises || []).filter(
+    (exercise) => exercise.exerciseType !== 'warmup' && exercise.exerciseType !== 'cooldown'
+  );
+  const primaryCriterion = plan.failedCriteria[0];
+  const repairIds = repairExercises.map((exercise) => exercise.id);
+
+  const boundExercises = repairExercises.map((exercise) => ({
+    ...exercise,
+    isGapClosure: true,
+    countsTowardRemediation: true,
+    sessionSource: 'gap-closure',
+    gapClosurePlanId: plan.id,
+    checkpointAttemptId: plan.sourceCheckpointAttemptId,
+    checkpointLevel: plan.checkpointLevel,
+    skillId: plan.skillId,
+    targetCriterionId: primaryCriterion?.criterionId,
+    targetCriterionIds: primaryCriterion ? [primaryCriterion.criterionId] : [],
+    gapClosureTargetCriterion: primaryCriterion?.criterionTitle || exercise.gapClosureTargetCriterion,
+    remediationDrillId: exercise.id,
+  }));
+
+  const reboundPlan: GapClosurePlan = {
+    ...plan,
+    exercises: boundExercises,
+    completedExerciseIds: [],
+    isReadyForReassessment: false,
+    failedCriteria: plan.failedCriteria.map((criterion, index) =>
+      index === 0
+        ? {
+            ...criterion,
+            assignedDrillIds: repairIds,
+            completedDrillIds: [],
+            qualifyingCompletedDrillIds: [],
+            status: 'pending',
+          }
+        : criterion
+    ),
+    remediationSummary: `0 of ${plan.failedCriteria.length} gaps addressed (0 of ${repairIds.length} targeted evidence units completed)`,
+  };
+
+  saveGapClosurePlan(reboundPlan);
+
+  return {
+    ...session,
+    exercises: boundExercises,
+    sessionSource: 'gap-closure',
+    isGapClosure: true,
+    gapClosurePlanId: plan.id,
+    sourceCheckpointAttemptId: plan.sourceCheckpointAttemptId,
+    checkpointAttemptId: plan.sourceCheckpointAttemptId,
+    checkpointLevel: plan.checkpointLevel,
+    failedCriterionIds: plan.failedCriteria.map((criterion) => criterion.criterionId),
+  };
+}
+

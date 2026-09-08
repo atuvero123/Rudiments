@@ -90,3 +90,6 @@ C7.10 corrects the C4 verifier's metronome argument order, adds a true staff-onl
 
 ## C7.11 — Legacy C4 protocol revalidation bridge
 C7.11 adds a migration path for competencies whose pre-v2 C4 checkpoint was retired by the C7.10 verifier correction. Historical learning/practice evidence is preserved, the app avoids forcing a full six-stage relearn, and the learner completes a short corrected-clock no-assistance revalidation before taking the new formal test. See `C7_11_BUILD_REPORT.md`.
+
+## C7.12 — Targeted verification repair
+C7.12 fixes the failed-verification repair loop exposed by field testing. A learner with complete curriculum coverage is no longer sent back to Mission 1 after a failed formal test. Path and Today's Practice now launch a short canonical no-assistance repair session at a relaxed near-target tempo, bind that work to the active C4 repair plan, and return to formal verification only after fresh repair evidence succeeds. See `C7_12_BUILD_REPORT.md`.
