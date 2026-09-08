@@ -61,7 +61,7 @@ import {
   getSkillStatusAfterCompetencyVerification,
   recordCompetencyVerificationOutcome,
 } from '../lib/competencyAdvancementEngine';
-import { buildC7CompetencySession, buildC7VerificationStabilizationSession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
+import { buildC7CompetencySession, buildC7SecondSessionRevisitSession, buildC7VerificationStabilizationSession, getCurriculumEvidenceLedger } from '../lib/curriculumPracticeIntelligence';
 import { CurriculumEvidenceLedgerCard } from './CurriculumEvidenceLedgerCard';
 
 interface PathViewProps {
@@ -127,12 +127,19 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
   } as any);
   const advancementReadiness = deriveCompetencyAdvancementReadiness(activeCompetency, skills);
   const activeCoverageLedger = getCurriculumEvidenceLedger(activeCompetency.id);
+  const activeUnmetCoverageCriteria = activeCoverageLedger.readinessCriteria.filter((criterion) => !criterion.met);
+  const activeNeedsSeparateSessionRevisit =
+    activeCoverageLedger.readiness === 5 &&
+    activeUnmetCoverageCriteria.length === 1 &&
+    activeUnmetCoverageCriteria[0]?.label === 'Learning revisited separately';
   const activeNeedsVerificationStabilization =
     activeCoverageLedger.readiness === 6 &&
     advancementReadiness.state !== 'VERIFIED' &&
+    advancementReadiness.state !== 'READY_TO_VERIFY' &&
     advancementReadiness.state !== 'BLOCKED' &&
     advancementReadiness.state !== 'REPAIR_REQUIRED' &&
     !advancementReadiness.recurringFriction;
+  const activeReadyToVerify = advancementReadiness.state === 'READY_TO_VERIFY';
 
   const handleCompetencyVerificationComplete = (result: {
     startedAt: string;
@@ -217,14 +224,26 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
     // session repeats only the true no-assistance missions at the formal tempo.
     const readiness = deriveCompetencyAdvancementReadiness(comp, skills);
     const ledger = getCurriculumEvidenceLedger(comp.id);
+    const unmetCoverageCriteria = ledger.readinessCriteria.filter((criterion) => !criterion.met);
+    const shouldRunSecondSessionRevisit =
+      ledger.readiness === 5 &&
+      unmetCoverageCriteria.length === 1 &&
+      unmetCoverageCriteria[0]?.label === 'Learning revisited separately';
     const shouldStabilizeForVerification =
       ledger.readiness === 6 &&
       readiness.state !== 'VERIFIED' &&
+      readiness.state !== 'READY_TO_VERIFY' &&
       readiness.state !== 'BLOCKED' &&
       readiness.state !== 'REPAIR_REQUIRED' &&
       !readiness.recurringFriction;
 
-    const session = shouldStabilizeForVerification
+    const session = shouldRunSecondSessionRevisit
+      ? buildC7SecondSessionRevisitSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand
+        )
+      : shouldStabilizeForVerification
       ? buildC7VerificationStabilizationSession(
           comp,
           profile,
@@ -487,11 +506,11 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
           </div>
 
           <button
-            onClick={() => handlePracticeClick(activeCompetency)}
+            onClick={() => activeReadyToVerify ? setShowCompetencyVerification(true) : handlePracticeClick(activeCompetency)}
             className="flex items-center gap-2 bg-[#4a523a] hover:bg-[#3d4430] text-white px-5 py-3 rounded-2xl font-black text-xs transition-transform transform active:scale-95 shadow-md cursor-pointer self-start sm:self-auto"
           >
-            <Play className="w-4 h-4 fill-white" />
-            <span>{activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
+            {activeReadyToVerify ? <ShieldCheck className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
+            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
           </button>
         </div>
 

@@ -81,3 +81,6 @@ C7.7 hardens the canonical learning-to-verification handoff. Canonical missions 
 
 ## C7.8 — Required-Supporting Competency Handoff & Unit-Completion Integrity
 C7.8 fixes the post-verification skip exposed after the successful 4/4 certification test. Ordered canonical units now require both CORE and SUPPORTING competencies; only ELECTIVE content is optional. This prevents Unit 1 from completing before Drum Notation Basics and applies the same protection to later supporting curriculum steps. Existing verification and banked learning evidence are preserved. See `C7_8_BUILD_REPORT.md`.
+
+## C7.9 — Targeted Revisit & Direct Verification Action
+C7.9 handles the final 5/6 learning-coverage case without forcing the learner through a full curriculum replay. When the only missing criterion is a separate-session revisit, Path launches only the genuine independent and musical-transfer missions at the formal target tempo. Once C4 reaches `READY_TO_VERIFY`, the primary competency action becomes **Run Verification** directly. See `C7_9_BUILD_REPORT.md`.

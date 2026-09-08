@@ -765,6 +765,49 @@ export function buildC7CompetencySession(
   };
 }
 
+
+/**
+ * C7.9 — Targeted second-session revisit.
+ *
+ * When the learner has already evidenced every learning dimension except the
+ * required separate-session revisit, repeating the full teaching journey is
+ * unnecessary. This creates a fresh governed session containing only the
+ * independent and musical-transfer missions. A clean independent result in
+ * this new session can simultaneously satisfy C7's separate-session coverage
+ * and C4's separate qualifying independent-session requirement.
+ */
+export function buildC7SecondSessionRevisitSession(
+  competency: CurriculumCompetency,
+  profile: LearnerProfile,
+  placementBand: CurriculumBand
+): PracticeSession {
+  const fullSession = buildC7CompetencySession(competency, profile, placementBand);
+  const revisitExercises = (fullSession.exercises || [])
+    .filter((exercise) => {
+      const assistance = exercise.curriculumMission?.assistanceTarget;
+      return assistance === 'NONE' || assistance === 'MINIMAL';
+    })
+    .map((exercise) => ({
+      ...exercise,
+      tempo: competency.tempoStandard.bpm,
+      targetTempo: competency.tempoStandard.bpm,
+      durationSeconds: Math.max(60, exercise.durationSeconds || 60),
+    }));
+
+  if (revisitExercises.length === 0) return fullSession;
+
+  return {
+    ...fullSession,
+    durationMinutes: Math.max(6, revisitExercises.length * 4),
+    focusTopic: `${competency.title} — Separate-Session Revisit`,
+    notes: `C7.9 targeted revisit: prior learning evidence is preserved. This fresh session repeats only genuine independent and musical-transfer work so separate-session evidence can be earned without redoing the full teaching journey.`,
+    exercises: revisitExercises,
+    curriculumPractice: fullSession.curriculumPractice
+      ? { ...fullSession.curriculumPractice, missionCount: revisitExercises.length }
+      : undefined,
+  };
+}
+
 /**
  * C7.7 — Short verification-stabilization session.
  *
