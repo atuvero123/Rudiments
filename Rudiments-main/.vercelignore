@@ -1,0 +1,8 @@
+# C3.1.1 deployment guard: legacy Vercel TypeScript functions from C3/C2.
+# These files may still exist in a Git repository after an additive upload.
+api/chat.ts
+api/health.ts
+api/generate-plan.ts
+api/checkpoint-assessment.ts
+server.ts
+serverlib/

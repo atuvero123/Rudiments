@@ -1,0 +1,27 @@
+IMPORTANT — ONE-TIME GITHUB CLEANUP BEFORE REDEPLOY
+
+The old C3 repository may still contain these legacy TypeScript Vercel functions:
+
+api/chat.ts
+api/health.ts
+api/generate-plan.ts
+api/checkpoint-assessment.ts
+
+C3.1.1 uses these JavaScript functions instead:
+
+api/chat.js
+api/health.js
+api/generate-plan.js
+api/checkpoint-assessment.js
+
+Vercel treats chat.ts and chat.js as the SAME /api/chat route and refuses to build when both exist.
+
+BEST FIX:
+1. Open the GitHub repository.
+2. Open the api folder.
+3. Delete the FOUR .ts files listed above.
+4. Keep the FOUR .js files.
+5. Commit the deletions.
+6. Vercel will redeploy automatically.
+
+This package also includes .vercelignore as a deployment guard, but deleting the stale .ts files from GitHub is the clean permanent fix.

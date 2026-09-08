@@ -1,0 +1,102 @@
+name: Auto Unzip Changed Files
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '*.zip'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: oracle-auto-unzip-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  unzip-validate-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout exact upload commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find ZIP added by this commit
+        id: zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_FILE="$(git diff-tree --no-commit-id --name-only --diff-filter=AM -r "$GITHUB_SHA" -- '*.zip' | tail -n 1)"
+          if [ -z "$ZIP_FILE" ]; then
+            echo "No newly added/modified ZIP in this commit; nothing to extract."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ZIP path was reported by git but is not present: $ZIP_FILE" >&2
+            exit 1
+          fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "file=$ZIP_FILE" >> "$GITHUB_OUTPUT"
+          echo "Using ZIP: $ZIP_FILE"
+
+      - name: Validate archive paths
+        if: steps.zip.outputs.found == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_FILE='${{ steps.zip.outputs.file }}'
+          while IFS= read -r ENTRY; do
+            case "$ENTRY" in
+              /*|../*|*/../*|*'/..')
+                echo "Unsafe archive path rejected: $ENTRY" >&2
+                exit 1
+                ;;
+            esac
+          done < <(unzip -Z1 "$ZIP_FILE")
+
+      - name: Extract changed files into repository
+        if: steps.zip.outputs.found == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP_FILE='${{ steps.zip.outputs.file }}'
+          TEMP_DIR="$(mktemp -d)"
+          unzip -q "$ZIP_FILE" -d "$TEMP_DIR"
+          rsync -a --exclude='.git/' "$TEMP_DIR"/ ./
+          rm -f "$ZIP_FILE"
+          echo "Extracted files:"
+          git status --short
+
+      - name: Set up Bun
+        if: steps.zip.outputs.found == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        if: steps.zip.outputs.found == 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Production build gate
+        if: steps.zip.outputs.found == 'true'
+        run: bun run build
+
+      - name: Commit only after successful build
+        if: steps.zip.outputs.found == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --staged --quiet; then
+            echo "No extracted source changes to commit."
+            exit 0
+          fi
+          git commit -m "Automated: validated and applied changed files"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
