@@ -1477,8 +1477,10 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
               </span>
             </div>
 
-            <div className="text-2xl sm:text-3xl font-mono font-black tracking-widest text-amber-300 py-1 select-all">
-              {currentExercise.sticking}
+            <div className={`${currentExercise.curriculumMission?.pedagogyDomain === 'FILL_TRANSITION' ? 'text-lg sm:text-xl tracking-wide' : 'text-2xl sm:text-3xl tracking-widest'} font-mono font-black text-amber-300 py-1 select-all`}>
+              {currentExercise.curriculumMission?.pedagogyDomain === 'FILL_TRANSITION' && structuredTeachingDefinition
+                ? structuredTeachingDefinition.limbPattern
+                : currentExercise.sticking}
             </div>
 
             <p className="text-[10px] text-stone-400 leading-relaxed">

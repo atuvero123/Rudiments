@@ -279,6 +279,11 @@ export const CompetencyVerificationModal: React.FC<CompetencyVerificationModalPr
             {isNotationVerification
               ? 'Staff only • no count labels • no playhead • metronome only'
               : `${competency.countingPattern} • ${competency.stickingPattern}`}
+            {!isNotationVerification && competency.id.startsWith('comp-fill-') && teaching?.limbPattern && (
+              <span className="mt-1 block whitespace-normal font-sans font-semibold text-stone-700">
+                Orchestration: {teaching.limbPattern}
+              </span>
+            )}
           </div>
         </div>
 

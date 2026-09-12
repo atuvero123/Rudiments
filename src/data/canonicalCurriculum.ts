@@ -572,7 +572,7 @@ export const CANONICAL_CURRICULUM_COMPETENCIES: CurriculumCompetency[] = [
     subdivision: '8th notes',
     durationCriterion: '4 clean cycles into crash downbeat',
     supportedEquipment: 'Both',
-    musicalApplicationRequirement: 'Move 8th notes smoothly: 2 on snare, 2 on high tom, 2 on floor tom, crash 1',
+    musicalApplicationRequirement: 'Move 8th notes smoothly: 2 on snare, 2 on high tom, 4 on floor tom, then Crash + Kick on the next Beat 1',
     songTags: ['In The Air Tonight (intro)', 'Yellow'],
     prerequisiteCompetencyIds: ['comp-fill-quarter'],
     unlocksCompetencyIds: ['comp-fill-16th', 'comp-fill-recovery'],

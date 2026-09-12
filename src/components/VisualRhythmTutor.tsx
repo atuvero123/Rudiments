@@ -52,6 +52,23 @@ import { CurriculumPhraseVisualizer } from './CurriculumPhraseVisualizer';
 import { DrumNotationStaff } from './DrumNotationStaff';
 import { buildNotationProgressionDefinition } from '../lib/notationProgression';
 
+
+function formatMotorSurface(surface: string): string {
+  switch (surface) {
+    case 'snare': return 'SNARE';
+    case 'tom_high': return 'HIGH TOM';
+    case 'tom_mid': return 'MID TOM';
+    case 'tom_floor': return 'FLOOR TOM';
+    case 'crash': return 'CRASH';
+    case 'kick': return 'KICK';
+    case 'hihat':
+    case 'hihat_closed': return 'HI-HAT';
+    case 'hihat_open': return 'OPEN HH';
+    case 'ride': return 'RIDE';
+    default: return surface.replace(/_/g, ' ').toUpperCase();
+  }
+}
+
 interface VisualRhythmTutorProps {
   exercise: PracticeExercise;
   currentTempo: number;
@@ -356,6 +373,19 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         { label: 'R', hand: 'R', accent: false, count: 'ta' },
         { label: '>L', hand: 'L', accent: true, count: 'la' },
       ];
+    }
+    // C7.17: a fill is not defined by sticking alone. Keep the canonical drum
+    // surface attached to every stroke even after tutor assistance fades, so
+    // independent play cannot accidentally become eight strokes on one drum.
+    if (pedagogyDomain === 'FILL_TRANSITION' && teachingDef?.events?.length) {
+      const firstBarEvents = teachingDef.events.filter((event) => (event.bar || 1) === 1);
+      return firstBarEvents.map((event) => ({
+        label: event.hand === 'NONE' ? event.label : event.hand,
+        hand: event.hand === 'L' ? 'L' : event.hand === 'R' ? 'R' : 'K',
+        accent: Boolean(event.accent),
+        count: event.countToken,
+        surfaceLabel: formatMotorSurface(String(event.surface)),
+      }));
     }
     // C7.16: dynamics are a voice hierarchy, not a word-split sticking
     // sentence. Render the authored one-bar event map directly so the learner
@@ -1627,6 +1657,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                       ? (st.accent ? 'Bar Start' : 'Pulse')
                       : pedagogyDomain === 'DYNAMICS'
                       ? (st.accent ? 'STRONG' : 'SOFT')
+                      : pedagogyDomain === 'FILL_TRANSITION' && 'surfaceLabel' in st
+                      ? st.surfaceLabel
                       : st.accent ? 'Accent' : 'Tap'}
                   </span>
                 </div>

@@ -21,6 +21,23 @@ import { DrumNotationStaff } from './DrumNotationStaff';
 import { CURRICULUM_COMPETENCIES_BY_ID } from '../data/canonicalCurriculum';
 import { deriveCanonicalVerificationTransport, formatVerificationLength } from '../lib/verificationTransportEngine';
 
+
+function formatTeachingSurface(surface: string): string {
+  switch (surface) {
+    case 'snare': return 'SNARE';
+    case 'tom_high': return 'HIGH TOM';
+    case 'tom_mid': return 'MID TOM';
+    case 'tom_floor': return 'FLOOR TOM';
+    case 'crash': return 'CRASH';
+    case 'kick': return 'KICK';
+    case 'hihat':
+    case 'hihat_closed': return 'HI-HAT';
+    case 'hihat_open': return 'OPEN HH';
+    case 'ride': return 'RIDE';
+    default: return surface.replace(/_/g, ' ').toUpperCase();
+  }
+}
+
 interface UnderstandStageViewProps {
   exercise: PracticeExercise;
   timeline: RhythmTimeline;
@@ -116,6 +133,13 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
   const explanation = teachingDef.musicalExplanation;
   const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
   const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
+  // C7.17: canonical fill definitions are expanded to the mission length for
+  // transport, but the Stage-1 execution reference should teach one authored
+  // fill cycle only. Repeating the same eight notes for every mission bar made
+  // the pattern look like a 16-note fill and obscured the actual orchestration.
+  const executionReferenceEvents = pedagogyDomain === 'FILL_TRANSITION'
+    ? teachingDef.events.filter((event) => (event.bar || 1) === 1)
+    : teachingDef.events;
   const executionReferenceLabel = pedagogyDomain === 'RUDIMENT'
     ? 'Required Sticking — Play This'
     : pedagogyDomain === 'GROOVE' || pedagogyDomain === 'STYLE'
@@ -262,7 +286,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2 py-2">
-            {teachingDef.events.map((ev, idx) => (
+            {executionReferenceEvents.map((ev, idx) => (
               <button
                 key={idx}
                 onClick={() => handlePlayTeachingEvent(ev)}
@@ -281,6 +305,11 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
                 <span className="text-[9px] font-mono opacity-80 mt-0.5">
                   {ev.countToken}
                 </span>
+                {pedagogyDomain === 'FILL_TRANSITION' && (
+                  <span className="mt-1 rounded-md border border-current/20 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide opacity-80">
+                    {formatTeachingSurface(String(ev.surface))}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -290,7 +319,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
               {exercise.curriculumMission?.patternDisplay === 'SUGGESTED' ? 'Suggested Pattern — Optional' : executionReferenceLabel.replace(' — Play This', ' — Play This Now')}
             </div>
             <div className="text-xs font-mono font-bold text-amber-300/90">
-              {teachingDef.sticking}
+              {pedagogyDomain === 'FILL_TRANSITION' ? teachingDef.limbPattern : teachingDef.sticking}
             </div>
           </div>
         </div>
