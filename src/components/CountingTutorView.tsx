@@ -122,20 +122,47 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
   };
 
   const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
-  const tokens = teachingDef.countTokens || ['1', '&', '2', '&', '3', '&', '4', '&'];
-  const spoken = teachingDef.spokenTokens || ['one', 'and', 'two', 'and', 'three', 'and', 'four', 'and'];
+  const definitionTokens = teachingDef.countTokens || ['1', '&', '2', '&', '3', '&', '4', '&'];
+  const definitionSpoken = teachingDef.spokenTokens || ['one', 'and', 'two', 'and', 'three', 'and', 'four', 'and'];
 
-  // C7.19 mixed-grid counting support. Most competencies occupy every slot in
-  // one subdivision grid, so token index can be derived mathematically. A
-  // groove-to-fill handoff is different: Beats 1-3 use 8ths while Beat 4 opens
-  // into 16ths. When the authored token count is shorter than the full grid,
-  // bind each visible/spoken token to its actual teaching event position.
+  // C7.20 mixed-grid hardening. A teaching phrase may deliberately leave some
+  // slots of its fastest transport grid empty (for example 8ths on Beats 1-3
+  // opening into 16ths on Beat 4). In that case the authored events, not a
+  // mathematically expanded uniform grid, are the authoritative count strip.
   const firstBarCountEvents = [...(teachingDef.events || [])]
     .filter((event) => (event.bar || 1) === 1)
     .sort((a, b) => (a.beat - b.beat) || (a.subdivision - b.subdivision));
   const fullGridSlots = Math.max(1, teachingDef.beatsPerBar) * Math.max(1, teachingDef.subdivisionCount);
+  const authoredPositions = new Set(
+    firstBarCountEvents.map((event) => `${event.beat}:${event.subdivision}`)
+  );
+  const hasSparseAuthoredGrid =
+    firstBarCountEvents.length > 0 &&
+    authoredPositions.size === firstBarCountEvents.length &&
+    firstBarCountEvents.length < fullGridSlots;
   const useEventDrivenCountStrip =
-    tokens.length !== fullGridSlots && firstBarCountEvents.length === tokens.length;
+    hasSparseAuthoredGrid ||
+    (definitionTokens.length !== fullGridSlots && firstBarCountEvents.length === definitionTokens.length);
+
+  const spokenForToken = (token: string): string => {
+    const words: Record<string, string> = {
+      '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five', '6': 'six',
+      '7': 'seven', '8': 'eight', '&': 'and', e: 'e', a: 'a', la: 'la', li: 'li',
+      trip: 'trip', let: 'let',
+    };
+    return words[token] || token;
+  };
+
+  const tokens = useEventDrivenCountStrip
+    ? firstBarCountEvents.map((event) => event.countToken)
+    : definitionTokens;
+  const spoken = useEventDrivenCountStrip
+    ? tokens.map((token, idx) =>
+        definitionTokens.length === tokens.length
+          ? definitionSpoken[idx] || spokenForToken(token)
+          : spokenForToken(token)
+      )
+    : definitionSpoken;
   const tokenPositions = useEventDrivenCountStrip
     ? firstBarCountEvents.map((event) => ({ beat: event.beat, subdivision: event.subdivision }))
     : tokens.map((_, idx) => ({
@@ -221,7 +248,9 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
         <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
           {tokens.map((token, idx) => {
             const isDownbeat = /^[1-9]/.test(token);
-            const isAccent = teachingDef.accentPositions?.includes(idx);
+            const isAccent = useEventDrivenCountStrip
+              ? Boolean(firstBarCountEvents[idx]?.accent)
+              : teachingDef.accentPositions?.includes(idx);
             const activeTokenIndex = useEventDrivenCountStrip
               ? tokenPositions.findIndex((position) =>
                   position.beat === Math.max(1, currentBeat) && position.subdivision === activeSubdivision

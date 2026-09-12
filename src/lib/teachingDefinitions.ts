@@ -588,7 +588,7 @@ export const TEACHING_DEFINITIONS: Record<string, CompetencyTeachingDefinition> 
   'comp-fill-entry': {
     id: 'teach-fill-entry',
     competencyId: 'comp-fill-entry',
-    skillId: 'fill-entry',
+    skillId: 'fill-groove-transition',
     title: 'Groove-to-Fill Entry Timing',
     meter: '4/4',
     beatsPerBar: 4,
@@ -1197,10 +1197,15 @@ export function findTeachingDefinition(identifier: string): CompetencyTeachingDe
   if (lower.includes('fill') && lower.includes('quarter')) return TEACHING_DEFINITIONS['comp-fill-quarter'];
   if (lower.includes('notation')) return TEACHING_DEFINITIONS['comp-reading-notation'];
 
-  // C7: every canonical curriculum competency now resolves to its own
-  // pedagogy-derived definition instead of silently falling back to Quarter Pulse.
+  // C7.20: canonical skill ids must resolve to an authored teaching definition
+  // whenever one exists. Several canonical skill ids intentionally differ from
+  // the older authored aliases (for example fill-groove-transition). Returning a
+  // freshly derived generic definition here can silently replace a competency's
+  // authored mixed grid, orchestration, simultaneous voices, or phrase logic.
+  // Resolve through the canonical competency id first, then derive only when no
+  // authored definition exists for that competency.
   const canonical = findCanonicalCompetency(identifier);
-  if (canonical) return deriveTeachingDefinition(canonical);
+  if (canonical) return TEACHING_DEFINITIONS[canonical.id] || deriveTeachingDefinition(canonical);
   return null;
 }
 

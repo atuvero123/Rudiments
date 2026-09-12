@@ -147,13 +147,28 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   // Exact/fuzzy matches use the competency-authored timeline; unknown legacy
   // exercises retain the legacy timeline rather than silently becoming another skill.
   const matchedTeachingDef = useMemo(() => {
-    const ids = [...(exercise.skillIds || []), exercise.id, exercise.title].filter(Boolean);
+    // C7.20: canonical mission identity is authoritative. Resolve the competency
+    // id before legacy skill aliases so a canonical skill id can never select a
+    // generic derived definition ahead of an authored competency definition.
+    const ids = [
+      exercise.curriculumMission?.competencyId,
+      exercise.skillId,
+      ...(exercise.skillIds || []),
+      exercise.id,
+      exercise.title,
+    ].filter(Boolean) as string[];
     for (const id of ids) {
       const found = findTeachingDefinition(id);
       if (found) return found;
     }
     return null;
-  }, [exercise.id, exercise.skillIds, exercise.title]);
+  }, [
+    exercise.curriculumMission?.competencyId,
+    exercise.skillId,
+    exercise.id,
+    exercise.skillIds,
+    exercise.title,
+  ]);
 
   const teachingDef = useMemo(() => {
     const base = matchedTeachingDef || getTeachingDefinition(exercise.title || exercise.id);

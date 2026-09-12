@@ -112,8 +112,15 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
   // six-stage Understand -> Count -> Watch -> Follow -> Play -> Evaluate flow.
   // The legacy parent timer/check-in remains only for unmatched legacy exercises.
   const structuredTeachingDefinition = currentExercise
-    ? [...(currentExercise.skillIds || []), currentExercise.id, currentExercise.title]
-        .map((id) => findTeachingDefinition(id))
+    ? [
+        currentExercise.curriculumMission?.competencyId,
+        currentExercise.skillId,
+        ...(currentExercise.skillIds || []),
+        currentExercise.id,
+        currentExercise.title,
+      ]
+        .filter(Boolean)
+        .map((id) => findTeachingDefinition(String(id)))
         .find(Boolean) || null
     : null;
   const hasStructuredTeachingFlow = Boolean(structuredTeachingDefinition);
