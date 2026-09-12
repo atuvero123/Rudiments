@@ -69,6 +69,11 @@ function formatMotorSurface(surface: string): string {
   }
 }
 
+
+function formatMotorSurfaceSet(surfaces: string[]): string {
+  return Array.from(new Set(surfaces.map(formatMotorSurface))).join(' + ');
+}
+
 interface VisualRhythmTutorProps {
   exercise: PracticeExercise;
   currentTempo: number;
@@ -118,6 +123,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     exercise.skillId === 'time-44';
   const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
   const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
+  const isGrooveToFillEntry = exercise.curriculumMission?.competencyId === 'comp-fill-entry';
   const motorReferenceNoun = pedagogyDomain === 'RUDIMENT'
     ? 'Sticking'
     : pedagogyDomain === 'GROOVE' || pedagogyDomain === 'STYLE'
@@ -125,7 +131,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     : pedagogyDomain === 'COORDINATION'
     ? 'Limb Sequence'
     : pedagogyDomain === 'FILL_TRANSITION'
-    ? 'Fill Pattern'
+    ? isGrooveToFillEntry ? 'Groove → Fill Map' : 'Fill Pattern'
     : pedagogyDomain === 'DYNAMICS'
     ? 'Dynamic Voice Map'
     : 'Pulse Pattern';
@@ -379,13 +385,24 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     // independent play cannot accidentally become eight strokes on one drum.
     if (pedagogyDomain === 'FILL_TRANSITION' && teachingDef?.events?.length) {
       const firstBarEvents = teachingDef.events.filter((event) => (event.bar || 1) === 1);
-      return firstBarEvents.map((event) => ({
-        label: event.hand === 'NONE' ? event.label : event.hand,
-        hand: event.hand === 'L' ? 'L' : event.hand === 'R' ? 'R' : 'K',
-        accent: Boolean(event.accent),
-        count: event.countToken,
-        surfaceLabel: formatMotorSurface(String(event.surface)),
-      }));
+      return firstBarEvents.map((event) => {
+        const authoredSurfaces = event.surfaces?.length
+          ? event.surfaces.map(String)
+          : [String(event.surface)];
+        const hasMultipleVoices = authoredSurfaces.length > 1;
+        return {
+          // C7.19: simultaneous groove voices need to remain visible during
+          // Watch/Follow/Independent. Showing BOTH as a generic "K" hid the
+          // hi-hat handoff that this competency is actually testing.
+          label: event.hand === 'NONE' || event.hand === 'BOTH' || hasMultipleVoices
+            ? event.label
+            : event.hand,
+          hand: event.hand === 'L' ? 'L' : event.hand === 'R' ? 'R' : 'K',
+          accent: Boolean(event.accent),
+          count: event.countToken,
+          surfaceLabel: formatMotorSurfaceSet(authoredSurfaces),
+        };
+      });
     }
     // C7.16: dynamics are a voice hierarchy, not a word-split sticking
     // sentence. Render the authored one-bar event map directly so the learner

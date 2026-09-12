@@ -127,6 +127,9 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
   };
 
   const canonicalCompetency = CURRICULUM_COMPETENCIES_BY_ID.get(teachingDef.competencyId);
+  const subdivisionDetail = teachingDef.competencyId === 'comp-fill-entry'
+    ? '8ths on Beats 1–3 • 16ths on Beat 4'
+    : `${teachingDef.subdivisionCount} notes per beat`;
   const verificationTransport = canonicalCompetency
     ? deriveCanonicalVerificationTransport(canonicalCompetency, teachingDef)
     : null;
@@ -147,7 +150,9 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
     : pedagogyDomain === 'COORDINATION'
     ? 'Required Limb Sequence — Play This'
     : pedagogyDomain === 'FILL_TRANSITION'
-    ? 'Required Fill Pattern — Play This'
+    ? teachingDef.competencyId === 'comp-fill-entry'
+      ? 'Required Groove → Fill Handoff — Play This'
+      : 'Required Fill Pattern — Play This'
     : pedagogyDomain === 'DYNAMICS'
     ? 'Required Dynamic Voice Map — Play This'
     : 'Required Pulse Pattern — Play This';
@@ -226,7 +231,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
         <div className="bg-stone-900 p-3 rounded-2xl border border-stone-800 space-y-1">
           <span className="text-[10px] uppercase font-bold text-stone-400">Subdivision</span>
           <p className="font-mono font-black text-white text-base">{teachingDef.subdivision}</p>
-          <span className="text-[10px] text-stone-400">{teachingDef.subdivisionCount} notes per beat</span>
+          <span className="text-[10px] text-stone-400">{subdivisionDetail}</span>
         </div>
 
         <div className="bg-stone-900 p-3 rounded-2xl border border-amber-500/30 space-y-1">
@@ -300,14 +305,20 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
                   {pedagogyDomain === 'DYNAMICS' ? (ev.accent ? 'STRONG' : 'SOFT') : ev.accent ? '> ACCENT' : 'TAP'}
                 </span>
                 <span className="text-base sm:text-lg font-mono font-black">
-                  {pedagogyDomain === 'DYNAMICS' ? ev.label : ev.accent ? `>${ev.hand}` : ev.hand}
+                  {pedagogyDomain === 'DYNAMICS' || ev.hand === 'BOTH' || (ev.surfaces?.length || 0) > 1
+                    ? ev.label
+                    : ev.accent
+                    ? `>${ev.hand}`
+                    : ev.hand}
                 </span>
                 <span className="text-[9px] font-mono opacity-80 mt-0.5">
                   {ev.countToken}
                 </span>
                 {pedagogyDomain === 'FILL_TRANSITION' && (
                   <span className="mt-1 rounded-md border border-current/20 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wide opacity-80">
-                    {formatTeachingSurface(String(ev.surface))}
+                    {(ev.surfaces?.length ? ev.surfaces : [ev.surface])
+                      .map((surface) => formatTeachingSurface(String(surface)))
+                      .join(' + ')}
                   </span>
                 )}
               </button>

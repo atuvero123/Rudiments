@@ -125,6 +125,24 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
   const tokens = teachingDef.countTokens || ['1', '&', '2', '&', '3', '&', '4', '&'];
   const spoken = teachingDef.spokenTokens || ['one', 'and', 'two', 'and', 'three', 'and', 'four', 'and'];
 
+  // C7.19 mixed-grid counting support. Most competencies occupy every slot in
+  // one subdivision grid, so token index can be derived mathematically. A
+  // groove-to-fill handoff is different: Beats 1-3 use 8ths while Beat 4 opens
+  // into 16ths. When the authored token count is shorter than the full grid,
+  // bind each visible/spoken token to its actual teaching event position.
+  const firstBarCountEvents = [...(teachingDef.events || [])]
+    .filter((event) => (event.bar || 1) === 1)
+    .sort((a, b) => (a.beat - b.beat) || (a.subdivision - b.subdivision));
+  const fullGridSlots = Math.max(1, teachingDef.beatsPerBar) * Math.max(1, teachingDef.subdivisionCount);
+  const useEventDrivenCountStrip =
+    tokens.length !== fullGridSlots && firstBarCountEvents.length === tokens.length;
+  const tokenPositions = useEventDrivenCountStrip
+    ? firstBarCountEvents.map((event) => ({ beat: event.beat, subdivision: event.subdivision }))
+    : tokens.map((_, idx) => ({
+        beat: Math.floor(idx / Math.max(1, teachingDef.subdivisionCount)) + 1,
+        subdivision: idx % Math.max(1, teachingDef.subdivisionCount),
+      }));
+
   return (
     <div className="bg-stone-950 text-white rounded-3xl p-5 sm:p-7 border-2 border-stone-800 shadow-2xl space-y-6">
       {/* Stage Header */}
@@ -204,10 +222,14 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
           {tokens.map((token, idx) => {
             const isDownbeat = /^[1-9]/.test(token);
             const isAccent = teachingDef.accentPositions?.includes(idx);
-            const activeTokenIndex = Math.max(
-              0,
-              ((Math.max(1, currentBeat) - 1) * Math.max(1, teachingDef.subdivisionCount) + activeSubdivision) % Math.max(1, tokens.length)
-            );
+            const activeTokenIndex = useEventDrivenCountStrip
+              ? tokenPositions.findIndex((position) =>
+                  position.beat === Math.max(1, currentBeat) && position.subdivision === activeSubdivision
+                )
+              : Math.max(
+                  0,
+                  ((Math.max(1, currentBeat) - 1) * Math.max(1, teachingDef.subdivisionCount) + activeSubdivision) % Math.max(1, tokens.length)
+                );
             const isCurrent = isPlaying && !isCountIn && activeTokenIndex === idx;
 
             return (

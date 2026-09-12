@@ -711,6 +711,7 @@ export function buildC7CompetencySession(
     const isReading = pedagogy.domain === 'READING';
     const isGrooveSongTransfer = pedagogy.domain === 'GROOVE' && musical;
     const isMusicalBalance = competency.id === 'comp-dyn-song-balance';
+    const isGrooveToFillEntry = competency.id === 'comp-fill-entry';
     const readingPurposes = [
       'Identify the written drum voices and staff positions before playing.',
       'Count the written rhythm from left to right while keeping your eyes on the staff.',
@@ -744,10 +745,37 @@ export function buildC7CompetencySession(
       'Bars 1–4 VERSE: controlled hats with clear but restrained kick/snare. Bars 5–8 CHORUS: lift kick/snare intent while hats remain underneath. Keep exactly the same 1-&-2-&-3-&-4-& pulse from Bar 1 through Bar 8.',
     ];
 
+    const grooveToFillPurposes = [
+      'Map the exact handoff: preserve the 8th-note groove through 3-& and let the first fill stroke replace the hi-hat exactly on Beat 4.',
+      'Internalize the mixed grid “1 & 2 & 3 & 4 e & a” without changing the quarter-note pulse when Beat 4 opens into 16ths.',
+      'Hear whether the groove survives the transition: 3-& must feel complete and Beat 4 must arrive without a gap, pickup or anticipatory rush.',
+      'Follow repeated groove-to-fill cycles with reduced tutor support while keeping the right-hand move from hi-hat to snare relaxed and on time.',
+      'Enter the Beat-4 fill independently for repeated bars with metronome only. The groove before every fill must remain as stable as the fill itself.',
+      'Repeat the transition as a controlled phrase study so every entry sounds intentional, even and musically connected rather than like a separate exercise pasted onto the groove.',
+    ];
+    const grooveToFillInstructions = [
+      'Play Kick + closed hi-hat on 1, hi-hat on &, Snare + hi-hat on 2, hi-hat on &, Kick + hi-hat on 3, hi-hat on 3-&. From that final hi-hat, move directly to Snare R-L-R-L on 4-e-&-a.',
+      'Count aloud “1 & 2 & 3 & 4 e & a”. Do not insert silent e/a syllables into Beats 1–3 and do not make Beat 4 faster; only the note density changes.',
+      'Listen specifically to the seam between 3-& and 4. A clean model has no missing 3-&, no extra pickup and no change in click spacing as the snare fill begins.',
+      'Use Reduced Follow. Copy one complete tutor cycle, then reproduce the same 3-& → 4 handoff in your response space. Keep the hi-hat present until the final upbeat.',
+      `Metronome only. Complete ${competency.durationCriterion}. If the groove shortens before Beat 4 or the fill pulls ahead of the click, stop and grade the run honestly.`,
+      'Treat each governed bar as one complete transition cycle. Keep the groove relaxed through Beats 1–3, make one decisive handoff on Beat 4, and preserve the same pulse and sound quality from the first cycle to the last.',
+    ];
+    const grooveToFillMissionLabels = [
+      'Map the Handoff',
+      'Count the Handoff',
+      'Hear the Seam',
+      'Follow the Transition',
+      'Enter the Fill Alone',
+      'Repeat It Musically',
+    ];
+
     const purpose = isReading
       ? readingPurposes[index]
       : isMusicalBalance
         ? musicalBalancePurposes[index]
+      : isGrooveToFillEntry
+        ? grooveToFillPurposes[index]
       : isGrooveSongTransfer
         ? 'Serve a complete 16-bar Verse → Chorus → Verse → Chorus form by changing dynamics without changing tempo or pocket.'
       : n === 1
@@ -765,6 +793,8 @@ export function buildC7CompetencySession(
       ? readingInstructions[index]
       : isMusicalBalance
         ? musicalBalanceInstructions[index]
+      : isGrooveToFillEntry
+        ? grooveToFillInstructions[index]
       : isGrooveSongTransfer
         ? `Metronome only. Play the full 16-bar form: Bars 1–4 VERSE (controlled), 5–8 CHORUS (lift), 9–12 VERSE RETURN (settle), 13–16 FINAL CHORUS (lift again). Keep the exact same groove and tempo throughout; only the musical energy changes. ${competency.musicalApplicationRequirement}.`
       : n === 1
@@ -783,7 +813,7 @@ export function buildC7CompetencySession(
       competencyId: competency.id,
       missionId: `c7-${competency.id}-m${n}`,
       missionNumber: n,
-      missionTitle: `Mission ${n} — ${pedagogy.missionLabels[index]}`,
+      missionTitle: `Mission ${n} — ${isGrooveToFillEntry ? grooveToFillMissionLabels[index] : pedagogy.missionLabels[index]}`,
       stage: stages[index],
       assistanceTarget: assistance[index],
       conceptualTarget: n <= 3,
