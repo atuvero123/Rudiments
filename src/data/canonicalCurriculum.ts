@@ -599,7 +599,7 @@ export const CANONICAL_CURRICULUM_COMPETENCIES: CurriculumCompetency[] = [
     subdivision: '16th notes',
     durationCriterion: '4 cycles without rushing beat 4',
     supportedEquipment: 'Both',
-    musicalApplicationRequirement: 'Execute 1-e-&-a 2-e-&-a 3-e-&-a 4-e-&-a cleanly without rushing into crash',
+    musicalApplicationRequirement: 'Play a full-bar descending 16th-note fill: Snare on 1-e-&-a, High Tom on 2-e-&-a, Mid Tom on 3-e-&-a, Floor Tom on 4-e-&-a, then land Crash + Kick on the next Beat 1',
     songTags: ['Living On A Prayer', 'Everlong'],
     prerequisiteCompetencyIds: ['comp-fill-8th'],
     unlocksCompetencyIds: ['comp-fill-recovery'],
