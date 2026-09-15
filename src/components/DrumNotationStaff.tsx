@@ -100,7 +100,7 @@ export const DrumNotationStaff: React.FC<DrumNotationStaffProps> = ({
           <div className="text-sm font-black text-white">{title}</div>
         </div>
         <div className="text-[10px] font-mono text-stone-400">
-          {teachingDef.meter} • {teachingDef.subdivision} • {totalBars} bar{totalBars === 1 ? '' : 's'} • read left → right
+          {teachingDef.meter} • {(teachingDef.subdivisionDisplay || teachingDef.subdivision)} • {totalBars} bar{totalBars === 1 ? '' : 's'} • read left → right
         </div>
       </div>
 

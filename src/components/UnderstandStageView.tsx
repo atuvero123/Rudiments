@@ -167,7 +167,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
               STAGE 1: UNDERSTAND
             </span>
             <span className="text-xs font-mono text-stone-400">
-              {teachingDef.meter} • {teachingDef.subdivision}
+              {teachingDef.meter} • {(teachingDef.subdivisionDisplay || teachingDef.subdivision)}
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-white mt-1">
@@ -230,7 +230,7 @@ export const UnderstandStageView: React.FC<UnderstandStageViewProps> = ({
 
         <div className="bg-stone-900 p-3 rounded-2xl border border-stone-800 space-y-1">
           <span className="text-[10px] uppercase font-bold text-stone-400">Subdivision</span>
-          <p className="font-mono font-black text-white text-base">{teachingDef.subdivision}</p>
+          <p className="font-mono font-black text-white text-base">{(teachingDef.subdivisionDisplay || teachingDef.subdivision)}</p>
           <span className="text-[10px] text-stone-400">{subdivisionDetail}</span>
         </div>
 

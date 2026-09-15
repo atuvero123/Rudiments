@@ -180,7 +180,7 @@ export const CountingTutorView: React.FC<CountingTutorViewProps> = ({
               STAGE 2: COUNT
             </span>
             <span className="text-xs font-mono text-stone-400">
-              {teachingDef.meter} • {teachingDef.subdivision}
+              {teachingDef.meter} • {(teachingDef.subdivisionDisplay || teachingDef.subdivision)}
             </span>
           </div>
           <h2 className="text-xl sm:text-2xl font-black text-white mt-1">

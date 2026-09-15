@@ -593,6 +593,7 @@ export const TEACHING_DEFINITIONS: Record<string, CompetencyTeachingDefinition> 
     meter: '4/4',
     beatsPerBar: 4,
     subdivision: '16th Notes',
+    subdivisionDisplay: '8th-note groove → 16ths on Beat 4',
     subdivisionCount: 4,
     // C7.19: this competency deliberately mixes an 8th-note groove on Beats 1-3
     // with a 16th-note fill on Beat 4. The count strip is therefore authored as

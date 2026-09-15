@@ -1663,6 +1663,8 @@ export interface CompetencyTeachingDefinition {
   meter: string; // e.g. "4/4" or "6/8"
   beatsPerBar: number;
   subdivision: 'Quarter Notes' | '8th Notes' | '16th Notes' | 'Triplets' | '6/8 Compound' | '32nd Notes';
+  /** Display-only label for mixed / sparse rhythmic grids. Transport math still uses `subdivision` + `subdivisionCount`. */
+  subdivisionDisplay?: string;
   subdivisionCount: number; // 1, 2, 4, 3, 6, 8
   countTokens: string[]; // e.g. ['1', '2', '3', '4']
   spokenTokens: string[]; // e.g. ['one', 'two', 'three', 'four']

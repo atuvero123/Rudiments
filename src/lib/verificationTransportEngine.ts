@@ -93,11 +93,14 @@ export function deriveCanonicalVerificationTransport(
 
   if (requiredBars) {
     const totalPulses = requiredBars * pulsesPerBar;
+    // Bar completion remains pulse-governed. Keep the derived seconds human-readable
+    // as a one-decimal estimate so no legacy UI can leak long recurring decimals.
+    const durationSeconds = Math.round(((totalPulses * 60) / bpm) * 10) / 10;
     return {
       bpm,
       standardText,
       completionMode: 'BARS',
-      durationSeconds: (totalPulses * 60) / bpm,
+      durationSeconds,
       requiredBars,
       pulsesPerBar,
       totalPulses,
