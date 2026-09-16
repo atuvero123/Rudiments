@@ -709,6 +709,9 @@ export interface CurriculumMissionMetadata {
   conceptualTarget?: boolean;
   executionTarget?: boolean;
   musicalApplication?: boolean;
+  /** C8: musical evidence must name the renderer/contract that actually produced it. */
+  applicationKind?: 'RUDIMENT_ORCHESTRATION';
+  applicationEvidenceVersion?: string;
   patternDisplay?: CurriculumPatternDisplay;
   pedagogyDomain?: 'PULSE_SUBDIVISION' | 'METER_FORM' | 'READING' | 'GROOVE' | 'RUDIMENT' | 'FILL_TRANSITION' | 'COORDINATION' | 'DYNAMICS' | 'PERFORMANCE' | 'STYLE';
   requiredPatternLabel?: string;

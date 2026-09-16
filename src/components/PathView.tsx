@@ -64,6 +64,7 @@ import {
 } from '../lib/competencyAdvancementEngine';
 import {
   buildC7CompetencySession,
+  buildC8RudimentMusicalApplicationSession,
   buildC7GrooveIntegrityContinuationSession,
   buildC7ProtocolRevalidationSession,
   buildC7SecondSessionRevisitSession,
@@ -149,6 +150,13 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
     activeCoverageLedger.readiness === 5 &&
     activeUnmetCoverageCriteria.length === 1 &&
     activeUnmetCoverageCriteria[0]?.label === 'Learning revisited separately';
+  const activeNeedsRudimentMusicalApplication = Boolean(
+    activeCompetency.id.includes('comp-rud-') &&
+    activeUnmetCoverageCriteria.some((criterion) => criterion.label === 'Rudiment applied musically') &&
+    advancementReadiness.state !== 'VERIFIED' &&
+    advancementReadiness.state !== 'BLOCKED' &&
+    advancementReadiness.state !== 'REPAIR_REQUIRED'
+  );
   const activeNeedsVerificationStabilization =
     activeCoverageLedger.readiness === 6 &&
     advancementReadiness.state !== 'VERIFIED' &&
@@ -156,7 +164,11 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
     advancementReadiness.state !== 'BLOCKED' &&
     advancementReadiness.state !== 'REPAIR_REQUIRED' &&
     !advancementReadiness.recurringFriction;
-  const activeReadyToVerify = advancementReadiness.state === 'READY_TO_VERIFY';
+  // C8 evidence integrity: formal verification is never offered before the
+  // canonical six-part curriculum coverage is complete.
+  const activeReadyToVerify =
+    advancementReadiness.state === 'READY_TO_VERIFY' &&
+    activeCoverageLedger.readiness === 6;
   const activeRepairPlan = getActiveGapClosurePlan(activeCompetency.skillId);
   const activeNeedsVerificationRepair = Boolean(
     advancementReadiness.state === 'REPAIR_REQUIRED' &&
@@ -269,6 +281,13 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
       readiness.state !== 'BLOCKED' &&
       readiness.state !== 'REPAIR_REQUIRED'
     );
+    const shouldRunRudimentMusicalApplication = Boolean(
+      comp.id.includes('comp-rud-') &&
+      unmetCoverageCriteria.some((criterion) => criterion.label === 'Rudiment applied musically') &&
+      readiness.state !== 'VERIFIED' &&
+      readiness.state !== 'BLOCKED' &&
+      readiness.state !== 'REPAIR_REQUIRED'
+    );
     const shouldRunSecondSessionRevisit =
       ledger.readiness === 5 &&
       unmetCoverageCriteria.length === 1 &&
@@ -304,6 +323,12 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
           profile,
           placementSummary.highestVerifiedBand,
           readiness.highestQualifyingBpm || readiness.targetBpm
+        )
+      : shouldRunRudimentMusicalApplication
+      ? buildC8RudimentMusicalApplicationSession(
+          comp,
+          profile,
+          placementSummary.highestVerifiedBand
         )
       : shouldRunGrooveIntegrityContinuation
       ? buildC7GrooveIntegrityContinuationSession(
@@ -589,7 +614,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             className="flex items-center gap-2 bg-[#4a523a] hover:bg-[#3d4430] text-white px-5 py-3 rounded-2xl font-black text-xs transition-transform transform active:scale-95 shadow-md cursor-pointer self-start sm:self-auto"
           >
             {activeReadyToVerify ? <ShieldCheck className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
-            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsVerificationRepair ? 'Repair Before Retest' : activeNeedsProtocolRevalidation ? 'Revalidate on Corrected Clock' : activeNeedsGrooveIntegrityContinuation ? 'Continue Corrected Long Form' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
+            <span>{activeReadyToVerify ? 'Run Verification' : activeNeedsVerificationRepair ? 'Repair Before Retest' : activeNeedsProtocolRevalidation ? 'Revalidate on Corrected Clock' : activeNeedsRudimentMusicalApplication ? 'Complete Musical Application' : activeNeedsGrooveIntegrityContinuation ? 'Continue Corrected Long Form' : activeNeedsSeparateSessionRevisit ? 'Revisit for Verification' : activeNeedsVerificationStabilization ? 'Stabilize for Verification' : 'Practice This Competency'}</span>
           </button>
         </div>
 
@@ -598,6 +623,15 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
             <div className="font-black">Corrected-verifier revalidation</div>
             <div className="mt-1 leading-relaxed">
               Your earlier learning and practice history are still preserved. Only the old formal C4 checkpoint was retired because it used the pre-v2 timing protocol. You do not need to repeat the full teaching journey; complete the short corrected-clock revalidation, then take the formal test again.
+            </div>
+          </div>
+        )}
+
+        {activeNeedsRudimentMusicalApplication && (
+          <div className="rounded-2xl border border-violet-300 bg-violet-50 px-4 py-3 text-xs text-violet-950">
+            <div className="font-black">C8 musical-application transfer</div>
+            <div className="mt-1 leading-relaxed">
+              Your technical rudiment evidence is preserved. The older Mission 6 used the same pad-only renderer as independent practice, so it no longer counts as musical application. Complete the short groove → rudiment fill → Beat-1 landing task; you do not need to repeat Missions 1–5.
             </div>
           </div>
         )}

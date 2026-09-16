@@ -53,6 +53,10 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
   const missionStage = exercise.curriculumMission?.stage;
   const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
   const isGrooveMission = pedagogyDomain === 'GROOVE';
+  const isRudimentMusicalApplication =
+    pedagogyDomain === 'RUDIMENT' &&
+    missionStage === 'MUSICAL_APPLICATION' &&
+    exercise.curriculumMission?.applicationKind === 'RUDIMENT_ORCHESTRATION';
 
   const grooveEvaluationCopy = (() => {
     if (!isGrooveMission) return null;
@@ -107,15 +111,23 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
 
   const evaluationTitle = isNotationMission
     ? 'Reading Accuracy & Timing Evaluation'
+    : isRudimentMusicalApplication
+    ? 'Rudiment Musical-Application Evaluation'
     : grooveEvaluationCopy?.title || 'Performance & Feel Evaluation';
   const evaluationIntro = isNotationMission
     ? 'Grade what you actually read from the staff: correct voice, correct timing, and continuous visual tracking.'
+    : isRudimentMusicalApplication
+    ? 'Grade the transfer, not the pad mechanics: did the sticking survive the move into the groove, kit orchestration and Beat-1 landing?'
     : grooveEvaluationCopy?.intro || 'Evaluate honestly. Authentic evidence is the foundation of genuine drumming mastery.';
   const evaluationPrompt = isNotationMission
     ? 'How accurately did you read the staff'
+    : isRudimentMusicalApplication
+    ? 'How musically did the rudiment transfer into the phrase'
     : grooveEvaluationCopy?.prompt || 'How did the phrase feel';
   const cleanDescription = isNotationMission
     ? 'Read the correct written voices in time without losing your place on the staff.'
+    : isRudimentMusicalApplication
+    ? 'The groove stayed settled, the original sticking remained intact while the surfaces changed, and the next Beat 1 landed cleanly with immediate recovery.'
     : grooveEvaluationCopy?.clean || 'Relaxed, controlled, and securely aligned with the intended pulse and pattern.';
 
   const diagnosticOptions = teachingDef.diagnosticIssues?.length
@@ -144,6 +156,9 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
       issueTags,
       tempoUsed: currentTempo,
       visualTutorUsed: true,
+      instructionMode: 'PLAY',
+      assistanceLevel: exercise.curriculumMission?.assistanceTarget || 'NONE',
+      evidenceCategory: 'SELF_ASSESSED_EXECUTION',
       completedAt: new Date().toISOString(),
     };
 

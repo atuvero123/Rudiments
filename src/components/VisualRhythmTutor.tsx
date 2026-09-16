@@ -51,6 +51,7 @@ import { EvaluateStageView } from './EvaluateStageView';
 import { CurriculumPhraseVisualizer } from './CurriculumPhraseVisualizer';
 import { DrumNotationStaff } from './DrumNotationStaff';
 import { buildNotationProgressionDefinition } from '../lib/notationProgression';
+import { buildRudimentApplicationDefinition } from '../lib/rudimentApplicationEngine';
 
 
 function formatMotorSurface(surface: string): string {
@@ -124,7 +125,13 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
   const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
   const isGrooveToFillEntry = exercise.curriculumMission?.competencyId === 'comp-fill-entry';
-  const motorReferenceNoun = pedagogyDomain === 'RUDIMENT'
+  const isRudimentMusicalApplication =
+    pedagogyDomain === 'RUDIMENT' &&
+    exercise.curriculumMission?.stage === 'MUSICAL_APPLICATION' &&
+    exercise.curriculumMission?.applicationKind === 'RUDIMENT_ORCHESTRATION';
+  const motorReferenceNoun = isRudimentMusicalApplication
+    ? 'Rudiment → Groove / Kit Map'
+    : pedagogyDomain === 'RUDIMENT'
     ? 'Sticking'
     : pedagogyDomain === 'GROOVE' || pedagogyDomain === 'STYLE'
     ? 'Limb / Voice Map'
@@ -171,7 +178,13 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   ]);
 
   const teachingDef = useMemo(() => {
-    const base = matchedTeachingDef || getTeachingDefinition(exercise.title || exercise.id);
+    const resolvedBase = matchedTeachingDef || getTeachingDefinition(exercise.title || exercise.id);
+    // C8: RUDIMENT Mission 6 owns a real musical-transfer renderer. It cannot
+    // reuse the pad-only technical definition from Mission 5. The application
+    // definition embeds the sticking inside groove -> fill -> landing context.
+    const base = isRudimentMusicalApplication
+      ? buildRudimentApplicationDefinition(resolvedBase, exercise.curriculumMission?.competencyId || resolvedBase.competencyId)
+      : resolvedBase;
     const structure = exercise.curriculumMission?.structure;
 
     // C7.3: reading missions use an authored notation progression. Each mission
@@ -227,7 +240,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     }
 
     return base;
-  }, [matchedTeachingDef, exercise.id, exercise.title, exercise.curriculumMission]);
+  }, [matchedTeachingDef, exercise.id, exercise.title, exercise.curriculumMission, isRudimentMusicalApplication]);
 
   const timeline: RhythmTimeline = useMemo(() => {
     return matchedTeachingDef
@@ -923,7 +936,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           { id: 'COUNT', num: '2', label: 'COUNT', icon: Mic },
           { id: 'WATCH', num: '3', label: 'WATCH', icon: Eye },
           { id: 'FOLLOW', num: '4', label: 'FOLLOW', icon: Zap },
-          { id: 'PLAY', num: '5', label: 'PLAY', icon: Play },
+          { id: 'PLAY', num: '5', label: isRudimentMusicalApplication ? 'ORCHESTRATE' : 'PLAY', icon: isRudimentMusicalApplication ? Music : Play },
           { id: 'EVALUATE', num: '6', label: 'EVALUATE', icon: CheckCircle2 },
         ].map((step) => {
           const isActive = teachingStage === step.id;
@@ -977,7 +990,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
 
       {isGovernedCanonicalMission && (
         <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl border border-stone-200 bg-stone-50 text-[10px] font-bold text-stone-600">
-          <span>Mission-governed stage: <strong className="text-stone-900">{canonicalTeachingStage}</strong></span>
+          <span>Mission-governed stage: <strong className="text-stone-900">{isRudimentMusicalApplication ? 'APPLICATION / ORCHESTRATE' : canonicalTeachingStage}</strong></span>
           <span>Assistance contract: <strong className="text-stone-900">{exercise.curriculumMission?.assistanceTarget || 'FULL'}</strong></span>
         </div>
       )}
@@ -1150,7 +1163,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 }`}
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
-                <span>5. INDEPENDENT</span>
+                <span>{isRudimentMusicalApplication ? '5. ORCHESTRATE' : '5. INDEPENDENT'}</span>
               </button>
             </div>
 
@@ -1735,7 +1748,13 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 <>
                   <Play className="w-5 h-5 fill-current" />
                   <span>
-                    START {instructionMode === 'WATCH' ? 'DEMO' : instructionMode === 'FOLLOW' ? 'FOLLOW PRACTICE' : 'INDEPENDENT PLAY'}
+                    START {instructionMode === 'WATCH'
+                      ? 'DEMO'
+                      : instructionMode === 'FOLLOW'
+                      ? 'FOLLOW PRACTICE'
+                      : isRudimentMusicalApplication
+                      ? 'MUSICAL APPLICATION'
+                      : 'INDEPENDENT PLAY'}
                   </span>
                 </>
               )}
@@ -1828,7 +1847,11 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             <div className="pt-3 border-t border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="text-xs text-stone-400 text-center sm:text-left">
                 {independentRunCompleted
-                  ? `Independent run complete (${Math.max(1, independentLoopsCompleted)} loop${Math.max(1, independentLoopsCompleted) === 1 ? '' : 's'}). Evaluation is unlocked.`
+                  ? isRudimentMusicalApplication
+                    ? `Musical application complete (${Math.max(1, independentLoopsCompleted)} phrase${Math.max(1, independentLoopsCompleted) === 1 ? '' : 's'}). Evaluation is unlocked.`
+                    : `Independent run complete (${Math.max(1, independentLoopsCompleted)} loop${Math.max(1, independentLoopsCompleted) === 1 ? '' : 's'}). Evaluation is unlocked.`
+                  : isRudimentMusicalApplication
+                  ? 'Complete the governed groove → rudiment fill → landing phrase before musical-application evidence can be recorded.'
                   : 'Complete the required independent repetitions before evaluation can be recorded as evidence.'}
               </div>
               <button
@@ -1849,7 +1872,9 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 }`}
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>{independentRunCompleted ? 'Step 6: Evaluate & Self-Assess →' : 'Evaluation Locked'}</span>
+                <span>{independentRunCompleted
+                  ? isRudimentMusicalApplication ? 'Evaluate Musical Application →' : 'Step 6: Evaluate & Self-Assess →'
+                  : 'Evaluation Locked'}</span>
               </button>
             </div>
           )}
