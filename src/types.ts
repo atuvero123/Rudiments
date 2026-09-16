@@ -179,7 +179,7 @@ export interface PracticeAttemptEvidence {
   progressionStage?: ProgressionStage;
   challengeType?: string;
   /** C9: preserves the exact musical-application contract in the generic attempt store. */
-  applicationKind?: 'RUDIMENT_ORCHESTRATION';
+  applicationKind?: 'RUDIMENT_ORCHESTRATION' | 'SONG_PLAY_ALONG';
   applicationEvidenceVersion?: string;
   /** C9.2: true only after the governed musical phrase completed its required PLAY cycles. */
   applicationEvidenceQualified?: boolean;
@@ -627,7 +627,7 @@ export interface ExerciseResult {
   evidenceCategory?: 'LEARNING_ACTIVITY' | 'GUIDED_PRACTICE' | 'SELF_ASSESSED_EXECUTION';
   visualTutorUsed?: boolean;
   /** C9.2 musical-application evidence transport metadata. */
-  applicationKind?: 'RUDIMENT_ORCHESTRATION';
+  applicationKind?: 'RUDIMENT_ORCHESTRATION' | 'SONG_PLAY_ALONG';
   applicationEvidenceVersion?: string;
   applicationEvidenceQualified?: boolean;
   applicationRunKey?: string;
@@ -705,6 +705,53 @@ export type CurriculumMissionStage =
 
 export type CurriculumPatternDisplay = 'REQUIRED' | 'SUGGESTED' | 'NONE' | 'BAR_STRUCTURE' | 'NOTATION';
 
+export type SongLearningStageKind =
+  | 'ORIENTATION'
+  | 'SECTION_SKILL'
+  | 'TUTOR_HANDOFF'
+  | 'TRANSITION'
+  | 'CHAIN'
+  | 'PARTIAL_SONG'
+  | 'FULL_GUIDED'
+  | 'FULL_MINIMAL'
+  | 'FULL_BACKING'
+  | 'PERFORMANCE';
+
+export type SongBackingMode = 'BACKING_AND_TUTOR' | 'BACKING_ONLY' | 'TUTOR_ONLY';
+
+export interface SongLearningStageConfig {
+  /** Stable song-learning plan id. */
+  planId: string;
+  /** Human-readable stage number in the adaptive song journey. */
+  stageIndex: number;
+  /** Total stages generated for this song. Unlike canonical skills, this is not fixed at six. */
+  totalStages: number;
+  kind: SongLearningStageKind;
+  trackId: string;
+  /** Section ids included in this learning window, in playback order. */
+  sectionIds: string[];
+  /** Optional focused bar window inside the selected sections. */
+  startBar?: number;
+  endBar?: number;
+  /** Tutor/student exchange. A value of 0 disables the corresponding role. */
+  tutorBars?: number;
+  learnerBars?: number;
+  backingMode: SongBackingMode;
+  clickEnabled: boolean;
+  spokenCues: boolean;
+  tutorDrumsEnabled: boolean;
+  loopCount?: number;
+  /** What the learner is expected to hear / execute in this stage. */
+  primaryGoal: string;
+  sectionGoal?: string;
+  transitionGoal?: string;
+  expectedSkills?: string[];
+  /** Optional song-form cue shown above the transport. */
+  cueText?: string;
+  /** C11: versioned evidence boundary for the song-learning engine. */
+  evidenceVersion: string;
+}
+
 export interface CurriculumStructureSection {
   label: string;
   startBar: number;
@@ -726,12 +773,14 @@ export interface CurriculumMissionMetadata {
   executionTarget?: boolean;
   musicalApplication?: boolean;
   /** C8: musical evidence must name the renderer/contract that actually produced it. */
-  applicationKind?: 'RUDIMENT_ORCHESTRATION';
+  applicationKind?: 'RUDIMENT_ORCHESTRATION' | 'SONG_PLAY_ALONG';
   applicationEvidenceVersion?: string;
   /** C10: optional canonical no-drum backing track used by long-form performance work. */
   performanceTrackId?: string;
   /** C10: governs how a performance mission should be experienced and assessed. */
   performanceMode?: 'GUIDED_FORM' | 'INDEPENDENT_FULL_SONG' | 'MUSICAL_FULL_SONG';
+  /** C11: dedicated adaptive song-learning/play-along contract. */
+  songLearning?: SongLearningStageConfig;
   patternDisplay?: CurriculumPatternDisplay;
   pedagogyDomain?: 'PULSE_SUBDIVISION' | 'METER_FORM' | 'READING' | 'GROOVE' | 'RUDIMENT' | 'FILL_TRANSITION' | 'COORDINATION' | 'DYNAMICS' | 'PERFORMANCE' | 'STYLE';
   requiredPatternLabel?: string;
@@ -891,7 +940,7 @@ export interface PracticeSession {
   curriculumPractice?: {
     competencyId: string;
     placementBand: CurriculumBand;
-    journeyVersion: 'C6' | 'C7';
+    journeyVersion: 'C6' | 'C7' | 'C11';
     missionCount: number;
     personalizedDepth: 'FOUNDATION' | 'CONDENSED' | 'DIAGNOSTIC';
   };

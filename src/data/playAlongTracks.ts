@@ -24,6 +24,15 @@ export interface PlayAlongSection {
   grooveHint: string;
   transitionCue: SectionCue;
   coachingNote: string;
+  /** C11 optional authored tutor-drum part. Positions use musical beat numbers (1-based; .5 = offbeat). */
+  drumGuide?: {
+    label: string;
+    timekeeper: 'CLOSED_HAT_8THS' | 'OPEN_HAT_8THS' | 'RIDE_QUARTERS' | 'RIDE_8THS';
+    kickPositions: number[];
+    snarePositions: number[];
+    entryCrash?: boolean;
+    exitFill?: 'NONE' | 'BEAT_4_EIGHTHS' | 'BEAT_4_SIXTEENTHS' | 'TWO_BEAT_BUILD';
+  };
 }
 
 export interface PlayAlongVariation {
@@ -461,6 +470,7 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         grooveHint: 'Establish a simple pocket. No fill is required.',
         transitionCue: 'NO_FILL',
         coachingNote: 'Settle the pulse first. Do not prove vocabulary in the intro.',
+        drumGuide: { label: 'Settled intro pocket', timekeeper: 'CLOSED_HAT_8THS', kickPositions: [1, 3], snarePositions: [2, 4], entryCrash: false, exitFill: 'NONE' },
       },
       {
         id: 'verse-a', name: 'Verse A', bars: 12, energy: 1,
@@ -468,6 +478,7 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         grooveHint: 'Closed hats, clear 2 and 4, restrained kick pattern.',
         transitionCue: 'SHORT_FILL',
         coachingNote: 'Protect the imagined vocal and keep the groove predictable.',
+        drumGuide: { label: 'Verse pocket', timekeeper: 'CLOSED_HAT_8THS', kickPositions: [1, 3, 3.5], snarePositions: [2, 4], entryCrash: false, exitFill: 'BEAT_4_EIGHTHS' },
       },
       {
         id: 'chorus-a', name: 'Chorus A', bars: 12, energy: 3,
@@ -475,6 +486,7 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         grooveHint: 'Lift the cymbal texture and backbeat without speeding up.',
         transitionCue: 'CRASH_ONLY',
         coachingNote: 'Energy rises through dynamics, not through rushing.',
+        drumGuide: { label: 'Chorus lift', timekeeper: 'OPEN_HAT_8THS', kickPositions: [1, 1.5, 3, 3.5], snarePositions: [2, 4], entryCrash: true, exitFill: 'NONE' },
       },
       {
         id: 'verse-return', name: 'Verse Return', bars: 12, energy: 1,
@@ -482,6 +494,7 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         grooveHint: 'Return to the simpler texture immediately and keep the same internal pulse.',
         transitionCue: 'NO_FILL',
         coachingNote: 'Coming down cleanly is part of arrangement control.',
+        drumGuide: { label: 'Verse-return restraint', timekeeper: 'CLOSED_HAT_8THS', kickPositions: [1, 3], snarePositions: [2, 4], entryCrash: false, exitFill: 'NONE' },
       },
       {
         id: 'bridge-build', name: 'Bridge Build', bars: 8, energy: 2,
@@ -489,6 +502,7 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         grooveHint: 'Build gradually across the eight bars while leaving space.',
         transitionCue: 'BUILD',
         coachingNote: 'Do not peak on bar 1. Let the section grow.',
+        drumGuide: { label: 'Bridge build', timekeeper: 'RIDE_8THS', kickPositions: [1, 3, 3.5], snarePositions: [2, 4], entryCrash: false, exitFill: 'TWO_BEAT_BUILD' },
       },
       {
         id: 'final-chorus', name: 'Final Chorus', bars: 8, energy: 4,
@@ -496,6 +510,7 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         grooveHint: 'Strongest groove of the song. Preserve the pocket and choose fills sparingly.',
         transitionCue: 'FREE',
         coachingNote: 'Musical confidence means strong time plus controlled choices.',
+        drumGuide: { label: 'Final-chorus full pocket', timekeeper: 'OPEN_HAT_8THS', kickPositions: [1, 1.5, 3, 3.5], snarePositions: [2, 4], entryCrash: true, exitFill: 'BEAT_4_SIXTEENTHS' },
       },
       {
         id: 'outro', name: 'Outro', bars: 4, energy: 1,
@@ -503,6 +518,7 @@ export const PLAY_ALONG_TRACKS: PlayAlongTrack[] = [
         grooveHint: 'Reduce density and finish together with the track.',
         transitionCue: 'NO_FILL',
         coachingNote: 'Recover the simple pocket and finish without rushing the last bar.',
+        drumGuide: { label: 'Outro settle', timekeeper: 'CLOSED_HAT_8THS', kickPositions: [1, 3], snarePositions: [2, 4], entryCrash: false, exitFill: 'NONE' },
       },
     ],
     variations: [

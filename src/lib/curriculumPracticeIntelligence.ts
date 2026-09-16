@@ -16,6 +16,7 @@ import {
   getRudimentApplicationPlan,
   isQualifiedRudimentApplicationExercise,
 } from './rudimentApplicationEngine';
+import { buildC11SongLearningSession, C11_SONG_LEARNING_EVIDENCE_VERSION } from './songLearningEngine';
 
 const C6_EVIDENCE_KEY = 'RUDIMENT_C6_CURRICULUM_EVIDENCE_V1';
 
@@ -35,12 +36,18 @@ export const C7_GROOVE_STABILITY_VALID_TRANSFER_SINCE = Date.parse('2026-09-08T0
 // independent and musical-performance evidence on the 60-bar / 3:00 architecture.
 export const C10_FULL_SONG_VALID_TRANSFER_SINCE = Date.parse('2026-09-16T10:25:00Z');
 
+// C11 song-learning boundary. The former six-mission performance journey used
+// a generic skill renderer and quarter-note pulse. C11 replaces the entire song
+// pedagogy with section learning, tutor/student handoffs and backing-track runs,
+// so old evidence must not certify the new song-learning contract.
+export const C11_SONG_LEARNING_VALID_EVIDENCE_SINCE = Date.parse('2026-09-16T16:30:00Z');
+
 function isC7IntegrityValid(competencyId: string, missionNumber: number, timestamp: string): boolean {
   if (competencyId === 'comp-grv-stability' && missionNumber >= 5) {
     return new Date(timestamp).getTime() >= C7_GROOVE_STABILITY_VALID_TRANSFER_SINCE;
   }
-  if (competencyId === 'comp-perf-song-app' && missionNumber >= 5) {
-    return new Date(timestamp).getTime() >= C10_FULL_SONG_VALID_TRANSFER_SINCE;
+  if (competencyId === 'comp-perf-song-app') {
+    return new Date(timestamp).getTime() >= C11_SONG_LEARNING_VALID_EVIDENCE_SINCE;
   }
   return true;
 }
@@ -60,7 +67,7 @@ export interface CurriculumMissionEvidenceRecord {
   conceptualTarget: boolean;
   executionTarget: boolean;
   musicalApplication: boolean;
-  applicationKind?: 'RUDIMENT_ORCHESTRATION';
+  applicationKind?: 'RUDIMENT_ORCHESTRATION' | 'SONG_PLAY_ALONG';
   applicationEvidenceVersion?: string;
   applicationEvidenceQualified?: boolean;
   applicationRunKey?: string;
@@ -162,19 +169,33 @@ export function recordCurriculumMissionEvidence(input: {
     // or evaluating stale UI state cannot create musical-application evidence.
     musicalApplication: mission.pedagogyDomain === 'RUDIMENT'
       ? isQualifiedRudimentApplicationExercise(input.exercise) && hasQualifiedApplicationTransport(input)
+      : mission.applicationKind === 'SONG_PLAY_ALONG'
+      ? mission.applicationEvidenceVersion === C11_SONG_LEARNING_EVIDENCE_VERSION && hasQualifiedApplicationTransport(input)
       : Boolean(mission.musicalApplication),
     applicationKind: isQualifiedRudimentApplicationExercise(input.exercise)
       ? 'RUDIMENT_ORCHESTRATION'
+      : mission.applicationKind === 'SONG_PLAY_ALONG'
+      ? 'SONG_PLAY_ALONG'
       : undefined,
     applicationEvidenceVersion: isQualifiedRudimentApplicationExercise(input.exercise)
       ? C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION
+      : mission.applicationKind === 'SONG_PLAY_ALONG'
+      ? C11_SONG_LEARNING_EVIDENCE_VERSION
       : undefined,
     applicationEvidenceQualified: isQualifiedRudimentApplicationExercise(input.exercise)
       ? hasQualifiedApplicationTransport(input)
+      : mission.applicationKind === 'SONG_PLAY_ALONG'
+      ? hasQualifiedApplicationTransport(input)
       : undefined,
-    applicationRunKey: isQualifiedRudimentApplicationExercise(input.exercise) ? input.applicationRunKey : undefined,
-    applicationCompletedLoops: isQualifiedRudimentApplicationExercise(input.exercise) ? input.applicationCompletedLoops : undefined,
-    applicationRequiredLoops: isQualifiedRudimentApplicationExercise(input.exercise) ? input.applicationRequiredLoops : undefined,
+    applicationRunKey: isQualifiedRudimentApplicationExercise(input.exercise) || mission.applicationKind === 'SONG_PLAY_ALONG'
+      ? input.applicationRunKey
+      : undefined,
+    applicationCompletedLoops: isQualifiedRudimentApplicationExercise(input.exercise) || mission.applicationKind === 'SONG_PLAY_ALONG'
+      ? input.applicationCompletedLoops
+      : undefined,
+    applicationRequiredLoops: isQualifiedRudimentApplicationExercise(input.exercise) || mission.applicationKind === 'SONG_PLAY_ALONG'
+      ? input.applicationRequiredLoops
+      : undefined,
     issueTags: input.issueTags || [],
     pedagogyDomain: mission.pedagogyDomain,
   };
@@ -192,6 +213,11 @@ function missionNumberFromExerciseId(exerciseId: string): number | null {
 }
 
 function inferredCanonicalAssistance(competencyId: string, missionNumber: number): AssistanceLevel {
+  if (competencyId === 'comp-perf-song-app') {
+    if (missionNumber <= 3) return 'FULL';
+    if (missionNumber <= 8) return 'REDUCED';
+    return 'NONE';
+  }
   if (competencyId === 'comp-meter-44') {
     if (missionNumber <= 3) return 'FULL';
     if (missionNumber <= 6) return 'REDUCED';
@@ -203,6 +229,13 @@ function inferredCanonicalAssistance(competencyId: string, missionNumber: number
 }
 
 function canonicalMissionFlags(competencyId: string, missionNumber: number) {
+  if (competencyId === 'comp-perf-song-app') {
+    return {
+      conceptualTarget: missionNumber <= 2,
+      executionTarget: missionNumber >= 2,
+      musicalApplication: missionNumber === 11,
+    };
+  }
   if (competencyId === 'comp-meter-44') {
     return {
       conceptualTarget: missionNumber !== 6,
@@ -228,7 +261,7 @@ function assessmentFromPracticeAttempt(
 
 function isCanonicalExerciseForCompetency(competencyId: string, exerciseId: string): boolean {
   const id = exerciseId || '';
-  return id.startsWith(`c6-${competencyId}-`) || id.startsWith(`c7-${competencyId}-`);
+  return id.startsWith(`c6-${competencyId}-`) || id.startsWith(`c7-${competencyId}-`) || id.startsWith(`c11-song-${competencyId}-`);
 }
 
 /**
@@ -255,6 +288,13 @@ export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMi
         const validApplication =
           record.applicationKind === 'RUDIMENT_ORCHESTRATION' &&
           record.applicationEvidenceVersion === C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION &&
+          hasQualifiedApplicationTransport(record);
+        return { ...record, musicalApplication: validApplication, applicationEvidenceQualified: validApplication };
+      }
+      if (competencyId === 'comp-perf-song-app' && record.missionNumber === 11) {
+        const validApplication =
+          record.applicationKind === 'SONG_PLAY_ALONG' &&
+          record.applicationEvidenceVersion === C11_SONG_LEARNING_EVIDENCE_VERSION &&
           hasQualifiedApplicationTransport(record);
         return { ...record, musicalApplication: validApplication, applicationEvidenceQualified: validApplication };
       }
@@ -306,14 +346,24 @@ export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMi
             attempt.applicationKind === 'RUDIMENT_ORCHESTRATION' &&
             attempt.applicationEvidenceVersion === C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION &&
             hasQualifiedApplicationTransport(attempt)
+          : competencyId === 'comp-perf-song-app' && flags.musicalApplication
+          ? attempt.applicationKind === 'SONG_PLAY_ALONG' &&
+            attempt.applicationEvidenceVersion === C11_SONG_LEARNING_EVIDENCE_VERSION &&
+            hasQualifiedApplicationTransport(attempt)
           : flags.musicalApplication,
         applicationKind: pedagogy.domain === 'RUDIMENT' && attempt.challengeType === 'kit-orchestration' && attempt.applicationKind === 'RUDIMENT_ORCHESTRATION'
           ? 'RUDIMENT_ORCHESTRATION'
+          : competencyId === 'comp-perf-song-app' && attempt.applicationKind === 'SONG_PLAY_ALONG'
+          ? 'SONG_PLAY_ALONG'
           : undefined,
         applicationEvidenceVersion: pedagogy.domain === 'RUDIMENT' && attempt.challengeType === 'kit-orchestration'
           ? attempt.applicationEvidenceVersion
+          : competencyId === 'comp-perf-song-app' && attempt.applicationKind === 'SONG_PLAY_ALONG'
+          ? attempt.applicationEvidenceVersion
           : undefined,
         applicationEvidenceQualified: pedagogy.domain === 'RUDIMENT' && flags.musicalApplication
+          ? hasQualifiedApplicationTransport(attempt)
+          : competencyId === 'comp-perf-song-app' && flags.musicalApplication
           ? hasQualifiedApplicationTransport(attempt)
           : undefined,
         applicationRunKey: attempt.applicationRunKey,
@@ -816,6 +866,13 @@ export function buildC7CompetencySession(
   profile: LearnerProfile,
   placementBand: CurriculumBand
 ): PracticeSession {
+  // C11: song performance no longer reuses the fixed six-mission skill journey.
+  // Dispatch into the dedicated adaptive song-learning/play-along engine so all
+  // callers (fresh practice, revisits, verification repair) inherit the same model.
+  if (competency.id === 'comp-perf-song-app') {
+    return buildC11SongLearningSession(competency, profile, placementBand);
+  }
+
   if (competency.id === 'comp-meter-44') {
     return buildC6CompetencySession(competency, profile, placementBand);
   }

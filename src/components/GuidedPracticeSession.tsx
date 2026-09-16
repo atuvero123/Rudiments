@@ -8,6 +8,7 @@ import {
   InstructionMode,
 } from '../types';
 import { VisualRhythmTutor } from './VisualRhythmTutor';
+import { SongLearningStageView } from './SongLearningStageView';
 import { audioEngine } from '../lib/audioEngine';
 import {
   AdaptiveDecision,
@@ -123,7 +124,8 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
         .map((id) => findTeachingDefinition(String(id)))
         .find(Boolean) || null
     : null;
-  const hasStructuredTeachingFlow = Boolean(structuredTeachingDefinition);
+  const hasSongLearningFlow = Boolean(currentExercise?.curriculumMission?.songLearning);
+  const hasStructuredTeachingFlow = Boolean(structuredTeachingDefinition || hasSongLearningFlow);
 
   // Active Exercise States
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -1350,36 +1352,56 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
         {/* VISUAL RHYTHM TUTOR & GUIDED PLACEMENT ENGINE */}
         {(currentExercise.musicalPlacement || currentExercise.transferInstructions || currentExercise.progressionStage === 'TRANSFER' || currentExercise.phase === 'DEVELOPMENT' || currentExercise.phase === 'CHALLENGE' || currentExercise.phase === 'MAIN WORK' || currentExercise.phase === 'FOUNDATION' || currentExercise.sticking) && (
           <div className="space-y-2">
-            <VisualRhythmTutor
-              exercise={currentExercise}
-              currentTempo={currentTempo}
-              onCheckIn={(mode, partialResult) => {
-                setCurrentInstructionMode(mode);
+            {hasSongLearningFlow ? (
+              <SongLearningStageView
+                exercise={currentExercise}
+                currentTempo={currentTempo}
+                onCheckIn={(mode, partialResult) => {
+                  setCurrentInstructionMode(mode);
+                  if (partialResult?.selfCheck) {
+                    const issues = partialResult.issueTags || [];
+                    setSelectedFeeling(partialResult.selfCheck);
+                    setSelectedIssues(issues);
+                    setShowSelfCheck(true);
+                    processExerciseEvaluation(partialResult.selfCheck, issues, {
+                      ...partialResult,
+                      instructionMode: mode,
+                    });
+                  }
+                }}
+              />
+            ) : (
+              <VisualRhythmTutor
+                exercise={currentExercise}
+                currentTempo={currentTempo}
+                onCheckIn={(mode, partialResult) => {
+                  setCurrentInstructionMode(mode);
 
-                // C2 structured evidence arrives only after a completed PLAY run
-                // and Stage 6 evaluation. Feed it directly into the established
-                // adaptive/evidence engine and show the adaptive response—not a
-                // second duplicate questionnaire.
-                if (partialResult?.selfCheck) {
-                  const issues = partialResult.issueTags || [];
-                  setSelectedFeeling(partialResult.selfCheck);
-                  setSelectedIssues(issues);
-                  setShowSelfCheck(true);
-                  processExerciseEvaluation(partialResult.selfCheck, issues, {
-                    ...partialResult,
-                    instructionMode: mode,
-                  });
-                  return;
-                }
+                  // C2 structured evidence arrives only after a completed PLAY run
+                  // and Stage 6 evaluation. Feed it directly into the established
+                  // adaptive/evidence engine and show the adaptive response—not a
+                  // second duplicate questionnaire.
+                  if (partialResult?.selfCheck) {
+                    const issues = partialResult.issueTags || [];
+                    setSelectedFeeling(partialResult.selfCheck);
+                    setSelectedIssues(issues);
+                    setShowSelfCheck(true);
+                    processExerciseEvaluation(partialResult.selfCheck, issues, {
+                      ...partialResult,
+                      instructionMode: mode,
+                    });
+                    return;
+                  }
 
-                // Legacy/unstructured tutor callbacks may still request the
-                // parent questionnaire. Canonical C2 lessons never use this path.
-                if (!hasStructuredTeachingFlow) {
-                  setShowSelfCheck(true);
-                }
-              }}
-              onTempoAdjust={handleAdjustTempo}
-            />
+                  // Legacy/unstructured tutor callbacks may still request the
+                  // parent questionnaire. Canonical C2 lessons never use this path.
+                  if (!hasStructuredTeachingFlow) {
+                    setShowSelfCheck(true);
+                  }
+                }}
+                onTempoAdjust={handleAdjustTempo}
+              />
+            )}
           </div>
         )}
 
