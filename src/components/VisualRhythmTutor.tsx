@@ -51,7 +51,11 @@ import { EvaluateStageView } from './EvaluateStageView';
 import { CurriculumPhraseVisualizer } from './CurriculumPhraseVisualizer';
 import { DrumNotationStaff } from './DrumNotationStaff';
 import { buildNotationProgressionDefinition } from '../lib/notationProgression';
-import { buildRudimentApplicationDefinition } from '../lib/rudimentApplicationEngine';
+import {
+  buildRudimentApplicationDefinition,
+  C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION,
+  isQualifiedRudimentApplicationExercise,
+} from '../lib/rudimentApplicationEngine';
 
 
 function formatMotorSurface(surface: string): string {
@@ -125,10 +129,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   const isNotationMission = exercise.curriculumMission?.patternDisplay === 'NOTATION';
   const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
   const isGrooveToFillEntry = exercise.curriculumMission?.competencyId === 'comp-fill-entry';
-  const isRudimentMusicalApplication =
-    pedagogyDomain === 'RUDIMENT' &&
-    exercise.curriculumMission?.stage === 'MUSICAL_APPLICATION' &&
-    exercise.curriculumMission?.applicationKind === 'RUDIMENT_ORCHESTRATION';
+  const isRudimentMusicalApplication = isQualifiedRudimentApplicationExercise(exercise);
   const motorReferenceNoun = isRudimentMusicalApplication
     ? 'Rudiment → Groove / Kit Map'
     : pedagogyDomain === 'RUDIMENT'
@@ -348,6 +349,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   const [independentRating, setIndependentRating] = useState<IndependentRating | null>(null);
   const [independentRunCompleted, setIndependentRunCompleted] = useState<boolean>(false);
   const [independentLoopsCompleted, setIndependentLoopsCompleted] = useState<number>(0);
+  const [independentRequiredLoops, setIndependentRequiredLoops] = useState<number>(1);
+  const applicationRunKeyRef = useRef<string | null>(null);
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
   const [diagnosticsData, setDiagnosticsData] = useState<TransportDiagnosticState | null>(null);
 
@@ -585,6 +588,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     masterTransport.setTeachingStage(canonicalTeachingStage);
     setInstructionMode(getTeachingStageInstructionMode(canonicalTeachingStage));
     setAssistanceLevel(exercise.curriculumMission?.assistanceTarget || 'FULL');
+    applicationRunKeyRef.current = null;
+    setIndependentRequiredLoops(1);
   }, [isGovernedCanonicalMission, canonicalTeachingStage, exercise.curriculumMission?.assistanceTarget, stopTransport]);
 
   // Cleanup on unmount or exercise change
@@ -598,6 +603,8 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     setAssistanceLevel(exercise.curriculumMission?.assistanceTarget || 'FULL');
     setIndependentRunCompleted(false);
     setIndependentLoopsCompleted(0);
+    setIndependentRequiredLoops(1);
+    applicationRunKeyRef.current = null;
     setCompletedLoops(0);
     setShowIndependentCheckIn(false);
     setShowFollowCheckIn(false);
@@ -728,13 +735,18 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     setShowFollowCheckIn(false);
     setShowIndependentCheckIn(false);
     setCompletedLoops(0);
+    const evaluationUnlockLoops = maxLoopsCount === Infinity ? 2 : Math.max(1, maxLoopsCount);
     if (instructionMode === 'PLAY') {
       setIndependentRunCompleted(false);
       setIndependentLoopsCompleted(0);
+      setIndependentRequiredLoops(evaluationUnlockLoops);
+      if (isRudimentMusicalApplication) {
+        applicationRunKeyRef.current = `c9app-${exercise.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      } else {
+        applicationRunKeyRef.current = null;
+      }
     }
     setIsPlaying(true);
-
-    const evaluationUnlockLoops = maxLoopsCount === Infinity ? 2 : Math.max(1, maxLoopsCount);
 
     await masterTransport.start({
       timeline,
@@ -1164,6 +1176,26 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
             teachingDef={teachingDef}
             currentTempo={currentTempo}
             onSaveEvaluation={(partialResult) => {
+              if (isRudimentMusicalApplication) {
+                const applicationEvidenceQualified = Boolean(
+                  independentRunCompleted &&
+                  independentLoopsCompleted >= independentRequiredLoops &&
+                  applicationRunKeyRef.current
+                );
+                onCheckIn('PLAY', {
+                  ...partialResult,
+                  instructionMode: 'PLAY',
+                  assistanceLevel: exercise.curriculumMission?.assistanceTarget || 'NONE',
+                  evidenceCategory: 'SELF_ASSESSED_EXECUTION',
+                  applicationKind: 'RUDIMENT_ORCHESTRATION',
+                  applicationEvidenceVersion: C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION,
+                  applicationEvidenceQualified,
+                  applicationRunKey: applicationRunKeyRef.current || undefined,
+                  applicationCompletedLoops: independentLoopsCompleted,
+                  applicationRequiredLoops: independentRequiredLoops,
+                });
+                return;
+              }
               onCheckIn('PLAY', partialResult);
             }}
             onRepeatStage={(stage) => {
@@ -1942,10 +1974,10 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               <div className="text-xs text-stone-400 text-center sm:text-left">
                 {independentRunCompleted
                   ? isRudimentMusicalApplication
-                    ? `Musical application complete (${Math.max(1, independentLoopsCompleted)} phrase${Math.max(1, independentLoopsCompleted) === 1 ? '' : 's'}). Evaluation is unlocked.`
+                    ? `Musical application complete (${independentLoopsCompleted}/${independentRequiredLoops} governed phrase cycle${independentRequiredLoops === 1 ? '' : 's'}). Evaluation is unlocked and this run can be considered for C7 musical-use evidence.`
                     : `Independent run complete (${Math.max(1, independentLoopsCompleted)} loop${Math.max(1, independentLoopsCompleted) === 1 ? '' : 's'}). Evaluation is unlocked.`
                   : isRudimentMusicalApplication
-                  ? 'Complete the governed groove → rudiment fill → landing phrase before musical-application evidence can be recorded.'
+                  ? `Complete the governed groove → rudiment fill → landing → recovery phrase (${independentLoopsCompleted}/${independentRequiredLoops || 1} complete cycle${independentRequiredLoops === 1 ? '' : 's'}) before musical-application evidence can be recorded.`
                   : 'Complete the required independent repetitions before evaluation can be recorded as evidence.'}
               </div>
               <button

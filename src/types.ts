@@ -181,6 +181,12 @@ export interface PracticeAttemptEvidence {
   /** C9: preserves the exact musical-application contract in the generic attempt store. */
   applicationKind?: 'RUDIMENT_ORCHESTRATION';
   applicationEvidenceVersion?: string;
+  /** C9.2: true only after the governed musical phrase completed its required PLAY cycles. */
+  applicationEvidenceQualified?: boolean;
+  /** Stable per-run key used to make musical-application evidence idempotent. */
+  applicationRunKey?: string;
+  applicationCompletedLoops?: number;
+  applicationRequiredLoops?: number;
 }
 
 export type PlacementType =
@@ -620,6 +626,13 @@ export interface ExerciseResult {
   overallRating?: IndependentRating;
   evidenceCategory?: 'LEARNING_ACTIVITY' | 'GUIDED_PRACTICE' | 'SELF_ASSESSED_EXECUTION';
   visualTutorUsed?: boolean;
+  /** C9.2 musical-application evidence transport metadata. */
+  applicationKind?: 'RUDIMENT_ORCHESTRATION';
+  applicationEvidenceVersion?: string;
+  applicationEvidenceQualified?: boolean;
+  applicationRunKey?: string;
+  applicationCompletedLoops?: number;
+  applicationRequiredLoops?: number;
 }
 
 export interface AccentNote {

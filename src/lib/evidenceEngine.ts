@@ -398,10 +398,17 @@ export function finalizeSessionEvidence(session: PracticeSession): Record<string
       coachAction: coachActionMap[action] || 'advance',
       nextBpm: (ex.result.tempoUsed || ex.tempo) + (ex.result.tempoChange || 0),
       recoveryMode: action === 'recover' || ex.result.selfCheck === 'TOO_DIFFICULT',
+      instructionMode: ex.result.instructionMode,
+      assistanceLevel: ex.result.assistanceLevel,
+      evidenceCategory: ex.result.evidenceCategory,
       progressionStage: ex.progressionStage,
       challengeType: ex.challengeType,
-      applicationKind: ex.curriculumMission?.applicationKind,
-      applicationEvidenceVersion: ex.curriculumMission?.applicationEvidenceVersion,
+      applicationKind: ex.result.applicationKind || ex.curriculumMission?.applicationKind,
+      applicationEvidenceVersion: ex.result.applicationEvidenceVersion || ex.curriculumMission?.applicationEvidenceVersion,
+      applicationEvidenceQualified: ex.result.applicationEvidenceQualified,
+      applicationRunKey: ex.result.applicationRunKey,
+      applicationCompletedLoops: ex.result.applicationCompletedLoops,
+      applicationRequiredLoops: ex.result.applicationRequiredLoops,
     };
 
     const mem = recordPracticeAttempt(attemptEvidence);

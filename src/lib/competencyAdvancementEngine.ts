@@ -235,6 +235,7 @@ export function deriveCompetencyAdvancementReadiness(
   const independentCanonicalRuns = canonicalRecords
     .filter((record) =>
       record.assessment === 'CLEAN_AND_RELAXED' &&
+      !record.musicalApplication &&
       (record.assistanceLevel === 'MINIMAL' || record.assistanceLevel === 'NONE')
     )
     .map((record) => ({
@@ -266,6 +267,10 @@ export function deriveCompetencyAdvancementReadiness(
     )
     .map((attempt) => ({ bpm: attempt.bpm, sessionKey: `placement-date:${attempt.timestamp.split('T')[0]}`, timestamp: attempt.timestamp }));
 
+  // C9.2: musical-application evidence contributes to curriculum breadth,
+  // but cannot substitute for the dedicated independent-clean requirement.
+  // Mission 6 therefore remains in canonicalRecords / practice breadth while
+  // only non-musical independent executions enter the clean-readiness pool.
   const cleanIndependent = [
     ...independentCanonicalRuns,
     ...independentPracticeRuns,

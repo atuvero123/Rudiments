@@ -18,6 +18,7 @@ import {
   InstructionMode,
   CompetencyTeachingDefinition,
 } from '../types';
+import { isQualifiedRudimentApplicationExercise } from '../lib/rudimentApplicationEngine';
 
 interface EvaluateStageViewProps {
   exercise: PracticeExercise;
@@ -53,10 +54,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
   const missionStage = exercise.curriculumMission?.stage;
   const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
   const isGrooveMission = pedagogyDomain === 'GROOVE';
-  const isRudimentMusicalApplication =
-    pedagogyDomain === 'RUDIMENT' &&
-    missionStage === 'MUSICAL_APPLICATION' &&
-    exercise.curriculumMission?.applicationKind === 'RUDIMENT_ORCHESTRATION';
+  const isRudimentMusicalApplication = isQualifiedRudimentApplicationExercise(exercise);
 
   const grooveEvaluationCopy = (() => {
     if (!isGrooveMission) return null;
@@ -112,22 +110,22 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
   const evaluationTitle = isNotationMission
     ? 'Reading Accuracy & Timing Evaluation'
     : isRudimentMusicalApplication
-    ? 'Rudiment Musical-Application Evaluation'
+    ? 'Musical Application Evidence Check'
     : grooveEvaluationCopy?.title || 'Performance & Feel Evaluation';
   const evaluationIntro = isNotationMission
     ? 'Grade what you actually read from the staff: correct voice, correct timing, and continuous visual tracking.'
     : isRudimentMusicalApplication
-    ? 'Grade the transfer, not the pad mechanics: did the sticking survive the move into the groove, kit orchestration and Beat-1 landing?'
+    ? 'Grade the complete governed phrase you just played: settled groove, intact rudiment handoff/fill, clean landing, and immediate groove recovery. This is learning evidence, not a formal verification.'
     : grooveEvaluationCopy?.intro || 'Evaluate honestly. Authentic evidence is the foundation of genuine drumming mastery.';
   const evaluationPrompt = isNotationMission
     ? 'How accurately did you read the staff'
     : isRudimentMusicalApplication
-    ? 'How musically did the rudiment transfer into the phrase'
+    ? 'How did the complete musical phrase feel'
     : grooveEvaluationCopy?.prompt || 'How did the phrase feel';
   const cleanDescription = isNotationMission
     ? 'Read the correct written voices in time without losing your place on the staff.'
     : isRudimentMusicalApplication
-    ? 'The groove stayed settled, the original sticking remained intact while the surfaces changed, and the next Beat 1 landed cleanly with immediate recovery.'
+    ? 'Groove stayed settled, the rudiment remained recognizable through the orchestration, Beat 1 landed cleanly, and the groove recovered immediately.'
     : grooveEvaluationCopy?.clean || 'Relaxed, controlled, and securely aligned with the intended pulse and pattern.';
 
   const diagnosticOptions = teachingDef.diagnosticIssues?.length
@@ -225,12 +223,16 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
           >
             <div className="flex items-center justify-between">
               <span className="font-black text-amber-300 text-sm flex items-center gap-1.5">
-                <span>👍 Mostly Controlled</span>
+                <span>{isRudimentMusicalApplication ? '👍 Mostly Clean' : '👍 Mostly Controlled'}</span>
               </span>
               <span className="text-[10px] uppercase font-bold text-stone-400">Minor Drift</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              {isNotationMission ? 'The written line was mostly correct with only a small timing or voice-reading mistake.' : 'The phrase stayed together with only small timing, sound, or coordination imperfections.'}
+              {isNotationMission
+                ? 'The written line was mostly correct with only a small timing or voice-reading mistake.'
+                : isRudimentMusicalApplication
+                ? 'The full phrase stayed musical with only a small handoff, orchestration, landing, or recovery imperfection.'
+                : 'The phrase stayed together with only small timing, sound, or coordination imperfections.'}
             </p>
           </button>
 

@@ -291,6 +291,10 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
         assistanceLevel: partialResult?.assistanceLevel || currentExercise.curriculumMission.assistanceTarget,
         issueTags: issues,
         completedAt: result.completedAt,
+        applicationEvidenceQualified: result.applicationEvidenceQualified,
+        applicationRunKey: result.applicationRunKey,
+        applicationCompletedLoops: result.applicationCompletedLoops,
+        applicationRequiredLoops: result.applicationRequiredLoops,
       });
     }
 
@@ -369,8 +373,12 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
         evidenceCategory: partialResult?.evidenceCategory,
         progressionStage: currentExercise.progressionStage,
         challengeType: currentExercise.challengeType,
-        applicationKind: currentExercise.curriculumMission?.applicationKind,
-        applicationEvidenceVersion: currentExercise.curriculumMission?.applicationEvidenceVersion,
+        applicationKind: result.applicationKind || currentExercise.curriculumMission?.applicationKind,
+        applicationEvidenceVersion: result.applicationEvidenceVersion || currentExercise.curriculumMission?.applicationEvidenceVersion,
+        applicationEvidenceQualified: result.applicationEvidenceQualified,
+        applicationRunKey: result.applicationRunKey,
+        applicationCompletedLoops: result.applicationCompletedLoops,
+        applicationRequiredLoops: result.applicationRequiredLoops,
       });
 
       // Update active Gap Closure Plan if this is a remediation drill
@@ -945,6 +953,15 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
                       )}
                     </div>
                   </div>
+
+                  {ex.result?.applicationEvidenceQualified && (
+                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-emerald-800">
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5">Musical use banked</span>
+                      <span>
+                        {ex.result.applicationCompletedLoops || 0}/{ex.result.applicationRequiredLoops || 1} governed phrase cycle{(ex.result.applicationRequiredLoops || 1) === 1 ? '' : 's'} completed
+                      </span>
+                    </div>
+                  )}
 
                   {ex.result?.adaptiveReason && (
                     <p className="text-[11px] text-stone-600 italic">

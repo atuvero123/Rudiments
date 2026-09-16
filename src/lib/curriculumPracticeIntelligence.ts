@@ -54,6 +54,10 @@ export interface CurriculumMissionEvidenceRecord {
   musicalApplication: boolean;
   applicationKind?: 'RUDIMENT_ORCHESTRATION';
   applicationEvidenceVersion?: string;
+  applicationEvidenceQualified?: boolean;
+  applicationRunKey?: string;
+  applicationCompletedLoops?: number;
+  applicationRequiredLoops?: number;
   issueTags: string[];
   pedagogyDomain?: string;
 }
@@ -93,6 +97,20 @@ function writeAllEvidence(records: CurriculumMissionEvidenceRecord[]) {
   }
 }
 
+function hasQualifiedApplicationTransport(input: {
+  applicationEvidenceQualified?: boolean;
+  applicationRunKey?: string;
+  applicationCompletedLoops?: number;
+  applicationRequiredLoops?: number;
+}): boolean {
+  const required = Math.max(1, input.applicationRequiredLoops || 1);
+  return Boolean(
+    input.applicationEvidenceQualified === true &&
+    input.applicationRunKey &&
+    (input.applicationCompletedLoops || 0) >= required
+  );
+}
+
 export function recordCurriculumMissionEvidence(input: {
   sessionId: string;
   exercise: PracticeExercise;
@@ -101,12 +119,17 @@ export function recordCurriculumMissionEvidence(input: {
   assistanceLevel?: AssistanceLevel;
   issueTags?: string[];
   completedAt?: string;
+  applicationEvidenceQualified?: boolean;
+  applicationRunKey?: string;
+  applicationCompletedLoops?: number;
+  applicationRequiredLoops?: number;
 }): CurriculumMissionEvidenceRecord | null {
   const mission = input.exercise.curriculumMission;
   if (!mission) return null;
 
   const timestamp = input.completedAt || new Date().toISOString();
-  const runId = `${input.sessionId}:${input.exercise.id}:${timestamp}`;
+  const runIdentity = input.applicationRunKey || timestamp;
+  const runId = `${input.sessionId}:${input.exercise.id}:${runIdentity}`;
   const all = readAllEvidence();
   const existing = all.find((record) => record.runId === runId);
   if (existing) return existing;
@@ -125,10 +148,12 @@ export function recordCurriculumMissionEvidence(input: {
     assistanceLevel: input.assistanceLevel || mission.assistanceTarget,
     conceptualTarget: Boolean(mission.conceptualTarget),
     executionTarget: Boolean(mission.executionTarget),
-    // C9: a rudiment Mission 6 counts as musical application only when the
-    // dedicated orchestration contract actually rendered the exercise.
+    // C9.2: a rudiment Mission 6 becomes a musical-use record only when
+    // the dedicated orchestration contract rendered AND the governed PLAY run
+    // completed its required phrase cycles. Opening Mission 6, aborting a run,
+    // or evaluating stale UI state cannot create musical-application evidence.
     musicalApplication: mission.pedagogyDomain === 'RUDIMENT'
-      ? isQualifiedRudimentApplicationExercise(input.exercise)
+      ? isQualifiedRudimentApplicationExercise(input.exercise) && hasQualifiedApplicationTransport(input)
       : Boolean(mission.musicalApplication),
     applicationKind: isQualifiedRudimentApplicationExercise(input.exercise)
       ? 'RUDIMENT_ORCHESTRATION'
@@ -136,6 +161,12 @@ export function recordCurriculumMissionEvidence(input: {
     applicationEvidenceVersion: isQualifiedRudimentApplicationExercise(input.exercise)
       ? C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION
       : undefined,
+    applicationEvidenceQualified: isQualifiedRudimentApplicationExercise(input.exercise)
+      ? hasQualifiedApplicationTransport(input)
+      : undefined,
+    applicationRunKey: isQualifiedRudimentApplicationExercise(input.exercise) ? input.applicationRunKey : undefined,
+    applicationCompletedLoops: isQualifiedRudimentApplicationExercise(input.exercise) ? input.applicationCompletedLoops : undefined,
+    applicationRequiredLoops: isQualifiedRudimentApplicationExercise(input.exercise) ? input.applicationRequiredLoops : undefined,
     issueTags: input.issueTags || [],
     pedagogyDomain: mission.pedagogyDomain,
   };
@@ -215,8 +246,9 @@ export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMi
       if (record.pedagogyDomain === 'RUDIMENT' && record.missionNumber === 6) {
         const validApplication =
           record.applicationKind === 'RUDIMENT_ORCHESTRATION' &&
-          record.applicationEvidenceVersion === C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION;
-        return { ...record, musicalApplication: validApplication };
+          record.applicationEvidenceVersion === C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION &&
+          hasQualifiedApplicationTransport(record);
+        return { ...record, musicalApplication: validApplication, applicationEvidenceQualified: validApplication };
       }
       return record;
     });
@@ -264,7 +296,8 @@ export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMi
           ? flags.musicalApplication &&
             attempt.challengeType === 'kit-orchestration' &&
             attempt.applicationKind === 'RUDIMENT_ORCHESTRATION' &&
-            attempt.applicationEvidenceVersion === C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION
+            attempt.applicationEvidenceVersion === C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION &&
+            hasQualifiedApplicationTransport(attempt)
           : flags.musicalApplication,
         applicationKind: pedagogy.domain === 'RUDIMENT' && attempt.challengeType === 'kit-orchestration' && attempt.applicationKind === 'RUDIMENT_ORCHESTRATION'
           ? 'RUDIMENT_ORCHESTRATION'
@@ -272,6 +305,12 @@ export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMi
         applicationEvidenceVersion: pedagogy.domain === 'RUDIMENT' && attempt.challengeType === 'kit-orchestration'
           ? attempt.applicationEvidenceVersion
           : undefined,
+        applicationEvidenceQualified: pedagogy.domain === 'RUDIMENT' && flags.musicalApplication
+          ? hasQualifiedApplicationTransport(attempt)
+          : undefined,
+        applicationRunKey: attempt.applicationRunKey,
+        applicationCompletedLoops: attempt.applicationCompletedLoops,
+        applicationRequiredLoops: attempt.applicationRequiredLoops,
         issueTags: attempt.frictions || [],
         pedagogyDomain: pedagogy.domain,
       }];
