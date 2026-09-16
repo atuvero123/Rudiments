@@ -719,6 +719,21 @@ export type SongLearningStageKind =
 
 export type SongBackingMode = 'BACKING_AND_TUTOR' | 'BACKING_ONLY' | 'TUTOR_ONLY';
 
+export type SongFillTeachingMode = 'NONE' | 'DEMO_RESPONSE' | 'GUIDED' | 'CUE_ONLY' | 'MEMORY';
+
+export interface SongTransitionFocus {
+  /** Section whose ending contains the transition/fill. */
+  fromSectionId: string;
+  /** Section that must receive the Beat-1 landing. */
+  toSectionId: string;
+  /** Number of bars retained before the boundary. */
+  leadInBars: number;
+  /** Number of bars retained after the boundary. */
+  landingBars: number;
+  /** Repeat the focused window so a tutor demonstration can be followed by a learner response. */
+  repetitions?: number;
+}
+
 export interface SongLearningStageConfig {
   /** Stable song-learning plan id. */
   planId: string;
@@ -741,6 +756,10 @@ export interface SongLearningStageConfig {
   spokenCues: boolean;
   tutorDrumsEnabled: boolean;
   loopCount?: number;
+  /** Optional focused transition window used by song-specific fill lessons. */
+  transitionFocus?: SongTransitionFocus;
+  /** Controls how explicitly authored fill/landing information is surfaced in this stage. */
+  fillTeachingMode?: SongFillTeachingMode;
   /** What the learner is expected to hear / execute in this stage. */
   primaryGoal: string;
   sectionGoal?: string;
@@ -940,7 +959,7 @@ export interface PracticeSession {
   curriculumPractice?: {
     competencyId: string;
     placementBand: CurriculumBand;
-    journeyVersion: 'C6' | 'C7' | 'C11';
+    journeyVersion: 'C6' | 'C7' | 'C11' | 'C12';
     missionCount: number;
     personalizedDepth: 'FOUNDATION' | 'CONDENSED' | 'DIAGNOSTIC';
   };

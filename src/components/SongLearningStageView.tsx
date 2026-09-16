@@ -12,8 +12,8 @@ import {
   Drum,
   ArrowRight,
 } from 'lucide-react';
-import { ExerciseResult, InstructionMode, PracticeExercise, SelfCheckFeeling } from '../types';
-import { PLAY_ALONG_TRACKS, PlayAlongTrack } from '../data/playAlongTracks';
+import { ExerciseResult, InstructionMode, PracticeExercise, SelfCheckFeeling, SongLearningStageConfig } from '../types';
+import { PLAY_ALONG_TRACKS, PlayAlongSection, PlayAlongTrack } from '../data/playAlongTracks';
 import { PlayAlongTransport, PlayAlongTransportSnapshot } from '../lib/playAlongEngine';
 import { C11_SONG_LEARNING_EVIDENCE_VERSION } from '../lib/songLearningEngine';
 
@@ -41,10 +41,61 @@ const ISSUE_TAGS = [
   'Tutor handoff felt unclear',
 ];
 
-function selectTrack(trackId: string, sectionIds: string[], bpm: number): PlayAlongTrack | null {
-  const source = PLAY_ALONG_TRACKS.find((track) => track.id === trackId);
+function chordSlice(section: PlayAlongSection, startIndex: number, bars: number): string[] {
+  const progression = section.chordProgression.length ? section.chordProgression : ['C'];
+  return Array.from({ length: bars }, (_, offset) => progression[(startIndex + offset) % progression.length]);
+}
+
+function focusedTransitionSections(source: PlayAlongTrack, config: SongLearningStageConfig): PlayAlongSection[] | null {
+  const focus = config.transitionFocus;
+  if (!focus) return null;
+  const from = source.sections.find((section) => section.id === focus.fromSectionId);
+  const to = source.sections.find((section) => section.id === focus.toSectionId);
+  if (!from || !to) return null;
+
+  const leadInBars = Math.max(1, Math.min(from.bars, Math.floor(focus.leadInBars || 1)));
+  const landingBars = Math.max(1, Math.min(to.bars, Math.floor(focus.landingBars || 1)));
+  const repetitions = Math.max(1, Math.floor(focus.repetitions || 1));
+  const fromStart = Math.max(0, from.bars - leadInBars);
+  const result: PlayAlongSection[] = [];
+
+  for (let repetition = 0; repetition < repetitions; repetition += 1) {
+    const role = repetitions > 1 ? (repetition === 0 ? 'Tutor demo' : repetition === 1 ? 'Your response' : `Repeat ${repetition + 1}`) : 'Transition focus';
+    result.push({
+      ...from,
+      id: `${from.id}-focus-${repetition + 1}`,
+      name: `${from.name} • ${role}`,
+      bars: leadInBars,
+      chordProgression: chordSlice(from, fromStart, leadInBars),
+      coachingNote: `${from.coachingNote} ${role}: protect the lead-in and prepare the authored fill.`,
+    });
+    result.push({
+      ...to,
+      id: `${to.id}-focus-${repetition + 1}`,
+      name: `${to.name} • ${role}`,
+      bars: landingBars,
+      chordProgression: chordSlice(to, 0, landingBars),
+      coachingNote: `${to.coachingNote} ${role}: land Beat 1 and recover the groove immediately.`,
+    });
+  }
+  return result;
+}
+
+function selectTrack(config: SongLearningStageConfig, bpm: number): PlayAlongTrack | null {
+  const source = PLAY_ALONG_TRACKS.find((track) => track.id === config.trackId);
   if (!source) return null;
-  const wanted = new Set(sectionIds);
+
+  const focused = focusedTransitionSections(source, config);
+  if (focused) {
+    return {
+      ...source,
+      bpm,
+      title: `${source.title} — Transition Lab`,
+      sections: focused,
+    };
+  }
+
+  const wanted = new Set(config.sectionIds);
   const selectedSections = source.sections.filter((section) => wanted.has(section.id));
   return {
     ...source,
@@ -52,6 +103,42 @@ function selectTrack(trackId: string, sectionIds: string[], bpm: number): PlayAl
     title: `${source.title} — Learning Window`,
     sections: selectedSections.length ? selectedSections : source.sections,
   };
+}
+
+type FillDescriptor = {
+  label: string;
+  count: string;
+  orchestration: string;
+  startBeat: number;
+};
+
+function fillDescriptor(section?: PlayAlongSection): FillDescriptor | null {
+  const fill = section?.drumGuide?.exitFill || 'NONE';
+  if (fill === 'BEAT_4_EIGHTHS') {
+    return {
+      label: 'Beat-4 eighth-note fill',
+      count: '4 & → LAND 1',
+      orchestration: 'Snare on 4 → tom on & → Crash + Kick on the next Beat 1',
+      startBeat: 4,
+    };
+  }
+  if (fill === 'BEAT_4_SIXTEENTHS') {
+    return {
+      label: 'Beat-4 sixteenth-note fill',
+      count: '4 e & a → LAND 1',
+      orchestration: 'Four even notes around snare/toms → Crash + Kick on Beat 1',
+      startBeat: 4,
+    };
+  }
+  if (fill === 'TWO_BEAT_BUILD') {
+    return {
+      label: 'Two-beat build fill',
+      count: '3 e & a 4 e & a → LAND 1',
+      orchestration: 'Build across snare/toms through Beats 3–4 → Crash + Kick on Beat 1',
+      startBeat: 3,
+    };
+  }
+  return null;
 }
 
 function totalBars(track: PlayAlongTrack | null): number {
@@ -65,8 +152,8 @@ export const SongLearningStageView: React.FC<SongLearningStageViewProps> = ({
 }) => {
   const config = exercise.curriculumMission?.songLearning;
   const track = useMemo(
-    () => config ? selectTrack(config.trackId, config.sectionIds, currentTempo) : null,
-    [config?.trackId, config?.sectionIds.join('|'), currentTempo]
+    () => config ? selectTrack(config, currentTempo) : null,
+    [config?.trackId, config?.sectionIds.join('|'), config?.stageIndex, currentTempo]
   );
 
   const transportRef = useRef<PlayAlongTransport | null>(null);
@@ -144,6 +231,12 @@ export const SongLearningStageView: React.FC<SongLearningStageViewProps> = ({
   const progress = snapshot?.progress || 0;
   const currentSection = snapshot?.currentSection;
   const isTutorStudent = (config.tutorBars || 0) > 0 && (config.learnerBars || 0) > 0;
+  const paused = Boolean(snapshot?.isPaused && !isRunning);
+  const currentFill = fillDescriptor(currentSection);
+  const showFillCoach = config.fillTeachingMode !== 'NONE' && config.fillTeachingMode !== 'MEMORY';
+  const inFillBar = Boolean(snapshot && currentFill && snapshot.barInSection === snapshot.sectionBars);
+  const fillIsActive = Boolean(inFillBar && currentFill && snapshot && snapshot.currentBeat >= currentFill.startBeat);
+  const landingNow = Boolean(snapshot && currentSection?.drumGuide?.entryCrash && snapshot.barInSection === 1 && snapshot.currentBeat === 1);
 
   const handlePlayPause = async () => {
     if (!transportRef.current) return;
@@ -203,7 +296,7 @@ export const SongLearningStageView: React.FC<SongLearningStageViewProps> = ({
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="bg-violet-500/20 text-violet-200 border border-violet-400/30 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider">
-                C11 Song Learning • Stage {config.stageIndex}/{config.totalStages}
+                C12 Song Learning • Stage {config.stageIndex}/{config.totalStages}
               </span>
               <span className="text-[10px] text-stone-400 font-mono uppercase">{config.kind.replace(/_/g, ' ')}</span>
             </div>
@@ -251,11 +344,42 @@ export const SongLearningStageView: React.FC<SongLearningStageViewProps> = ({
                     <span className="text-[9px] font-mono">{section.bars} bars</span>
                   </div>
                   <p className={`text-[10px] mt-1 leading-snug ${active ? 'text-stone-800' : 'text-stone-400'}`}>{section.grooveHint}</p>
+                  {config.fillTeachingMode !== 'MEMORY' && fillDescriptor(section) && (
+                    <div className={`mt-2 text-[9px] font-black rounded-lg px-2 py-1 border ${active ? 'border-stone-700/40 bg-stone-950/10 text-stone-900' : 'border-amber-500/30 bg-amber-500/10 text-amber-200'}`}>
+                      ↳ {fillDescriptor(section)!.label}: {fillDescriptor(section)!.count}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         </div>
+
+        {showFillCoach && (inFillBar || landingNow) && (
+          <div className={`rounded-2xl border-2 p-3 ${fillIsActive ? 'border-rose-400 bg-rose-500/15' : landingNow ? 'border-emerald-400 bg-emerald-500/15' : 'border-amber-400 bg-amber-400/10'}`}>
+            {landingNow ? (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] uppercase font-black text-emerald-300">LANDING NOW</span>
+                  <span className="text-[10px] font-mono text-stone-300">Beat 1</span>
+                </div>
+                <p className="text-sm font-black mt-1">Crash + Kick → recover the new section groove immediately</p>
+              </>
+            ) : currentFill ? (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`text-[10px] uppercase font-black ${fillIsActive ? 'text-rose-200' : 'text-amber-200'}`}>{fillIsActive ? 'FILL NOW' : 'TRANSITION COMING'}</span>
+                  <span className="text-[10px] font-mono text-stone-300">{currentFill.count}</span>
+                </div>
+                <p className="text-sm font-black mt-1">{currentFill.label}</p>
+                <p className="text-[10px] text-stone-300 mt-1 leading-relaxed">{currentFill.orchestration}</p>
+                {config.fillTeachingMode === 'DEMO_RESPONSE' && (
+                  <p className="text-[10px] text-sky-200 mt-2">First pass: listen to the tutor. Second pass: reproduce the same fill and Beat-1 landing yourself.</p>
+                )}
+              </>
+            ) : null}
+          </div>
+        )}
 
         {isTutorStudent && (
           <div className={`rounded-2xl border-2 p-3 ${activeTurn === 'TUTOR' ? 'border-amber-400 bg-amber-400/10' : activeTurn === 'LEARNER' ? 'border-emerald-400 bg-emerald-500/10' : 'border-stone-700 bg-stone-900'}`}>
@@ -313,7 +437,7 @@ export const SongLearningStageView: React.FC<SongLearningStageViewProps> = ({
 
         <div className="grid grid-cols-12 gap-2">
           <button type="button" onClick={handlePlayPause} className={`col-span-9 rounded-2xl py-3.5 font-black text-sm flex items-center justify-center gap-2 ${isRunning ? 'bg-rose-700 text-white' : 'bg-emerald-500 text-stone-950'}`}>
-            {isRunning ? <><Pause className="w-5 h-5 fill-current" /> Pause Song Window</> : <><Play className="w-5 h-5 fill-current" /> {completed ? 'Replay Song Window' : 'Start Song Window'}</>}
+            {isRunning ? <><Pause className="w-5 h-5 fill-current" /> Pause Song Window</> : <><Play className="w-5 h-5 fill-current" /> {completed ? 'Replay Song Window' : paused ? 'Resume Song Window' : 'Start Song Window'}</>}
           </button>
           <button type="button" onClick={handleReset} className="col-span-3 rounded-2xl bg-stone-800 text-stone-200 border border-stone-700 flex items-center justify-center gap-1 text-xs font-black">
             <RotateCcw className="w-4 h-4" /> Reset

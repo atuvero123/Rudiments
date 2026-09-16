@@ -13,6 +13,8 @@ export interface PlayAlongTransportSnapshot {
   progress: number;
   /** C11 tutor/student ownership for the current bar. */
   activeTurn?: 'TUTOR' | 'LEARNER' | 'NONE';
+  /** C12 transport state: position is preserved while the audio clock is suspended. */
+  isPaused?: boolean;
 }
 
 export interface PlayAlongTransportCallbacks {
@@ -202,9 +204,13 @@ export class PlayAlongTransport {
   private clickEnabled = true;
   private volume = 0.55;
   private isRunning = false;
+  private isPaused = false;
+  private hasStarted = false;
   private startTime = 0;
   private pausedOffsetSeconds = 0;
+  private pausePromise: Promise<void> | null = null;
   private animationFrame = 0;
+  private lastSnapshot: PlayAlongTransportSnapshot | null = null;
   private scheduledThroughBar = -1;
   private lastSectionIndex = -1;
   private lastAnnouncedBar = 0;
@@ -214,6 +220,7 @@ export class PlayAlongTransport {
   private tutorBars = 0;
   private learnerBars = 0;
   private lastTurn: 'TUTOR' | 'LEARNER' | 'NONE' = 'NONE';
+  private lastTransitionAnnouncementKey = '';
 
   constructor(track: PlayAlongTrack, callbacks: PlayAlongTransportCallbacks = {}) {
     this.track = track;
@@ -229,6 +236,8 @@ export class PlayAlongTransport {
     this.lastSectionIndex = -1;
     this.lastAnnouncedBar = 0;
     this.lastTurn = 'NONE';
+    this.lastTransitionAnnouncementKey = '';
+    this.lastSnapshot = null;
   }
 
   setCoachMode(mode: PlayAlongCoachMode) {
@@ -456,39 +465,86 @@ export class PlayAlongTransport {
   }
 
   async start() {
+    // C12: Pause no longer destroys the AudioContext. Suspending the Web Audio
+    // clock freezes already-scheduled backing/tutor notes in place, so Resume
+    // can continue from the exact bar/beat instead of rebuilding a graph with
+    // timestamps that are already in the past (the C11 mobile-Chrome failure).
     const ctx = this.ensureAudio();
+
+    if (this.pausePromise) {
+      try {
+        await this.pausePromise;
+      } catch {
+        // Resume below still attempts to recover the context.
+      } finally {
+        this.pausePromise = null;
+      }
+    }
+
     if (ctx.state === 'suspended') await ctx.resume();
     if (this.isRunning) return;
 
-    const remaining = Math.max(0, this.pausedOffsetSeconds);
-    this.startTime = ctx.currentTime - remaining;
+    if (!this.hasStarted) {
+      this.startTime = ctx.currentTime;
+      this.hasStarted = true;
+      this.pausedOffsetSeconds = 0;
+      this.scheduledThroughBar = -1;
+      this.lastSectionIndex = -1;
+      this.lastAnnouncedBar = 0;
+      this.lastTransitionAnnouncementKey = '';
+      this.lastTurn = 'NONE';
+    }
+
+    this.isPaused = false;
     this.isRunning = true;
-    this.scheduledThroughBar = Math.floor(remaining / (this.beatsPerBar() * this.beatDurationSeconds())) - 1;
     this.loop();
   }
 
   pause() {
     if (!this.isRunning || !this.ctx) return;
-    this.pausedOffsetSeconds = Math.max(0, this.ctx.currentTime - this.startTime);
+
     this.isRunning = false;
+    this.isPaused = true;
     cancelAnimationFrame(this.animationFrame);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
     }
-    // Close the current graph so notes scheduled slightly ahead do not keep sounding after Pause.
-    const old = this.ctx;
-    this.ctx = null;
-    this.masterGain = null;
-    old.close().catch(() => undefined);
+
+    const ctx = this.ctx;
+    // Suspending freezes ctx.currentTime and every scheduled source. This is the
+    // core resume invariant: no new graph, no guessed offset, no dead scheduler.
+    this.pausePromise = ctx.suspend().then(() => {
+      this.pausedOffsetSeconds = Math.max(0, ctx.currentTime - this.startTime);
+    }).catch(() => {
+      // Some browsers may already have suspended the context. Preserve the
+      // elapsed position and let the next user gesture call ctx.resume().
+      this.pausedOffsetSeconds = Math.max(0, ctx.currentTime - this.startTime);
+    }).then(() => undefined);
+
+    if (this.lastSnapshot) {
+      const pausedSnapshot: PlayAlongTransportSnapshot = {
+        ...this.lastSnapshot,
+        isRunning: false,
+        isPaused: true,
+      };
+      this.lastSnapshot = pausedSnapshot;
+      this.callbacks.onSnapshot?.(pausedSnapshot);
+    }
   }
 
   stop() {
     this.isRunning = false;
+    this.isPaused = false;
+    this.hasStarted = false;
+    this.startTime = 0;
     this.pausedOffsetSeconds = 0;
+    this.pausePromise = null;
     this.scheduledThroughBar = -1;
     this.lastSectionIndex = -1;
     this.lastAnnouncedBar = 0;
     this.lastTurn = 'NONE';
+    this.lastTransitionAnnouncementKey = '';
+    this.lastSnapshot = null;
     cancelAnimationFrame(this.animationFrame);
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -512,6 +568,7 @@ export class PlayAlongTransport {
 
     if (elapsed >= totalDuration) {
       this.isRunning = false;
+      this.isPaused = false;
       this.pausedOffsetSeconds = 0;
       this.callbacks.onComplete?.();
       return;
@@ -542,7 +599,26 @@ export class PlayAlongTransport {
       this.callbacks.onTurnChange?.(activeTurn);
     }
 
-    this.callbacks.onSnapshot?.({
+    // C12 explicit transition coaching. The authored guide already determines
+    // the actual tutor fill; this cue makes the musical event impossible to
+    // miss while guided support is enabled.
+    const exitFill = bar.section.drumGuide?.exitFill || 'NONE';
+    const isLastSectionBar = bar.barInSection === bar.section.bars;
+    const fillStartsBeat = exitFill === 'TWO_BEAT_BUILD' ? 3 : 4;
+    if (isLastSectionBar && exitFill !== 'NONE' && beatIndex + 1 >= fillStartsBeat) {
+      const key = `${bar.section.id}:${bar.absoluteBar}:${exitFill}`;
+      if (key !== this.lastTransitionAnnouncementKey) {
+        this.lastTransitionAnnouncementKey = key;
+        const words = exitFill === 'TWO_BEAT_BUILD'
+          ? 'Build fill, beats three and four. Land the next section on one.'
+          : exitFill === 'BEAT_4_SIXTEENTHS'
+          ? 'Fill on beat four. Four even notes. Land on one.'
+          : 'Fill on beat four. Two even notes. Land on one.';
+        this.speak(words);
+      }
+    }
+
+    const nextSnapshot: PlayAlongTransportSnapshot = {
       isRunning: true,
       currentBar: bar.absoluteBar,
       totalBars: this.bars.length,
@@ -554,7 +630,10 @@ export class PlayAlongTransport {
       nextSectionName: this.track.sections[bar.sectionIndex + 1]?.name,
       progress: Math.max(0, Math.min(1, elapsed / totalDuration)),
       activeTurn,
-    });
+      isPaused: false,
+    };
+    this.lastSnapshot = nextSnapshot;
+    this.callbacks.onSnapshot?.(nextSnapshot);
 
     this.animationFrame = requestAnimationFrame(this.loop);
   };

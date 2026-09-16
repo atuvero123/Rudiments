@@ -42,6 +42,8 @@ export interface C11SongStageBlueprint {
   musicalApplication?: boolean;
   targetBpm: number;
   loopCount?: number;
+  transitionFocus?: SongLearningStageConfig['transitionFocus'];
+  fillTeachingMode?: SongLearningStageConfig['fillTeachingMode'];
   expectedSkills?: string[];
   cueText?: string;
 }
@@ -61,28 +63,75 @@ function sectionBars(track: PlayAlongTrack, ids: string[]): number {
     .reduce((total, section) => total + section.bars, 0);
 }
 
-function stageDurationSeconds(track: PlayAlongTrack, ids: string[], loopCount = 1): number {
-  const bars = Math.max(1, sectionBars(track, ids));
+function focusedTransitionBarCount(focus?: SongLearningStageConfig['transitionFocus']): number | null {
+  if (!focus) return null;
+  const repetitions = Math.max(1, Math.floor(focus.repetitions || 1));
+  return Math.max(1, Math.floor(focus.leadInBars || 1)) * repetitions
+    + Math.max(1, Math.floor(focus.landingBars || 1)) * repetitions;
+}
+
+function stageDurationSeconds(
+  track: PlayAlongTrack,
+  ids: string[],
+  loopCount = 1,
+  focus?: SongLearningStageConfig['transitionFocus']
+): number {
+  const bars = Math.max(1, focusedTransitionBarCount(focus) || sectionBars(track, ids));
   const beatsPerBar = track.meter === '6/8' ? 2 : 4;
   return Math.max(20, Math.round(bars * beatsPerBar * (60 / track.bpm) * Math.max(1, loopCount)));
 }
 
-function structureForStage(track: PlayAlongTrack, ids: string[]): CurriculumMissionMetadata['structure'] {
-  const wanted = new Set(ids);
+function structureForStage(
+  track: PlayAlongTrack,
+  ids: string[],
+  focus?: SongLearningStageConfig['transitionFocus']
+): CurriculumMissionMetadata['structure'] {
   let startBar = 1;
   const sections: CurriculumStructureSection[] = [];
 
-  track.sections.forEach((section) => {
-    if (!wanted.has(section.id)) return;
-    sections.push({
-      label: section.name.toUpperCase(),
-      startBar,
-      bars: section.bars,
-      intensity: section.energy >= 4 ? 'STRONG' : section.energy >= 2 ? 'MEDIUM' : 'SOFT',
-      performanceCue: `${section.grooveHint} ${section.coachingNote}`,
+  if (focus) {
+    const from = track.sections.find((section) => section.id === focus.fromSectionId);
+    const to = track.sections.find((section) => section.id === focus.toSectionId);
+    if (from && to) {
+      const leadInBars = Math.max(1, Math.min(from.bars, Math.floor(focus.leadInBars || 1)));
+      const landingBars = Math.max(1, Math.min(to.bars, Math.floor(focus.landingBars || 1)));
+      const repetitions = Math.max(1, Math.floor(focus.repetitions || 1));
+      for (let repetition = 0; repetition < repetitions; repetition += 1) {
+        const role = repetitions > 1 ? (repetition === 0 ? 'TUTOR DEMO' : repetition === 1 ? 'YOUR RESPONSE' : `REPEAT ${repetition + 1}`) : 'TRANSITION';
+        sections.push({
+          label: `${from.name.toUpperCase()} — ${role}`,
+          startBar,
+          bars: leadInBars,
+          intensity: from.energy >= 4 ? 'STRONG' : from.energy >= 2 ? 'MEDIUM' : 'SOFT',
+          performanceCue: `${from.grooveHint} Prepare the authored section-ending fill.`,
+        });
+        startBar += leadInBars;
+        sections.push({
+          label: `${to.name.toUpperCase()} — ${role}`,
+          startBar,
+          bars: landingBars,
+          intensity: to.energy >= 4 ? 'STRONG' : to.energy >= 2 ? 'MEDIUM' : 'SOFT',
+          performanceCue: `${to.grooveHint} Land Beat 1 and recover the groove immediately.`,
+        });
+        startBar += landingBars;
+      }
+    }
+  }
+
+  if (!sections.length) {
+    const wanted = new Set(ids);
+    track.sections.forEach((section) => {
+      if (!wanted.has(section.id)) return;
+      sections.push({
+        label: section.name.toUpperCase(),
+        startBar,
+        bars: section.bars,
+        intensity: section.energy >= 4 ? 'STRONG' : section.energy >= 2 ? 'MEDIUM' : 'SOFT',
+        performanceCue: `${section.grooveHint} ${section.coachingNote}`,
+      });
+      startBar += section.bars;
     });
-    startBar += section.bars;
-  });
+  }
 
   const totalBars = Math.max(1, sections.reduce((sum, section) => sum + section.bars, 0));
   const landmarks = sections.map((section) => section.startBar);
@@ -155,8 +204,9 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       musicalApplication: false,
       targetBpm: Math.max(60, track.bpm - 12),
       loopCount: 1,
+      fillTeachingMode: 'GUIDED',
       expectedSkills: ['8th-note backbeat', 'Pocket stability', 'Dynamic restraint'],
-      cueText: 'Tutor drums demonstrate the section part over the backing track.',
+      cueText: 'Tutor drums demonstrate the section part over the backing track, including the authored Verse ending fill.',
     },
     {
       title: 'Tutor 2 Bars → You 2 Bars',
@@ -177,6 +227,7 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       musicalApplication: false,
       targetBpm: Math.max(64, track.bpm - 8),
       loopCount: 1,
+      fillTeachingMode: 'GUIDED',
       expectedSkills: ['Imitation', 'Pocket continuity', 'Recovery'],
       cueText: 'Tutor plays 2 bars. You answer for 2 bars. The band never stops.',
     },
@@ -207,11 +258,11 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       kind: 'TRANSITION',
       sectionIds: safe(verseToChorus),
       purpose: 'Learn the transition as part of the song instead of treating the fill as a separate exercise.',
-      instructions: 'Protect the final verse bar, use one short transition or deliberate no-fill, land the chorus on Beat 1 and immediately establish the lifted groove.',
+      instructions: 'Protect the final verse bar, play the authored Beat-4 fill, land the Chorus on Crash + Kick on Beat 1, and immediately establish the lifted groove. The first focused pass is demonstrated by the tutor; the second is yours.',
       primaryGoal: 'Preserve time through the section handoff and land the new section cleanly.',
-      transitionGoal: 'Final Verse bar → short fill or restraint → Crash/Chorus Beat 1 → immediate pocket.',
-      tutorBars: 1,
-      learnerBars: 1,
+      transitionGoal: 'Final Verse bar → Beat-4 eighth-note fill (4 &) → Crash + Kick on Chorus Beat 1 → immediate pocket.',
+      tutorBars: 4,
+      learnerBars: 4,
       backingMode: 'BACKING_AND_TUTOR',
       clickEnabled: true,
       spokenCues: true,
@@ -221,8 +272,16 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       musicalApplication: false,
       targetBpm: Math.max(68, track.bpm - 4),
       loopCount: 1,
+      transitionFocus: {
+        fromSectionId: 'verse-a',
+        toSectionId: 'chorus-a',
+        leadInBars: 2,
+        landingBars: 2,
+        repetitions: 2,
+      },
+      fillTeachingMode: 'DEMO_RESPONSE',
       expectedSkills: ['Fill entry', 'Beat-1 landing', 'Groove recovery', 'Restraint'],
-      cueText: 'A transition is successful only when the next groove arrives on time.',
+      cueText: 'First hear the complete Verse → fill → Chorus landing. Then repeat the same four-bar transition yourself while the band continues.',
     },
     {
       title: 'Chain the First Half',
@@ -242,8 +301,9 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       musicalApplication: false,
       targetBpm: Math.max(70, track.bpm - 2),
       loopCount: 1,
+      fillTeachingMode: 'GUIDED',
       expectedSkills: ['Form memory', 'Section contrast', 'Transition recovery'],
-      cueText: 'Think in sections, not isolated bars.',
+      cueText: 'Think in sections, not isolated bars. Protect the authored transition into the Chorus.',
     },
     {
       title: 'Learn the Return, Build & Ending',
@@ -253,8 +313,8 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       instructions: 'Settle immediately in the Verse Return, grow gradually through the Bridge, play the strongest controlled Final Chorus, then reduce density into the Outro.',
       primaryGoal: 'Control the second-half dynamic journey without changing tempo.',
       sectionGoal: 'Return → Build → Final Chorus → Outro',
-      tutorBars: 1,
-      learnerBars: 3,
+      tutorBars: 4,
+      learnerBars: 4,
       backingMode: 'BACKING_AND_TUTOR',
       clickEnabled: true,
       spokenCues: true,
@@ -264,8 +324,9 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       musicalApplication: false,
       targetBpm: Math.max(70, track.bpm - 2),
       loopCount: 1,
-      expectedSkills: ['Dynamic control', 'Long-form form memory', 'Outro restraint'],
-      cueText: 'Coming down cleanly matters as much as building up.',
+      fillTeachingMode: 'GUIDED',
+      expectedSkills: ['Dynamic control', 'Long-form form memory', 'Bridge build fill', 'Final-chorus exit fill', 'Outro restraint'],
+      cueText: 'Coming down cleanly matters as much as building up. Tutor windows expose the Bridge build fill and later section-ending fill before you own them.',
     },
     {
       title: 'Full Song — Guided Handoffs',
@@ -285,8 +346,9 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       musicalApplication: false,
       targetBpm: track.bpm,
       loopCount: 1,
-      expectedSkills: ['Full-song continuity', 'Form anticipation', 'Recovery'],
-      cueText: 'The tutor is now a safety rail, not the performance.',
+      fillTeachingMode: 'GUIDED',
+      expectedSkills: ['Full-song continuity', 'Form anticipation', 'Transition fills', 'Recovery'],
+      cueText: 'The tutor is now a safety rail, not the performance. Fill cues remain visible at authored transitions.',
     },
     {
       title: 'Full Song — Minimal Cues',
@@ -306,8 +368,9 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       musicalApplication: false,
       targetBpm: track.bpm,
       loopCount: 1,
-      expectedSkills: ['Independent form', 'Pocket endurance', 'Error recovery'],
-      cueText: 'No tutor drums. You own the form.',
+      fillTeachingMode: 'CUE_ONLY',
+      expectedSkills: ['Independent form', 'Pocket endurance', 'Fill memory', 'Error recovery'],
+      cueText: 'No tutor drums. You own the form; only light transition reminders remain.',
     },
     {
       title: 'Full Song — Backing Track Only',
@@ -327,8 +390,9 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       musicalApplication: false,
       targetBpm: track.bpm,
       loopCount: 1,
-      expectedSkills: ['Band-time feel', 'Arrangement memory', 'Dynamic independence'],
-      cueText: 'This is the rehearsal-room test: accompaniment only.',
+      fillTeachingMode: 'MEMORY',
+      expectedSkills: ['Band-time feel', 'Arrangement memory', 'Fill recall', 'Dynamic independence'],
+      cueText: 'This is the rehearsal-room test: accompaniment only. Transition fills must now come from memory.',
     },
     {
       title: 'Performance Run — Make Musical Choices',
@@ -348,6 +412,7 @@ export function buildC11SongBlueprints(track: PlayAlongTrack): C11SongStageBluep
       musicalApplication: true,
       targetBpm: track.bpm,
       loopCount: 1,
+      fillTeachingMode: 'MEMORY',
       expectedSkills: ['Pocket', 'Form', 'Dynamics', 'Fills', 'Restraint', 'Recovery'],
       cueText: 'Play the arrangement, not the interface.',
     },
@@ -367,7 +432,7 @@ export function buildC11SongLearningSession(
 
   const exercises: PracticeExercise[] = blueprints.map((blueprint, index) => {
     const missionNumber = index + 1;
-    const structure = structureForStage(track, blueprint.sectionIds);
+    const structure = structureForStage(track, blueprint.sectionIds, blueprint.transitionFocus);
     const loopCount = blueprint.loopCount || 1;
     const config: SongLearningStageConfig = {
       planId: `c11-${track.id}`,
@@ -383,6 +448,8 @@ export function buildC11SongLearningSession(
       spokenCues: blueprint.spokenCues,
       tutorDrumsEnabled: blueprint.tutorDrumsEnabled,
       loopCount,
+      transitionFocus: blueprint.transitionFocus,
+      fillTeachingMode: blueprint.fillTeachingMode || 'NONE',
       primaryGoal: blueprint.primaryGoal,
       sectionGoal: blueprint.sectionGoal,
       transitionGoal: blueprint.transitionGoal,
@@ -415,7 +482,7 @@ export function buildC11SongLearningSession(
       structure,
     };
 
-    const durationSeconds = stageDurationSeconds(track, blueprint.sectionIds, loopCount);
+    const durationSeconds = stageDurationSeconds(track, blueprint.sectionIds, loopCount, blueprint.transitionFocus);
     const isIndependent = blueprint.assistance === 'NONE';
 
     return {
@@ -445,7 +512,7 @@ export function buildC11SongLearningSession(
       curriculumMission: metadata,
       progressionStage: blueprint.musicalApplication ? 'TRANSFER' : missionNumber >= 3 ? 'APPLICATION' : 'FOUNDATION',
       challengeType: blueprint.kind === 'TRANSITION' ? 'musical-fill' : 'sustained-endurance',
-      sessionSource: 'C11_ADAPTIVE_SONG_LEARNING',
+      sessionSource: 'C12_ADAPTIVE_SONG_LEARNING',
       skillId: competency.skillId,
     };
   });
@@ -461,16 +528,16 @@ export function buildC11SongLearningSession(
     selectedSkillIds: [competency.skillId],
     songPrepName: track.title,
     focusTopic: `${track.title} — Adaptive Song Learning`,
-    notes: `C11 song-learning journey: ${blueprints.length} adaptive song stages across ${fullBars} bars. Section learning, tutor/student handoffs, transitions, chaining, backing-only independence and full musical performance replace the old fixed six-stage song template.`,
+    notes: `C12 song-learning journey: ${blueprints.length} adaptive song stages across ${fullBars} bars. Section learning, tutor/student handoffs, transitions, chaining, backing-only independence and full musical performance replace the old fixed six-stage song template.`,
     rating: 0,
     sessionStatus: 'NOT_STARTED',
     exercises,
-    sessionSource: 'C11_ADAPTIVE_SONG_LEARNING',
+    sessionSource: 'C12_ADAPTIVE_SONG_LEARNING',
     skillId: competency.skillId,
     curriculumPractice: {
       competencyId: competency.id,
       placementBand,
-      journeyVersion: 'C11',
+      journeyVersion: 'C12',
       missionCount: exercises.length,
       personalizedDepth: placementBand === 'ADVANCED' ? 'DIAGNOSTIC' : placementBand === 'INTERMEDIATE' ? 'CONDENSED' : 'FOUNDATION',
     },
