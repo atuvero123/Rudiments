@@ -351,16 +351,26 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
   const [showDiagnostics, setShowDiagnostics] = useState<boolean>(false);
   const [diagnosticsData, setDiagnosticsData] = useState<TransportDiagnosticState | null>(null);
 
-  const activeCurriculumSection = useMemo(() => {
+  const getCurriculumSectionForBar = useCallback((bar: number) => {
     const structure = exercise.curriculumMission?.structure;
     const sections = structure?.sections || [];
     if (!structure || sections.length === 0) return null;
     const totalBars = Math.max(1, structure.totalBars);
-    const liveBar = ((Math.max(1, currentBar) - 1) % totalBars) + 1;
+    const liveBar = ((Math.max(1, bar) - 1) % totalBars) + 1;
     return sections.find((section) =>
       liveBar >= section.startBar && liveBar < section.startBar + section.bars
     ) || null;
-  }, [currentBar, exercise.curriculumMission?.structure]);
+  }, [exercise.curriculumMission?.structure]);
+
+  const activeCurriculumSection = useMemo(() => (
+    getCurriculumSectionForBar(currentBar)
+  ), [currentBar, getCurriculumSectionForBar]);
+
+  const activeCurriculumSectionLabel = (activeCurriculumSection?.label || '').toUpperCase();
+  const isApplicationHandoffSection =
+    isRudimentMusicalApplication && activeCurriculumSectionLabel.includes('HANDOFF');
+  const isApplicationLandingSection =
+    isRudimentMusicalApplication && activeCurriculumSectionLabel.includes('LAND');
 
   const animationFrameRef = useRef<number | null>(null);
 
@@ -639,6 +649,25 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
           ? `BAR ${state.currentBar} — BEAT 1: Reset the beat count; keep the same tempo`
           : `BAR ${state.currentBar} — BEAT ${state.currentBeat}: Keep the quarter-note pulse even`
       );
+    } else if (isRudimentMusicalApplication && instructionMode === 'PLAY') {
+      // C9.1: the authored five-bar application structure owns the live
+      // responsibility cue. The transport phraseStage can legitimately remain
+      // GROOVE while Bar 4/5 change musical responsibility, so derive the cue
+      // from the canonical curriculum section instead of leaking a generic
+      // GROOVE label across the whole phrase.
+      const liveSection = getCurriculumSectionForBar(state.currentBar);
+      const liveSectionLabel = (liveSection?.label || '').toUpperCase();
+      if (liveSectionLabel.includes('HANDOFF')) {
+        setTransitionCue(
+          title.toLowerCase().includes('paradiddle')
+            ? 'HANDOFF + FILL: Keep the Paradiddle Intact'
+            : 'HANDOFF + FILL: Keep the Rudiment Intact'
+        );
+      } else if (liveSectionLabel.includes('LAND')) {
+        setTransitionCue('LAND + RECOVER: Crash + Kick, Then Re-enter the Groove');
+      } else {
+        setTransitionCue('GROOVE: Stay in Time with Relaxed Pulse');
+      }
     } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'FULL') {
       setTransitionCue('PLAY ALONG: Match the tutor note-for-note in real time');
     } else if (instructionMode === 'FOLLOW' && assistanceLevel === 'REDUCED') {
@@ -685,7 +714,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     }
 
     animationFrameRef.current = requestAnimationFrame(runTransportAnimation);
-  }, [timeline.title, isSixStrokeRoll, isPad, isStructureMission, isNotationMission, instructionMode, assistanceLevel, showDiagnostics, followTutorBars, followLearnerBars]);
+  }, [timeline.title, title, isSixStrokeRoll, isPad, isStructureMission, isNotationMission, isRudimentMusicalApplication, instructionMode, assistanceLevel, showDiagnostics, followTutorBars, followLearnerBars, getCurriculumSectionForBar]);
 
   // Handle Play/Pause Toggle with Async Audio Initialization.
   // Evidence is gated: independent evaluation is unlocked only after a complete
@@ -1500,9 +1529,9 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 className={`p-4 rounded-2xl border-2 text-center transition-all ${
                   phraseStage === 'LEARNER_SPACE' || activeOwner === 'LEARNER'
                     ? 'bg-emerald-600/30 border-emerald-400 text-emerald-200 font-black ring-2 ring-emerald-400 shadow-xl animate-pulse'
-                    : phraseStage === 'LAND'
+                    : phraseStage === 'LAND' || isApplicationLandingSection
                     ? 'bg-emerald-500/30 border-emerald-400 text-emerald-200 font-black ring-2 ring-emerald-400 shadow-xl'
-                    : phraseStage === 'FILL'
+                    : phraseStage === 'FILL' || isApplicationHandoffSection
                     ? 'bg-amber-500/30 border-amber-400 text-amber-200 font-black ring-2 ring-amber-400 shadow-lg'
                     : phraseStage === 'GROOVE'
                     ? 'bg-stone-900 border-stone-700 text-stone-200'
@@ -1614,7 +1643,21 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                 // C7.4: generic groove/fill landing language must never leak
                 // into notation lessons. Reading missions use bar/reading cues
                 // from the written staff instead of the old Bar-2 crash target.
-                const isLandingBeat = !isStructureMission && !isNotationMission && currentBar === 2 && beatNum === 1;
+                const applicationSectionLabel = activeCurriculumSectionLabel;
+                const applicationBeatRole = isRudimentMusicalApplication
+                  ? applicationSectionLabel.includes('HANDOFF')
+                    ? beatNum <= 2 ? 'HANDOFF' : 'FILL'
+                    : applicationSectionLabel.includes('LAND')
+                    ? beatNum === 1 ? 'LAND' : 'RECOVER'
+                    : 'GROOVE'
+                  : null;
+                const isApplicationLandingBeat =
+                  isRudimentMusicalApplication && applicationBeatRole === 'LAND';
+                const isLandingBeat = !isStructureMission && !isNotationMission && (
+                  isRudimentMusicalApplication
+                    ? isApplicationLandingBeat
+                    : currentBar === 2 && beatNum === 1
+                );
                 const isStructureBarStart = isStructureMission && beatNum === 1;
 
                 return (
@@ -1661,6 +1704,10 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                         ? beatNum === 1
                           ? `BAR ${currentBar} START`
                           : 'READ'
+                        : isRudimentMusicalApplication && applicationBeatRole
+                        ? applicationBeatRole === 'LAND'
+                          ? '🎯 LAND'
+                          : applicationBeatRole
                         : isLandingBeat
                         ? '🎯 LAND CRASH'
                         : isCalibration
