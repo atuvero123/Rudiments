@@ -30,9 +30,17 @@ export const C7_NOTATION_VALID_EVIDENCE_SINCE = Date.parse('2026-09-07T19:29:00Z
 // independent + musical-transfer evidence on the corrected long-form transport.
 export const C7_GROOVE_STABILITY_VALID_TRANSFER_SINCE = Date.parse('2026-09-08T09:00:00Z');
 
+// C10 full-song boundary. Earlier Full Song M5/M6 runs used the generic short
+// phrase transport. Preserve M1-M4 learning evidence, but require fresh long-form
+// independent and musical-performance evidence on the 60-bar / 3:00 architecture.
+export const C10_FULL_SONG_VALID_TRANSFER_SINCE = Date.parse('2026-09-16T10:25:00Z');
+
 function isC7IntegrityValid(competencyId: string, missionNumber: number, timestamp: string): boolean {
   if (competencyId === 'comp-grv-stability' && missionNumber >= 5) {
     return new Date(timestamp).getTime() >= C7_GROOVE_STABILITY_VALID_TRANSFER_SINCE;
+  }
+  if (competencyId === 'comp-perf-song-app' && missionNumber >= 5) {
+    return new Date(timestamp).getTime() >= C10_FULL_SONG_VALID_TRANSFER_SINCE;
   }
   return true;
 }
@@ -694,6 +702,48 @@ function c7TimeSignature(competency: CurriculumCompetency): string {
   return '4/4';
 }
 
+function performanceSectionsForBars(bars: number) {
+  if (bars >= 60) {
+    return [
+      { label: 'INTRO', startBar: 1, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Establish the pocket; no fill is required.' },
+      { label: 'VERSE A', startBar: 5, bars: 12, intensity: 'SOFT' as const, performanceCue: 'Keep the texture restrained and protect the imagined vocal.' },
+      { label: 'CHORUS A', startBar: 17, bars: 12, intensity: 'STRONG' as const, performanceCue: 'Lift energy without changing tempo or abandoning the pocket.' },
+      { label: 'VERSE RETURN', startBar: 29, bars: 12, intensity: 'SOFT' as const, performanceCue: 'Come down immediately while keeping the same internal pulse.' },
+      { label: 'BRIDGE BUILD', startBar: 41, bars: 8, intensity: 'MEDIUM' as const, performanceCue: 'Build gradually across the section; do not peak early.' },
+      { label: 'FINAL CHORUS', startBar: 49, bars: 8, intensity: 'STRONG' as const, performanceCue: 'Use the strongest version of the groove with controlled musical choices.' },
+      { label: 'OUTRO', startBar: 57, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Reduce density, recover the simple pocket, and finish without rushing.' },
+    ];
+  }
+  if (bars >= 32) {
+    return [
+      { label: 'INTRO', startBar: 1, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Settle the pulse and leave space.' },
+      { label: 'VERSE', startBar: 5, bars: 8, intensity: 'SOFT' as const, performanceCue: 'Protect the vocal space and keep the groove simple.' },
+      { label: 'CHORUS', startBar: 13, bars: 8, intensity: 'STRONG' as const, performanceCue: 'Lift energy while preserving identical tempo.' },
+      { label: 'VERSE RETURN', startBar: 21, bars: 8, intensity: 'SOFT' as const, performanceCue: 'Return to the simpler texture immediately.' },
+      { label: 'OUTRO', startBar: 29, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Finish calmly and in time.' },
+    ];
+  }
+  if (bars >= 24) {
+    return [
+      { label: 'INTRO', startBar: 1, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Hear where the arrangement begins.' },
+      { label: 'VERSE', startBar: 5, bars: 8, intensity: 'SOFT' as const, performanceCue: 'Recognize the restrained section sound.' },
+      { label: 'CHORUS', startBar: 13, bars: 8, intensity: 'STRONG' as const, performanceCue: 'Hear the lift without hearing a tempo increase.' },
+      { label: 'OUTRO', startBar: 21, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Recognize the deliberate drop in density.' },
+    ];
+  }
+  if (bars >= 16) {
+    return [
+      { label: 'INTRO', startBar: 1, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Count four bars and locate the first section boundary.' },
+      { label: 'VERSE', startBar: 5, bars: 8, intensity: 'SOFT' as const, performanceCue: 'Track 4-bar groups inside the verse.' },
+      { label: 'CHORUS ENTRY', startBar: 13, bars: 4, intensity: 'STRONG' as const, performanceCue: 'Feel the section change without changing the quarter-note pulse.' },
+    ];
+  }
+  return [
+    { label: 'INTRO', startBar: 1, bars: 4, intensity: 'SOFT' as const, performanceCue: 'Locate the beginning and establish the pulse.' },
+    { label: 'VERSE ENTRY', startBar: 5, bars: Math.max(1, bars - 4), intensity: 'SOFT' as const, performanceCue: 'Recognize the first section handoff.' },
+  ];
+}
+
 function c7StructureFor(
   competency: CurriculumCompetency,
   bars: number,
@@ -710,6 +760,18 @@ function c7StructureFor(
     showBarNumbers: true,
     showBeatNumbers: true,
   };
+
+  // C10: performance work is governed by arrangement sections, not a generic
+  // phrase loop. The final two missions use the complete 60-bar / 3:00 form.
+  if (competency.id === 'comp-perf-song-app' && domain === 'PERFORMANCE') {
+    const sections = performanceSectionsForBars(bars);
+    return {
+      ...base,
+      phraseGroupSize: 4,
+      highlightLandmarkBars: sections.map((section) => section.startBar),
+      sections,
+    };
+  }
 
   // C7.13: the final groove transfer mission must be a real musical form, not
   // another static two-bar loop carrying a "Serve the Song" label. Give the
@@ -775,6 +837,8 @@ export function buildC7CompetencySession(
   // phrase while the staff and master transport are only presenting 2/4 bars.
   const bars = pedagogy.domain === 'READING'
     ? [1, 1, 2, 2, 4, 4]
+    : competency.id === 'comp-perf-song-app'
+    ? [8, 16, 24, 32, 60, 60]
     : pedagogy.domain === 'GROOVE'
     ? [2, 4, 4, 8, 16, 16]
     : competency.id === 'comp-dyn-song-balance'
@@ -786,7 +850,11 @@ export function buildC7CompetencySession(
     const n = index + 1;
     const musical = n === 6;
     const independent = n === 5;
-    const bpm = musical ? target : Math.min(target, base + Math.max(0, tempoOffsets[index]));
+    const isFullSongPerformance = competency.id === 'comp-perf-song-app';
+    const performanceTempos = [Math.max(60, target - 16), Math.max(64, target - 12), Math.max(68, target - 8), Math.max(72, target - 5), target, target];
+    const bpm = isFullSongPerformance
+      ? performanceTempos[index]
+      : musical ? target : Math.min(target, base + Math.max(0, tempoOffsets[index]));
     const isReading = pedagogy.domain === 'READING';
     const isGrooveSongTransfer = pedagogy.domain === 'GROOVE' && musical;
     const isMusicalBalance = competency.id === 'comp-dyn-song-balance';
@@ -795,6 +863,22 @@ export function buildC7CompetencySession(
     const rudimentApplicationPlan = isRudimentApplication
       ? getRudimentApplicationPlan(competency)
       : null;
+    const performancePurposes = [
+      'Map the complete arrangement: know where Intro, Verse, Chorus, Bridge and Outro responsibilities change.',
+      'Count section lengths in 4-bar groups so the arrangement stays clear without relying on a wall-clock timer.',
+      'Hear the song form: recognize section energy, transition cues and the difference between a musical lift and a tempo change.',
+      'Follow a 32-bar rehearsal form with reduced cues while keeping the pocket stable across every section handoff.',
+      'Perform the complete 60-bar / 3:00 arrangement independently at 80 BPM with no tutor performance.',
+      'Perform the complete 60-bar / 3:00 arrangement again while making restrained musical choices and recovering immediately from small errors.',
+    ];
+    const performanceInstructions = [
+      'Study the arrangement map. Name each section, its bar length, and whether the drumming responsibility is settle, lift, build, return, or finish.',
+      'Count bars in groups of four. Say the upcoming section name before its first bar while keeping the quarter-note pulse unchanged.',
+      'Listen for the section changes and dynamic contour. Identify where the arrangement asks for restraint, a lift, a build, or deliberate space.',
+      'Play the 32-bar rehearsal form with reduced section cues. Keep one stable pocket underneath the changes and recover immediately after any transition hesitation.',
+      'Complete the entire 60-bar / 3:00 form at 80 BPM. Do not stop after a small error: recover the pocket within one bar and keep the section count moving.',
+      'Complete the entire 60-bar / 3:00 form at 80 BPM and shape it musically. Use fills sparingly, preserve the pocket, match section dynamics, and finish the outro without rushing.',
+    ];
     const readingPurposes = [
       'Identify the written drum voices and staff positions before playing.',
       'Count the written rhythm from left to right while keeping your eyes on the staff.',
@@ -853,7 +937,9 @@ export function buildC7CompetencySession(
       'Repeat It Musically',
     ];
 
-    const purpose = isReading
+    const purpose = isFullSongPerformance
+      ? performancePurposes[index]
+      : isReading
       ? readingPurposes[index]
       : isMusicalBalance
         ? musicalBalancePurposes[index]
@@ -874,7 +960,9 @@ export function buildC7CompetencySession(
               : n === 5
                 ? `Demonstrate ${competency.title} without tutor performance.`
                 : pedagogy.musicalTransfer;
-    const instructions = isReading
+    const instructions = isFullSongPerformance
+      ? performanceInstructions[index]
+      : isReading
       ? readingInstructions[index]
       : isMusicalBalance
         ? musicalBalanceInstructions[index]
@@ -909,6 +997,10 @@ export function buildC7CompetencySession(
       applicationKind: isRudimentApplication ? 'RUDIMENT_ORCHESTRATION' : undefined,
       applicationEvidenceVersion: isRudimentApplication
         ? C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION
+        : undefined,
+      performanceTrackId: isFullSongPerformance ? 'pa-canonical-performance-80' : undefined,
+      performanceMode: isFullSongPerformance
+        ? n >= 6 ? 'MUSICAL_FULL_SONG' : n >= 5 ? 'INDEPENDENT_FULL_SONG' : 'GUIDED_FORM'
         : undefined,
       patternDisplay: pedagogy.patternDisplay,
       requiredPatternLabel: isRudimentApplication && rudimentApplicationPlan
@@ -953,13 +1045,15 @@ export function buildC7CompetencySession(
       subdivision: competency.subdivision,
       tempo: bpm,
       targetTempo: target,
-      durationSeconds: n <= 2 ? 45 : n <= 4 ? 60 : 90,
+      durationSeconds: isFullSongPerformance
+        ? [60, 90, 120, 120, 180, 180][index]
+        : n <= 2 ? 45 : n <= 4 ? 60 : 90,
       exerciseType: c7ExerciseType(pedagogy.domain, musical),
       equipmentRequired: isRudimentApplication ? 'Either' : equipment,
       difficulty: independent || musical ? 'Challenging' : n >= 3 ? 'Moderate' : 'Easy',
       curriculumMission: metadata,
       progressionStage: musical ? 'TRANSFER' : n >= 3 ? 'APPLICATION' : 'FOUNDATION',
-      challengeType: isRudimentApplication ? 'kit-orchestration' : musical ? 'groove-phrase' : 'precision-mechanics',
+      challengeType: isRudimentApplication ? 'kit-orchestration' : isFullSongPerformance ? 'sustained-endurance' : musical ? 'groove-phrase' : 'precision-mechanics',
       transferInstructions: isRudimentApplication && rudimentApplicationPlan
         ? {
             baseSticking: competency.stickingPattern,

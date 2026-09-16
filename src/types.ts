@@ -728,6 +728,10 @@ export interface CurriculumMissionMetadata {
   /** C8: musical evidence must name the renderer/contract that actually produced it. */
   applicationKind?: 'RUDIMENT_ORCHESTRATION';
   applicationEvidenceVersion?: string;
+  /** C10: optional canonical no-drum backing track used by long-form performance work. */
+  performanceTrackId?: string;
+  /** C10: governs how a performance mission should be experienced and assessed. */
+  performanceMode?: 'GUIDED_FORM' | 'INDEPENDENT_FULL_SONG' | 'MUSICAL_FULL_SONG';
   patternDisplay?: CurriculumPatternDisplay;
   pedagogyDomain?: 'PULSE_SUBDIVISION' | 'METER_FORM' | 'READING' | 'GROOVE' | 'RUDIMENT' | 'FILL_TRANSITION' | 'COORDINATION' | 'DYNAMICS' | 'PERFORMANCE' | 'STYLE';
   requiredPatternLabel?: string;

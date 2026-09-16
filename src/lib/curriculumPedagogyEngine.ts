@@ -115,7 +115,7 @@ const DOMAIN_PROFILES: Record<CurriculumPedagogyDomain, Omit<CurriculumPedagogyP
     conceptualFocus: 'Understand arrangement responsibility, restraint and section-to-section continuity.',
     listeningFocus: 'Time, transitions and dynamics serve the complete musical form.',
     musicalTransfer: 'Perform a complete arrangement while making controlled musical decisions.',
-    diagnosticIssues: ['overplaying', 'missed section', 'transition hesitation', 'dynamic mismatch'],
+    diagnosticIssues: ['lost pocket', 'missed section', 'transition hesitation', 'dynamic mismatch', 'overplaying', 'could not recover after an error'],
     missionLabels: ['Map the Arrangement', 'Count the Sections', 'Hear the Song Form', 'Follow the Arrangement', 'Perform Independently', 'Make Musical Choices'],
     evidenceLabels: ['Arrangement understood', 'Sections counted', 'Form recognized', 'Guided performance stable', 'Independent performance clean', 'Musical decisions controlled'],
   },
@@ -305,8 +305,10 @@ export function deriveTeachingDefinition(competency: CurriculumCompetency): Comp
   const subCount = subdivisionCount(subdivision);
   const tokens = countTokensFor(meter, subdivision);
   const events = buildGenericEvents(competency, meter, subCount, tokens, profile.domain);
-  const durationMatch = competency.tempoStandard.durationOrCycles.match(/(\d+)/);
-  const seconds = competency.tempoStandard.durationOrCycles.toLowerCase().includes('second') && durationMatch ? Number(durationMatch[1]) : 30;
+  const durationSource = `${competency.tempoStandard.subdivision} ${competency.tempoStandard.durationOrCycles} ${competency.tempoStandard.standardText}`;
+  const secondsMatch = durationSource.match(/(\d+(?:\.\d+)?)\s*seconds?/i);
+  const minutesMatch = durationSource.match(/(\d+(?:\.\d+)?)\s*(?:-?\s*)?minutes?/i);
+  const seconds = secondsMatch ? Number(secondsMatch[1]) : minutesMatch ? Number(minutesMatch[1]) * 60 : 30;
 
   return {
     id: competency.id,

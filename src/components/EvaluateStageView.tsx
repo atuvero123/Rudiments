@@ -54,7 +54,59 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
   const missionStage = exercise.curriculumMission?.stage;
   const pedagogyDomain = exercise.curriculumMission?.pedagogyDomain;
   const isGrooveMission = pedagogyDomain === 'GROOVE';
+  const isPerformanceMission = pedagogyDomain === 'PERFORMANCE';
   const isRudimentMusicalApplication = isQualifiedRudimentApplicationExercise(exercise);
+
+  const performanceEvaluationCopy = (() => {
+    if (!isPerformanceMission) return null;
+    switch (missionStage) {
+      case 'UNDERSTAND':
+        return {
+          title: 'Arrangement Map Check',
+          intro: 'Grade whether you can explain the section order and the drummer responsibility in each part of the form.',
+          prompt: 'Could you locate the major section landmarks and explain what changes musically',
+          clean: 'The arrangement map was clear: section order, bar groupings and dynamic responsibilities were understood.',
+        };
+      case 'INTERNALIZE':
+        return {
+          title: 'Section-Counting Check',
+          intro: 'Grade whether the 4-bar groups and upcoming section names stayed clear without disturbing the pulse.',
+          prompt: 'Could you count the form and anticipate each section boundary in time',
+          clean: 'Bar groups stayed clear and every section handoff was anticipated without changing the quarter-note pulse.',
+        };
+      case 'HEAR':
+        return {
+          title: 'Song-Form Listening Check',
+          intro: 'Grade whether you genuinely heard the arrangement changes rather than simply watching the bar counter.',
+          prompt: 'Could you hear when the arrangement asked for restraint, lift, build or space',
+          clean: 'Section energy and transition responsibilities were recognized while the underlying tempo remained unchanged.',
+        };
+      case 'FOLLOW':
+      case 'REDUCED':
+        return {
+          title: 'Guided Arrangement Check',
+          intro: 'Grade the entire rehearsal form, especially section changes and your ability to recover without breaking the pocket.',
+          prompt: 'Did the pocket survive every guided section handoff and recovery',
+          clean: 'The pocket stayed stable, section changes were on time, and any small hesitation was recovered within one bar.',
+        };
+      case 'INDEPENDENT':
+        return {
+          title: 'Full-Song Independence Check',
+          intro: 'Grade the complete 60-bar / 3:00 run, not one strong section inside it.',
+          prompt: 'Did you complete the full arrangement independently without stopping or losing the form',
+          clean: 'The complete three-minute run stayed in pocket, section position remained clear, and recovery after small errors was immediate.',
+        };
+      case 'MUSICAL_APPLICATION':
+        return {
+          title: 'Musical Performance Check',
+          intro: 'Grade whether the complete arrangement sounded like music: stable pocket first, then controlled dynamics, fills, restraint and recovery.',
+          prompt: 'Did your musical choices support every section without sacrificing time or continuity',
+          clean: 'The full song stayed steady while dynamics, transitions, restraint and fills served the arrangement from intro to outro.',
+        };
+      default:
+        return null;
+    }
+  })();
 
   const grooveEvaluationCopy = (() => {
     if (!isGrooveMission) return null;
@@ -111,22 +163,22 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
     ? 'Reading Accuracy & Timing Evaluation'
     : isRudimentMusicalApplication
     ? 'Musical Application Evidence Check'
-    : grooveEvaluationCopy?.title || 'Performance & Feel Evaluation';
+    : performanceEvaluationCopy?.title || grooveEvaluationCopy?.title || 'Performance & Feel Evaluation';
   const evaluationIntro = isNotationMission
     ? 'Grade what you actually read from the staff: correct voice, correct timing, and continuous visual tracking.'
     : isRudimentMusicalApplication
     ? 'Grade the complete governed phrase you just played: settled groove, intact rudiment handoff/fill, clean landing, and immediate groove recovery. This is learning evidence, not a formal verification.'
-    : grooveEvaluationCopy?.intro || 'Evaluate honestly. Authentic evidence is the foundation of genuine drumming mastery.';
+    : performanceEvaluationCopy?.intro || grooveEvaluationCopy?.intro || 'Evaluate honestly. Authentic evidence is the foundation of genuine drumming mastery.';
   const evaluationPrompt = isNotationMission
     ? 'How accurately did you read the staff'
     : isRudimentMusicalApplication
     ? 'How did the complete musical phrase feel'
-    : grooveEvaluationCopy?.prompt || 'How did the phrase feel';
+    : performanceEvaluationCopy?.prompt || grooveEvaluationCopy?.prompt || 'How did the phrase feel';
   const cleanDescription = isNotationMission
     ? 'Read the correct written voices in time without losing your place on the staff.'
     : isRudimentMusicalApplication
     ? 'Groove stayed settled, the rudiment remained recognizable through the orchestration, Beat 1 landed cleanly, and the groove recovered immediately.'
-    : grooveEvaluationCopy?.clean || 'Relaxed, controlled, and securely aligned with the intended pulse and pattern.';
+    : performanceEvaluationCopy?.clean || grooveEvaluationCopy?.clean || 'Relaxed, controlled, and securely aligned with the intended pulse and pattern.';
 
   const diagnosticOptions = teachingDef.diagnosticIssues?.length
     ? teachingDef.diagnosticIssues
@@ -232,6 +284,8 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
                 ? 'The written line was mostly correct with only a small timing or voice-reading mistake.'
                 : isRudimentMusicalApplication
                 ? 'The full phrase stayed musical with only a small handoff, orchestration, landing, or recovery imperfection.'
+                : isPerformanceMission
+                ? 'The arrangement stayed together with only a small section, dynamic, transition, or pocket imperfection.'
                 : 'The phrase stayed together with only small timing, sound, or coordination imperfections.'}
             </p>
           </button>
@@ -253,7 +307,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Needs Work</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              {isNotationMission ? 'Lost the written position, misread a voice, or timing became unreliable during the line.' : 'Timing, sticking, coordination, or sound became unreliable during the run.'}
+              {isNotationMission ? 'Lost the written position, misread a voice, or timing became unreliable during the line.' : isPerformanceMission ? 'Pocket, section position, transition timing, recovery, or musical restraint became unreliable during the run.' : 'Timing, sticking, coordination, or sound became unreliable during the run.'}
             </p>
           </button>
 
@@ -274,7 +328,7 @@ export const EvaluateStageView: React.FC<EvaluateStageViewProps> = ({
               <span className="text-[10px] uppercase font-bold text-stone-400">Step Down</span>
             </div>
             <p className="text-xs text-stone-300 mt-1">
-              {isNotationMission ? 'Could not keep reading the written line accurately at this working tempo.' : 'Could not maintain the required phrase or count comfortably at this working tempo.'}
+              {isNotationMission ? 'Could not keep reading the written line accurately at this working tempo.' : isPerformanceMission ? 'Could not sustain the arrangement continuously at this tempo without losing pocket or form.' : 'Could not maintain the required phrase or count comfortably at this working tempo.'}
             </p>
           </button>
         </div>
