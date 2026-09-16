@@ -202,7 +202,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
     // authored source bars cyclically across the governed mission structure.
     // Reading remains handled above because it has its own authored notation
     // progression and must never be converted into a memorized generic pattern.
-    if (matchedTeachingDef && exercise.curriculumMission && structure) {
+    if (matchedTeachingDef && exercise.curriculumMission && structure && !isRudimentMusicalApplication) {
       const authoredBars = Math.max(
         1,
         ...base.events.map((event) => Math.max(1, event.bar || 1))
@@ -408,6 +408,51 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
         { label: '>L', hand: 'L', accent: true, count: 'la' },
       ];
     }
+    // C9: musical rudiment application must never fall back to splitting the
+    // long instructional sentence in teachingDef.sticking into fake playable
+    // cells. Show the actual authored phrase: settled groove, Bar-4 handoff/fill,
+    // Bar-5 Crash+Kick landing and immediate recovery.
+    if (isRudimentMusicalApplication && teachingDef?.events?.length) {
+      const toReference = (event: (typeof teachingDef.events)[number]) => {
+        const authoredSurfaces = event.surfaces?.length
+          ? event.surfaces.map(String)
+          : [String(event.surface)];
+        return {
+          label: event.label,
+          hand: event.hand === 'L' ? 'L' : event.hand === 'R' ? 'R' : 'K',
+          accent: Boolean(event.accent),
+          count: `B${event.bar || 1} ${event.countToken}`,
+          surfaceLabel: formatMotorSurfaceSet(authoredSurfaces),
+        };
+      };
+
+      const bar4 = teachingDef.events
+        .filter((event) => (event.bar || 1) === 4)
+        .map(toReference);
+      const landing = teachingDef.events
+        .filter((event) => (event.bar || 1) === 5 && event.role === 'landing')
+        .map(toReference);
+
+      return [
+        {
+          label: 'GROOVE ×3',
+          hand: 'K' as const,
+          accent: false,
+          count: 'Bars 1–3',
+          surfaceLabel: 'K+HH • S+HH',
+        },
+        ...bar4,
+        ...landing,
+        {
+          label: 'RECOVER',
+          hand: 'K' as const,
+          accent: false,
+          count: 'Bar 5',
+          surfaceLabel: 'K+HH • S+HH',
+        },
+      ];
+    }
+
     // C7.17: a fill is not defined by sticking alone. Keep the canonical drum
     // surface attached to every stroke even after tutor assistance fades, so
     // independent play cannot accidentally become eight strokes on one drum.
@@ -462,7 +507,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       { label: 'R', hand: 'R', accent: false, count: '&' },
       { label: 'R', hand: 'R', accent: false, count: 'a' },
     ];
-  }, [isStructureMission, isSixStrokeRoll, pedagogyDomain, exercise.sticking, teachingDef]);
+  }, [isStructureMission, isSixStrokeRoll, isRudimentMusicalApplication, pedagogyDomain, exercise.sticking, teachingDef]);
 
   const hasLandingTarget = useMemo(
     () => timeline.events.some((event) => event.role === 'landing'),
@@ -622,7 +667,9 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
       );
     } else if (state.phraseStage === 'LAND') {
       setTransitionCue(
-        `LAND ON 1: ${isPad ? 'Pad Rim Edge' : '💥 Crash + Kick'} on Bar 2 Beat 1`
+        isRudimentMusicalApplication
+          ? `LAND ON 1: ${isPad ? 'Pad Rim Edge' : '💥 Crash + Kick'} on Bar 5 Beat 1 — recover the groove immediately`
+          : `LAND ON 1: ${isPad ? 'Pad Rim Edge' : '💥 Crash + Kick'} on Bar 2 Beat 1`
       );
     } else if (state.phraseStage === 'RECOVER') {
       setTransitionCue('RECOVER: Return to Steady Groove Pulse');
@@ -1702,7 +1749,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
                       ? (st.accent ? 'Bar Start' : 'Pulse')
                       : pedagogyDomain === 'DYNAMICS'
                       ? (st.accent ? 'STRONG' : 'SOFT')
-                      : pedagogyDomain === 'FILL_TRANSITION' && 'surfaceLabel' in st
+                      : (pedagogyDomain === 'FILL_TRANSITION' || isRudimentMusicalApplication) && 'surfaceLabel' in st
                       ? st.surfaceLabel
                       : st.accent ? 'Accent' : 'Tap'}
                   </span>
@@ -1710,7 +1757,7 @@ export const VisualRhythmTutor: React.FC<VisualRhythmTutorProps> = ({
               ))}
 
               {/* Landing Stroke Target — only when this competency actually contains one */}
-              {hasLandingTarget && (
+              {hasLandingTarget && !isRudimentMusicalApplication && (
                 <div className="flex-1 min-w-[3.5rem] py-2 px-2 rounded-xl border bg-emerald-950/80 text-emerald-300 border-emerald-700/80 text-center font-black">
                   <span className="text-[8px] font-mono text-emerald-400 block">LAND</span>
                   <span className="text-sm font-black font-mono block mt-0.5">

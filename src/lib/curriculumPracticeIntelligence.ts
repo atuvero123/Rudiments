@@ -12,7 +12,7 @@ import { getCurriculumPedagogyProfile } from './curriculumPedagogyEngine';
 import { CURRICULUM_COMPETENCIES_BY_ID } from '../data/canonicalCurriculum';
 import { getAttemptsForSkill } from './evidenceEngine';
 import {
-  C8_RUDIMENT_APPLICATION_EVIDENCE_VERSION,
+  C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION,
   getRudimentApplicationPlan,
   isQualifiedRudimentApplicationExercise,
 } from './rudimentApplicationEngine';
@@ -125,7 +125,7 @@ export function recordCurriculumMissionEvidence(input: {
     assistanceLevel: input.assistanceLevel || mission.assistanceTarget,
     conceptualTarget: Boolean(mission.conceptualTarget),
     executionTarget: Boolean(mission.executionTarget),
-    // C8: a rudiment Mission 6 counts as musical application only when the
+    // C9: a rudiment Mission 6 counts as musical application only when the
     // dedicated orchestration contract actually rendered the exercise.
     musicalApplication: mission.pedagogyDomain === 'RUDIMENT'
       ? isQualifiedRudimentApplicationExercise(input.exercise)
@@ -134,7 +134,7 @@ export function recordCurriculumMissionEvidence(input: {
       ? 'RUDIMENT_ORCHESTRATION'
       : undefined,
     applicationEvidenceVersion: isQualifiedRudimentApplicationExercise(input.exercise)
-      ? C8_RUDIMENT_APPLICATION_EVIDENCE_VERSION
+      ? C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION
       : undefined,
     issueTags: input.issueTags || [],
     pedagogyDomain: mission.pedagogyDomain,
@@ -209,13 +209,13 @@ export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMi
     )
     .filter((record) => isC7IntegrityValid(competencyId, record.missionNumber, record.timestamp))
     .map((record) => {
-      // C8 evidence migration: older RUDIMENT Mission 6 records used the same
-      // pad-only PLAY renderer as Mission 5. Preserve the attempt and session
-      // history, but do not let that legacy record satisfy "applied musically".
+      // C9 evidence migration: only the corrected five-bar orchestration contract
+      // may satisfy musical application. Preserve older attempt/session history,
+      // but do not upgrade C8 or pre-C8 records into C9 evidence.
       if (record.pedagogyDomain === 'RUDIMENT' && record.missionNumber === 6) {
         const validApplication =
           record.applicationKind === 'RUDIMENT_ORCHESTRATION' &&
-          record.applicationEvidenceVersion === C8_RUDIMENT_APPLICATION_EVIDENCE_VERSION;
+          record.applicationEvidenceVersion === C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION;
         return { ...record, musicalApplication: validApplication };
       }
       return record;
@@ -261,13 +261,16 @@ export function getCurriculumEvidenceRecords(competencyId: string): CurriculumMi
         conceptualTarget: flags.conceptualTarget,
         executionTarget: flags.executionTarget,
         musicalApplication: pedagogy.domain === 'RUDIMENT'
-          ? flags.musicalApplication && attempt.challengeType === 'kit-orchestration'
+          ? flags.musicalApplication &&
+            attempt.challengeType === 'kit-orchestration' &&
+            attempt.applicationKind === 'RUDIMENT_ORCHESTRATION' &&
+            attempt.applicationEvidenceVersion === C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION
           : flags.musicalApplication,
-        applicationKind: pedagogy.domain === 'RUDIMENT' && attempt.challengeType === 'kit-orchestration'
+        applicationKind: pedagogy.domain === 'RUDIMENT' && attempt.challengeType === 'kit-orchestration' && attempt.applicationKind === 'RUDIMENT_ORCHESTRATION'
           ? 'RUDIMENT_ORCHESTRATION'
           : undefined,
         applicationEvidenceVersion: pedagogy.domain === 'RUDIMENT' && attempt.challengeType === 'kit-orchestration'
-          ? C8_RUDIMENT_APPLICATION_EVIDENCE_VERSION
+          ? attempt.applicationEvidenceVersion
           : undefined,
         issueTags: attempt.frictions || [],
         pedagogyDomain: pedagogy.domain,
@@ -866,7 +869,7 @@ export function buildC7CompetencySession(
       musicalApplication: musical,
       applicationKind: isRudimentApplication ? 'RUDIMENT_ORCHESTRATION' : undefined,
       applicationEvidenceVersion: isRudimentApplication
-        ? C8_RUDIMENT_APPLICATION_EVIDENCE_VERSION
+        ? C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION
         : undefined,
       patternDisplay: pedagogy.patternDisplay,
       requiredPatternLabel: isRudimentApplication && rudimentApplicationPlan
@@ -875,7 +878,21 @@ export function buildC7CompetencySession(
         ? undefined
         : competency.stickingPattern,
       pedagogyDomain: pedagogy.domain,
-      structure: c7StructureFor(competency, bars[index], pedagogy.domain, n),
+      structure: isRudimentApplication
+        ? {
+            totalBars: 5,
+            phraseGroupSize: 1,
+            beatsPerBar: 4,
+            highlightLandmarkBars: [1, 4, 5],
+            showBarNumbers: true,
+            showBeatNumbers: true,
+            sections: [
+              { label: 'GROOVE', startBar: 1, bars: 3, intensity: 'MEDIUM' as const, performanceCue: 'Settle the pocket. Do not prepare early for the fill.' },
+              { label: 'HANDOFF + FILL', startBar: 4, bars: 1, intensity: 'STRONG' as const, performanceCue: 'Keep Beats 1–2 in the groove, then preserve the rudiment exactly on Beats 3–4.' },
+              { label: 'LAND + RECOVER', startBar: 5, bars: 1, intensity: 'MEDIUM' as const, performanceCue: 'Crash + Kick on Beat 1, then recover the original groove immediately.' },
+            ],
+          }
+        : c7StructureFor(competency, bars[index], pedagogy.domain, n),
     };
 
     return {
@@ -909,11 +926,11 @@ export function buildC7CompetencySession(
             baseSticking: competency.stickingPattern,
             accentPattern: 'Preserve the authored accents while changing only the surface assignment.',
             orchestrationMap: [
-              { zone: 'Groove', notes: 'Bars 1–3 + Bar 4 Beats 1–2', instruction: 'Keep kick/snare/closed-hi-hat pocket stable.' },
-              { zone: 'Rudiment Fill', notes: rudimentApplicationPlan.requiredPatternLabel, instruction: 'Keep the original sticking; move only the surfaces.' },
-              { zone: 'Landing', notes: 'Next Beat 1', instruction: 'Crash + Kick together, then recover the groove immediately.' },
+              { zone: 'Groove', notes: 'Bars 1–3', instruction: 'Keep kick/snare/closed-hi-hat pocket stable.' },
+              { zone: 'Handoff + Rudiment Fill', notes: 'Bar 4: groove on Beats 1–2; rudiment fill on Beats 3–4', instruction: 'Keep the original sticking; move only the fill surfaces.' },
+              { zone: 'Landing + Recovery', notes: 'Bar 5 Beat 1 → rest of Bar 5', instruction: 'Crash + Kick together on 1, then recover the groove immediately.' },
             ],
-            musicalCounting: 'Groove: 1 & 2 & 3 & 4 & · Fill: 3 e & a 4 e & a · land next 1',
+            musicalCounting: 'Bars 1–3: 1 & 2 & 3 & 4 & · Bar 4: 1 & 2 & 3 e & a 4 e & a · Bar 5: 1 & 2 & 3 & 4 &',
             executionTarget: rudimentApplicationPlan.listeningTarget,
           }
         : undefined,
@@ -1004,14 +1021,14 @@ export function buildC7GrooveIntegrityContinuationSession(
 }
 
 /**
- * C8 — Targeted rudiment musical-application repair.
+ * C9 — Targeted rudiment musical-application repair.
  *
- * Pre-C8 Mission 6 used the same technical PLAY renderer as Mission 5. Those
- * legacy attempts remain in history but no longer satisfy the musical-application
- * criterion. This continuation asks only for the corrected orchestration mission,
- * preserving every valid technical and independent result already earned.
+ * C9 rebases the application mission onto the corrected C8 baseline, but gives the
+ * transfer exercise a real five-bar phrase, explicit Crash+Kick landing, immediate
+ * recovery bar, and an evidence version that cannot be inferred from older generic
+ * attempts. The continuation asks only for Mission 6 and preserves technical work.
  */
-export function buildC8RudimentMusicalApplicationSession(
+export function buildC9RudimentMusicalApplicationSession(
   competency: CurriculumCompetency,
   profile: LearnerProfile,
   placementBand: CurriculumBand
@@ -1031,13 +1048,13 @@ export function buildC8RudimentMusicalApplicationSession(
 
   return {
     ...fullSession,
-    id: `c8-rudiment-application-${competency.id}-${Date.now()}`,
+    id: `c9-rudiment-application-${competency.id}-${Date.now()}`,
     durationMinutes: 8,
     focusTopic: `${competency.title} — Musical Application`,
-    notes: 'C8 targeted transfer: prior technical learning is preserved. Complete only the corrected groove → rudiment fill → Beat-1 landing application so musical evidence comes from a real orchestration task.',
+    notes: 'C9 targeted transfer: prior technical learning is preserved. Complete only the corrected five-bar groove → rudiment fill → Crash+Kick landing → immediate groove recovery application.',
     // Keep the canonical c7-...-m6 exercise id so the fallback evidence
     // reconstruction path can still recover this run if the dedicated ledger
-    // write is ever interrupted. The session id itself marks this as C8 repair.
+    // write is ever interrupted. The session id itself marks this as C9 repair.
     exercises: applicationExercises,
     curriculumPractice: fullSession.curriculumPractice
       ? { ...fullSession.curriculumPractice, missionCount: applicationExercises.length }

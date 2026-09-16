@@ -400,6 +400,8 @@ export function finalizeSessionEvidence(session: PracticeSession): Record<string
       recoveryMode: action === 'recover' || ex.result.selfCheck === 'TOO_DIFFICULT',
       progressionStage: ex.progressionStage,
       challengeType: ex.challengeType,
+      applicationKind: ex.curriculumMission?.applicationKind,
+      applicationEvidenceVersion: ex.curriculumMission?.applicationEvidenceVersion,
     };
 
     const mem = recordPracticeAttempt(attemptEvidence);

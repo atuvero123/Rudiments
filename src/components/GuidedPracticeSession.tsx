@@ -369,6 +369,8 @@ export const GuidedPracticeSession: React.FC<GuidedPracticeSessionProps> = ({
         evidenceCategory: partialResult?.evidenceCategory,
         progressionStage: currentExercise.progressionStage,
         challengeType: currentExercise.challengeType,
+        applicationKind: currentExercise.curriculumMission?.applicationKind,
+        applicationEvidenceVersion: currentExercise.curriculumMission?.applicationEvidenceVersion,
       });
 
       // Update active Gap Closure Plan if this is a remediation drill

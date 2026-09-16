@@ -64,7 +64,7 @@ import {
 } from '../lib/competencyAdvancementEngine';
 import {
   buildC7CompetencySession,
-  buildC8RudimentMusicalApplicationSession,
+  buildC9RudimentMusicalApplicationSession,
   buildC7GrooveIntegrityContinuationSession,
   buildC7ProtocolRevalidationSession,
   buildC7SecondSessionRevisitSession,
@@ -325,7 +325,7 @@ export const PathView: React.FC<PathViewProps> = ({ onStartPracticeCompetency })
           readiness.highestQualifyingBpm || readiness.targetBpm
         )
       : shouldRunRudimentMusicalApplication
-      ? buildC8RudimentMusicalApplicationSession(
+      ? buildC9RudimentMusicalApplicationSession(
           comp,
           profile,
           placementSummary.highestVerifiedBand

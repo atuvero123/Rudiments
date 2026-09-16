@@ -6,17 +6,19 @@ import {
 } from '../types';
 
 /**
- * C8 — canonical rudiment musical-application authority.
+ * C9 — authoritative rudiment musical-application phrase.
  *
- * Technical rudiment teaching stays pad-first. Mission 6 is different: it must
- * prove that the learner can preserve the sticking while placing it inside a
- * musical phrase. This module owns that transfer so Mission 6 can never fall
- * back to the same pad-only timeline used by Mission 5.
+ * C8 correctly separated technical rudiment execution from musical application,
+ * but its renderer could still inherit the generic curriculum structure and its
+ * static memory grid could fall back to a word-split sentence. C9 makes the
+ * phrase itself authoritative: 3 settled groove bars -> Bar 4 handoff/fill ->
+ * Bar 5 Crash+Kick landing and immediate groove recovery.
  */
 export const C8_RUDIMENT_APPLICATION_EVIDENCE_VERSION = 'C8_RUDIMENT_ORCHESTRATION_V1';
+export const C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION = 'C9_RUDIMENT_ORCHESTRATION_V2';
 
 export interface RudimentApplicationPlan {
-  version: typeof C8_RUDIMENT_APPLICATION_EVIDENCE_VERSION;
+  version: typeof C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION;
   kind: 'RUDIMENT_ORCHESTRATION';
   phraseModel: 'GROOVE_TO_FILL_TO_GROOVE';
   title: string;
@@ -26,7 +28,7 @@ export interface RudimentApplicationPlan {
   listeningTarget: string;
 }
 
-function grooveEventsForBar(bar: number, crashOnOne = false): TeachingEventDef[] {
+function grooveEventsForBar(bar: number, role: TeachingEventDef['role'] = 'groove'): TeachingEventDef[] {
   const events: TeachingEventDef[] = [];
   for (let beat = 1; beat <= 4; beat += 1) {
     const downbeatSurfaces = beat === 1 || beat === 3
@@ -39,20 +41,12 @@ function grooveEventsForBar(bar: number, crashOnOne = false): TeachingEventDef[]
       subdivision: 0,
       countToken: String(beat),
       hand: beat === 1 || beat === 3 ? 'K' : 'L',
-      surface: crashOnOne && beat === 1 ? 'crash' : downbeatSurfaces[0],
-      surfaces: crashOnOne && beat === 1
-        ? ['crash', 'kick']
-        : [...downbeatSurfaces],
-      role: beat === 1 && crashOnOne ? 'landing' : 'groove',
-      accent: beat === 1 && crashOnOne,
-      label: crashOnOne && beat === 1
-        ? 'CRASH + KICK'
-        : beat === 1 || beat === 3
-        ? 'K + HH'
-        : 'S + HH',
-      description: crashOnOne && beat === 1
-        ? 'Phrase landing — crash and kick together on Beat 1.'
-        : `Steady groove downbeat on Beat ${beat}.`,
+      surface: downbeatSurfaces[0],
+      surfaces: [...downbeatSurfaces],
+      role,
+      accent: false,
+      label: beat === 1 || beat === 3 ? 'K + HH' : 'S + HH',
+      description: `Steady groove downbeat on Beat ${beat}.`,
     });
 
     events.push({
@@ -62,13 +56,36 @@ function grooveEventsForBar(bar: number, crashOnOne = false): TeachingEventDef[]
       countToken: '&',
       hand: 'R',
       surface: 'hihat_closed',
-      role: 'groove',
+      role,
       accent: false,
       label: 'HH',
       description: `Closed hi-hat on ${beat}&.`,
     });
   }
   return events;
+}
+
+function recoveryBarEvents(bar: number): TeachingEventDef[] {
+  const recovery = grooveEventsForBar(bar, 'groove_return');
+  return recovery.map((event) => {
+    if (event.beat === 1 && event.subdivision === 0) {
+      return {
+        ...event,
+        surface: 'crash',
+        surfaces: ['crash', 'kick'],
+        hand: 'BOTH',
+        role: 'landing',
+        accent: true,
+        label: 'CRASH + KICK',
+        description: 'Land Crash + Kick together on the next Beat 1, then recover the groove without hesitation.',
+      };
+    }
+    return {
+      ...event,
+      role: 'groove_return',
+      description: `Immediate groove recovery — ${event.description || event.label}`,
+    };
+  });
 }
 
 function getTwoBeatSource(base: CompetencyTeachingDefinition): TeachingEventDef[] {
@@ -94,14 +111,12 @@ function applicationSurfaceFor(
   }
 
   if (competencyId === 'comp-rud-single-paradiddle') {
-    // Paradiddle accents move to the toms while the inner notes return to snare.
-    if (event.accent || index === 0) return index < 4 ? 'tom_high' : 'tom_floor';
+    // Preserve RLRR LRLL. Only accented lead notes leave the snare.
+    if (event.accent || index === 0 || index === 4) return index < 4 ? 'tom_high' : 'tom_floor';
     return 'snare';
   }
 
-  if (event.accent) {
-    return index < 4 ? 'tom_high' : 'tom_floor';
-  }
+  if (event.accent) return index < 4 ? 'tom_high' : 'tom_floor';
   return index < 4 ? 'snare' : index < 6 ? 'tom_mid' : 'tom_floor';
 }
 
@@ -124,22 +139,22 @@ function buildApplicationFillEvents(
       surfaces: undefined,
       role: 'fill',
       label: source.accent ? `>${source.hand}` : source.hand,
-      description: `${source.hand} on ${surface.replaceAll('_', ' ')} — keep the original rudiment sticking unchanged.`,
+      description: `${source.hand} on ${surface.replaceAll('_', ' ')} — preserve the original rudiment sticking exactly.`,
     };
   });
 }
 
 function compactPattern(competencyId: string, base: CompetencyTeachingDefinition): string {
   if (competencyId === 'comp-rud-doubles') {
-    return 'Bars 1–3 groove · Bar 4 Beats 1–2 groove · Beat 3 Snare RR → High Tom LL · Beat 4 Mid Tom RR → Floor Tom LL · next Beat 1 Crash + Kick';
+    return 'Bars 1–3 groove · Bar 4 Beats 1–2 groove · Beat 3 Snare RR → High Tom LL · Beat 4 Mid Tom RR → Floor Tom LL · Bar 5 Beat 1 Crash + Kick → recover groove';
   }
   if (competencyId === 'comp-rud-singles') {
-    return 'Bars 1–3 groove · Bar 4 Beats 1–2 groove · Beat 3–4 alternating singles descend Snare → High Tom → Mid Tom → Floor Tom · next Beat 1 Crash + Kick';
+    return 'Bars 1–3 groove · Bar 4 Beats 1–2 groove · Beats 3–4 alternating singles descend Snare → High Tom → Mid Tom → Floor Tom · Bar 5 Beat 1 Crash + Kick → recover groove';
   }
   if (competencyId === 'comp-rud-single-paradiddle') {
-    return 'Bars 1–3 groove · Bar 4 Beats 1–2 groove · Beat 3–4 paradiddle accents move to toms while inner notes stay on snare · next Beat 1 Crash + Kick';
+    return 'Bars 1–3 groove · Bar 4 Beats 1–2 groove · Beats 3–4 keep RLRR LRLL intact while accented lead notes move to toms · Bar 5 Beat 1 Crash + Kick → recover groove';
   }
-  return `Bars 1–3 groove · Bar 4 Beats 1–2 groove · orchestrate ${base.sticking} across snare/toms · next Beat 1 Crash + Kick`;
+  return `Bars 1–3 groove · Bar 4 Beats 1–2 groove · orchestrate ${base.sticking} across snare/toms · Bar 5 Beat 1 Crash + Kick → recover groove`;
 }
 
 export function getRudimentApplicationPlan(
@@ -156,14 +171,14 @@ export function getRudimentApplicationPlan(
     : `keep ${competency.stickingPattern} intact while changing surfaces`;
 
   return {
-    version: C8_RUDIMENT_APPLICATION_EVIDENCE_VERSION,
+    version: C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION,
     kind: 'RUDIMENT_ORCHESTRATION',
     phraseModel: 'GROOVE_TO_FILL_TO_GROOVE',
     title: `${title} — Musical Orchestration`,
-    purpose: `Transfer ${title} from pad mechanics into a real groove → fill → groove phrase without changing the sticking or pulse.`,
-    instructions: `Keep the groove steady for three bars. In Bar 4, keep Beats 1–2 in the groove, then use the rudiment as a two-beat fill on Beats 3–4: ${pattern}. Land the next Beat 1 with Crash + Kick and immediately recover the groove.`,
+    purpose: `Transfer ${title} from pad mechanics into a real five-bar groove → rudiment fill → landing/recovery phrase without changing the sticking or pulse.`,
+    instructions: `Bars 1–3: hold the groove steady. Bar 4: keep Beats 1–2 in the groove, then play the rudiment as a two-beat fill on Beats 3–4: ${pattern}. Bar 5 Beat 1: land Crash + Kick together and immediately recover the groove through the rest of the bar.`,
     requiredPatternLabel: pattern,
-    listeningTarget: 'The groove must stay settled before the fill, the sticking must remain recognizable while the surfaces change, and the next Beat 1 must land without rushing or hesitation.',
+    listeningTarget: 'The groove must stay settled before the fill, the original sticking must remain recognizable while surfaces change, the next Beat 1 must land cleanly, and the recovery groove must return immediately without rushing.',
   };
 }
 
@@ -171,35 +186,37 @@ export function buildRudimentApplicationDefinition(
   base: CompetencyTeachingDefinition,
   competencyId: string
 ): CompetencyTeachingDefinition {
-  const grooveBars = [1, 2, 3].flatMap((bar) => grooveEventsForBar(bar, bar === 1));
-  const bar4Groove = grooveEventsForBar(4, false).filter((event) => event.beat <= 2);
+  const grooveBars = [1, 2, 3].flatMap((bar) => grooveEventsForBar(bar));
+  const bar4Groove = grooveEventsForBar(4).filter((event) => event.beat <= 2);
   const fillEvents = buildApplicationFillEvents(base, competencyId);
+  const bar5Recovery = recoveryBarEvents(5);
   const pattern = compactPattern(competencyId, base);
 
   return {
     ...base,
-    id: `${base.id}-c8-application`,
+    id: `${base.id}-c9-application`,
     title: `${base.title} — Musical Orchestration`,
-    subdivisionDisplay: '8th-note groove → 16th-note rudiment fill → Beat-1 landing',
-    bars: 4,
+    subdivisionDisplay: '8th-note groove → 16th-note rudiment fill → Beat-1 landing → groove recovery',
+    bars: 5,
     sticking: pattern,
-    limbPattern: `Preserve the original ${base.sticking} sticking while moving the final two-beat fill across the kit.`,
+    limbPattern: `Preserve the original ${base.sticking} sticking while moving only the fill surfaces; keep the groove limbs unchanged before and after the fill.`,
     drumSurfaces: ['Closed Hi-Hat', 'Kick', 'Snare', 'High Tom', 'Mid Tom', 'Floor Tom', 'Crash'],
-    events: [...grooveBars, ...bar4Groove, ...fillEvents],
+    events: [...grooveBars, ...bar4Groove, ...fillEvents, ...bar5Recovery],
     musicalExplanation: {
       ...base.musicalExplanation,
-      whatAmILearning: `Turn ${base.title} into a musical phrase rather than repeating it as an isolated pad exercise.`,
-      howIsItCounted: 'Bars 1–3: 1 & 2 & 3 & 4 &. Bar 4: keep 1 & 2 &, then count the rudiment fill as 3 e & a 4 e & a. Land the next 1.',
-      handsAndFeet: `Keep the groove limbs relaxed, then preserve ${base.sticking} exactly while only the drum surfaces change.`,
-      drumSurfaces: 'Closed hi-hat, kick and snare for the groove; snare and toms for the rudiment fill; Crash + Kick for the next Beat 1.',
+      whatAmILearning: `Turn ${base.title} into a complete musical phrase rather than repeating it as an isolated pad exercise.`,
+      howIsItCounted: 'Bars 1–3: 1 & 2 & 3 & 4 &. Bar 4: keep 1 & 2 &, then count the rudiment fill as 3 e & a 4 e & a. Bar 5: land 1, then continue & 2 & 3 & 4 &.',
+      handsAndFeet: `Keep the kick/snare/hi-hat groove relaxed, preserve ${base.sticking} exactly during the fill, then return immediately to the same groove limbs after the Crash + Kick landing.`,
+      drumSurfaces: 'Closed hi-hat, kick and snare for the groove; snare and toms for the rudiment fill; Crash + Kick on Bar 5 Beat 1; then immediate groove recovery.',
       musicalApplication: pattern,
-      whatToListenFor: 'No tempo lift before the fill, no sticking mutation during orchestration, and no hesitation when the groove returns after the landing.',
+      whatToListenFor: 'No tempo lift before the fill, no sticking mutation during orchestration, a decisive Crash + Kick landing, and no hesitation when the groove returns.',
     },
     diagnosticIssues: [
       'Rudiment changed during orchestration',
       'Rushed fill entry',
       'Uneven orchestrated strokes',
-      'Missed Beat 1 landing',
+      'Missed Crash + Kick Beat 1 landing',
+      'Delayed groove recovery after landing',
       'Lost groove after fill',
       ...base.diagnosticIssues,
     ].filter((value, index, all) => all.indexOf(value) === index),
@@ -213,7 +230,7 @@ export function isQualifiedRudimentApplicationExercise(exercise: PracticeExercis
     mission.stage === 'MUSICAL_APPLICATION' &&
     mission.musicalApplication === true &&
     mission.applicationKind === 'RUDIMENT_ORCHESTRATION' &&
-    mission.applicationEvidenceVersion === C8_RUDIMENT_APPLICATION_EVIDENCE_VERSION &&
+    mission.applicationEvidenceVersion === C9_RUDIMENT_APPLICATION_EVIDENCE_VERSION &&
     exercise.challengeType === 'kit-orchestration'
   );
 }

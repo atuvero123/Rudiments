@@ -178,6 +178,9 @@ export interface PracticeAttemptEvidence {
 
   progressionStage?: ProgressionStage;
   challengeType?: string;
+  /** C9: preserves the exact musical-application contract in the generic attempt store. */
+  applicationKind?: 'RUDIMENT_ORCHESTRATION';
+  applicationEvidenceVersion?: string;
 }
 
 export type PlacementType =
