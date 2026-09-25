@@ -194,6 +194,15 @@ function chordBassFrequency(chord: string): number {
   return root / 4;
 }
 
+function authoredFillStartBeat(fill: string): number {
+  // BEAT_4_EIGHTHS is retained for data compatibility, but the teaching
+  // transport now expands it into a clearer two-beat transition phrase.
+  if (fill === 'BEAT_4_EIGHTHS') return 3;
+  if (fill === 'TWO_BEAT_BUILD') return 3;
+  if (fill === 'BEAT_4_SIXTEENTHS') return 4;
+  return 5;
+}
+
 export class PlayAlongTransport {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
@@ -310,39 +319,64 @@ export class PlayAlongTransport {
     const isLastBarOfSection = bar.barInSection === bar.section.bars;
 
     if (isFourFour && guide) {
+      const fill = isLastBarOfSection ? (guide.exitFill || 'NONE') : 'NONE';
+      const fillStartBeat = authoredFillStartBeat(fill);
+      const fillStartOffset = (fillStartBeat - 1) * beatDur;
+
       if (isFirstBarOfSection && guide.entryCrash) {
         createTutorCrash(this.ctx, this.masterGain, barStart);
       }
 
+      // Once the transition fill begins, the normal groove yields completely.
+      // This prevents the fill from being masked by hats/kicks/snares at the
+      // same timestamps and makes the transition readable by ear.
       if (guide.timekeeper === 'RIDE_QUARTERS') {
         for (let beat = 0; beat < 4; beat += 1) {
-          createTutorHat(this.ctx, this.masterGain, barStart + beat * beatDur, true);
+          if (barStart + beat * beatDur < barStart + fillStartOffset) {
+            createTutorHat(this.ctx, this.masterGain, barStart + beat * beatDur, true);
+          }
         }
       } else {
         const open = guide.timekeeper === 'OPEN_HAT_8THS' || guide.timekeeper === 'RIDE_8THS';
         for (let eighth = 0; eighth < 8; eighth += 1) {
-          createTutorHat(this.ctx, this.masterGain, barStart + eighth * (beatDur / 2), open && eighth % 2 === 1);
+          const when = barStart + eighth * (beatDur / 2);
+          if (when < barStart + fillStartOffset) {
+            createTutorHat(this.ctx, this.masterGain, when, open && eighth % 2 === 1);
+          }
         }
       }
 
       guide.kickPositions.forEach((position) => {
-        createTutorKick(this.ctx!, this.masterGain!, barStart + (position - 1) * beatDur, 0.11 + energy * 0.007);
+        const when = barStart + (position - 1) * beatDur;
+        if (when < barStart + fillStartOffset) {
+          createTutorKick(this.ctx!, this.masterGain!, when, 0.11 + energy * 0.007);
+        }
       });
       guide.snarePositions.forEach((position) => {
-        createTutorSnare(this.ctx!, this.masterGain!, barStart + (position - 1) * beatDur, energy >= 3);
+        const when = barStart + (position - 1) * beatDur;
+        if (when < barStart + fillStartOffset) {
+          createTutorSnare(this.ctx!, this.masterGain!, when, energy >= 3);
+        }
       });
 
       if (isLastBarOfSection) {
-        const fill = guide.exitFill || 'NONE';
         if (fill === 'BEAT_4_EIGHTHS') {
+          // Preserve the authored identifier but give it a real musical window:
+          // four clear eighth-note events across beats 3–4.
+          createTutorSnare(this.ctx, this.masterGain, barStart + 2 * beatDur, true);
+          createTutorTom(this.ctx, this.masterGain, barStart + 2.5 * beatDur, 150);
           createTutorSnare(this.ctx, this.masterGain, barStart + 3 * beatDur, true);
-          createTutorTom(this.ctx, this.masterGain, barStart + 3.5 * beatDur, 130);
+          createTutorTom(this.ctx, this.masterGain, barStart + 3.5 * beatDur, 105);
         } else if (fill === 'BEAT_4_SIXTEENTHS') {
           const fillStart = barStart + 3 * beatDur;
-          [190, 165, 135, 105].forEach((freq, i) => createTutorTom(this.ctx!, this.masterGain!, fillStart + i * beatDur * 0.25, freq));
+          [190, 165, 135, 105].forEach((freq, i) =>
+            createTutorTom(this.ctx!, this.masterGain!, fillStart + i * beatDur * 0.25, freq)
+          );
         } else if (fill === 'TWO_BEAT_BUILD') {
           const fillStart = barStart + 2 * beatDur;
-          [190, 180, 160, 145, 130, 120, 110, 95].forEach((freq, i) => createTutorTom(this.ctx!, this.masterGain!, fillStart + i * beatDur * 0.25, freq));
+          [200, 185, 170, 150, 135, 120, 105, 90].forEach((freq, i) =>
+            createTutorTom(this.ctx!, this.masterGain!, fillStart + i * beatDur * 0.25, freq)
+          );
         }
       }
       return;
@@ -440,15 +474,22 @@ export class PlayAlongTransport {
     this.scheduleTutorDrums(barIndex, bar, barStart, beatDur, beats);
   }
 
+  private cancelSpeech() {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  }
+
   private speak(text: string) {
     if (!this.speechEnabled || this.coachMode !== 'GUIDED') return;
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
     try {
-      window.speechSynthesis.cancel();
+      this.cancelSpeech();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.02;
+      utterance.rate = 1.08;
       utterance.pitch = 1;
-      utterance.volume = 0.85;
+      // Keep coaching clearly underneath the drum event it is describing.
+      utterance.volume = 0.52;
       window.speechSynthesis.speak(utterance);
     } catch {
       // Visual cues remain the baseline if speech synthesis is unavailable.
@@ -460,7 +501,9 @@ export class PlayAlongTransport {
     this.lastSectionIndex = sectionIndex;
     this.callbacks.onSectionChange?.(section, sectionIndex);
     if (this.coachMode === 'GUIDED') {
-      this.speak(`${section.name}. ${section.coachingNote}`);
+      // The detailed coaching note remains visible in the UI; keep speech short
+      // so it cannot run over an important transition.
+      this.speak(section.name);
     }
   }
 
@@ -604,18 +647,27 @@ export class PlayAlongTransport {
     // miss while guided support is enabled.
     const exitFill = bar.section.drumGuide?.exitFill || 'NONE';
     const isLastSectionBar = bar.barInSection === bar.section.bars;
-    const fillStartsBeat = exitFill === 'TWO_BEAT_BUILD' ? 3 : 4;
-    if (isLastSectionBar && exitFill !== 'NONE' && beatIndex + 1 >= fillStartsBeat) {
-      const key = `${bar.section.id}:${bar.absoluteBar}:${exitFill}`;
+    const fillStartsBeat = authoredFillStartBeat(exitFill);
+    const fillIsStarting = isLastSectionBar && exitFill !== 'NONE' && beatIndex + 1 === fillStartsBeat;
+    const fillIsActive = isLastSectionBar && exitFill !== 'NONE' && beatIndex + 1 >= fillStartsBeat;
+
+    if (isLastSectionBar && exitFill !== 'NONE' && beatIndex + 1 === Math.max(1, fillStartsBeat - 1)) {
+      const key = `${bar.section.id}:${bar.absoluteBar}:${exitFill}:lead`;
       if (key !== this.lastTransitionAnnouncementKey) {
         this.lastTransitionAnnouncementKey = key;
         const words = exitFill === 'TWO_BEAT_BUILD'
-          ? 'Build fill, beats three and four. Land the next section on one.'
+          ? 'Fill starts on three. Build through four. Land on one.'
           : exitFill === 'BEAT_4_SIXTEENTHS'
-          ? 'Fill on beat four. Four even notes. Land on one.'
-          : 'Fill on beat four. Two even notes. Land on one.';
+          ? 'Fill on four. Four even notes. Land on one.'
+          : 'Fill starts on four. Four clear hits. Land on one.';
         this.speak(words);
       }
+    }
+
+    // Speech must never sit on top of the fill. Cancel it at the first fill beat
+    // so the tutor drum event remains the dominant cue.
+    if (fillIsStarting && fillIsActive) {
+      this.cancelSpeech();
     }
 
     const nextSnapshot: PlayAlongTransportSnapshot = {
