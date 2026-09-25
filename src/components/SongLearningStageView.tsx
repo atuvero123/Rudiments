@@ -116,10 +116,10 @@ function fillDescriptor(section?: PlayAlongSection): FillDescriptor | null {
   const fill = section?.drumGuide?.exitFill || 'NONE';
   if (fill === 'BEAT_4_EIGHTHS') {
     return {
-      label: 'Beat-4 eighth-note fill',
-      count: '4 & → LAND 1',
-      orchestration: 'Snare on 4 → tom on & → Crash + Kick on the next Beat 1',
-      startBeat: 4,
+      label: 'Two-beat eighth-note transition fill',
+      count: '3 & 4 & → LAND 1',
+      orchestration: 'Snare → tom → snare → low tom across Beats 3–4 → Crash + Kick on the next Beat 1',
+      startBeat: 3,
     };
   }
   if (fill === 'BEAT_4_SIXTEENTHS') {
@@ -236,7 +236,7 @@ export const SongLearningStageView: React.FC<SongLearningStageViewProps> = ({
   const showFillCoach = config.fillTeachingMode !== 'NONE' && config.fillTeachingMode !== 'MEMORY';
   const inFillBar = Boolean(snapshot && currentFill && snapshot.barInSection === snapshot.sectionBars);
   const fillIsActive = Boolean(inFillBar && currentFill && snapshot && snapshot.currentBeat >= currentFill.startBeat);
-  const landingNow = Boolean(snapshot && currentSection?.drumGuide?.entryCrash && snapshot.barInSection === 1 && snapshot.currentBeat === 1);
+  const landingNow = Boolean(snapshot && currentSection?.drumGuide?.entryCrash && snapshot.barInSection === 1 && snapshot.currentBeat <= 2);
 
   const handlePlayPause = async () => {
     if (!transportRef.current) return;
@@ -360,10 +360,10 @@ export const SongLearningStageView: React.FC<SongLearningStageViewProps> = ({
             {landingNow ? (
               <>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] uppercase font-black text-emerald-300">LANDING NOW</span>
-                  <span className="text-[10px] font-mono text-stone-300">Beat 1</span>
+                  <span className="text-[10px] uppercase font-black text-emerald-300">LANDING + NEW GROOVE</span>
+                  <span className="text-[10px] font-mono text-stone-300">Beats 1–2</span>
                 </div>
-                <p className="text-sm font-black mt-1">Crash + Kick → recover the new section groove immediately</p>
+                <p className="text-sm font-black mt-1">Crash + Kick → lock the new section groove before moving on</p>
               </>
             ) : currentFill ? (
               <>
